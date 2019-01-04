@@ -28,7 +28,7 @@
  */
 
 #include "ufdt_overlay.h"
-
+#include <Library/DebugLib.h>
 #include "libufdt.h"
 
 
@@ -255,7 +255,9 @@ static int ufdt_overlay_do_fixups(struct ufdt *main_tree,
     char *symbol_path = ufdt_node_get_fdt_prop_data_by_name(
         main_symbols_node, name_of(fixups), &len);
 
+  DEBUG ((EFI_D_ERROR, "fixup(%p) name(%a) symbol_path(%a) ..\n", fixups, name_of(fixups), symbol_path));
     if (!symbol_path) {
+  DEBUG ((EFI_D_ERROR, "Couldn't find prop data by name %a ..\n", name_of(fixups)));
       dto_error("Couldn't find '%s' symbol in main dtb\n", name_of(fixups));
       return -1;
     }
