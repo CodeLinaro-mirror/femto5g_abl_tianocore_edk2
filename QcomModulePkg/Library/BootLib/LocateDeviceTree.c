@@ -859,6 +859,16 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
     return FALSE;
   }
 
+  /* Get the Name prop from DTB */
+  PlatProp = (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "model",
+                                         &LenPlatId);
+  DEBUG ((EFI_D_VERBOSE, "Parsing: %a\n", PlatProp));
+  if (BestDtbInfo->Dtb) {
+    PlatProp = (CONST CHAR8 *)fdt_getprop (BestDtbInfo->Dtb,
+                    fdt_path_offset(BestDtbInfo->Dtb, "/"), "model", &LenPlatId);
+    DEBUG ((EFI_D_VERBOSE, "Best Selected: %a\n", PlatProp));
+  }
+
   /* Get the msm-id prop from DTB */
   PlatProp = (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "qcom,msm-id",
                                          &LenPlatId);
