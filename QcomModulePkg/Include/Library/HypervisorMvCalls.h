@@ -26,6 +26,12 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include "BootLinux.h"
+
+#define HYP_BOOTINFO_MAGIC   0xC06B0071
+#define HYP_BOOTINFO_VERSION 1
+#define HYP_MAX_NUM_DTBOS    4
+
 /* The msg_id consists of the following bit fields: */
 /* bit 31 (0=client, 1=server) */
 /*     bit 30..24 (protocol_id) */
@@ -51,64 +57,32 @@
 #define BOOT_MGR_START_SELF_REPLY 0x80420002
 /* boot_mgr: BOOLEAN success */
 
-#define HYP_BOOTINFO_MAGIC 0xC06B0071
-#define HYP_BOOTINFO_VERSION 1
-
-#define HYP_VM_TYPE_NONE 0
-#define HYP_VM_TYPE_APP 1  /* Light weight - no OS C VM */
-#define HYP_VM_TYPE_LINUX_AARCH64 2
-
-#define MAX_SUPPORTED_VMS 2
-#define MIN_SUPPORTED_VMS 1
-#define KERNEL_ADDR_IDX 0
-#define RAMDISK_ADDR_IDX 1
-#define DTB_ADDR_IDX 2
-
 #define GET_PIPE_ID_SEND(x) ((x) & (0xFFFF))
 #define GET_PIPE_ID_RECEIVE(x) (((x) >> 16) & (0xFFFF))
-
-/*
-DDR regions.
-* Unused regions have base = 0, size = 0.
-*/
-typedef struct vm_mem_region {
-    UINT64 base;
-    UINT64 size;
-} __attribute__ ((packed)) VmMemRegion;
 
 typedef struct hyp_boot_info {
     UINT32 hyp_bootinfo_magic;
     UINT32 hyp_bootinfo_version;
     /* Size of this structure, in bytes */
     UINT32 hyp_bootinfo_size;
-    /* the number of VMs controlled by the resource manager */
-    UINT32 num_vms;
-    /* the index of the HLOS VM */
-    UINT32 hlos_vm;
-    /* to communicate with resource manager */
-    UINT32 pipe_id;
-    /* for future extension */
-    UINT32 reserved_0[2];
+
+    UINT32 pil_enable;
 
     struct {
         /* HYP_VM_TYPE_ */
         UINT32 vm_type;
-        /* vm name - e.g. for partition name matching */
-        CHAR8 vm_name[28];
-        /* uuid currently unused */
-        CHAR8 uuid[16];
+        /*Number of dtbos provided */
+        UINT32 num_dtbos;
+
         union {
             struct {
                 UINT64 dtbo_base;
                 UINT64 dtbo_size;
-            } linux_arm;
+            } linux_aarch64[HYP_MAX_NUM_DTBOS];
             /* union padding */
-            UINT32 vm_info[12];
+            UINT32 vm_info[16];
         } info;
-        /* ddr ranges for the VM */
-        /* (areas valid for loading the kernel/dtb/initramfs) */
-        struct vm_mem_region ddr_region[8];
-    } vm[];
+    } primary_vm_info;
 } __attribute__ ((packed)) HypBootInfo;
 
 typedef struct HypBootMgrStartParams {
@@ -134,3 +108,4 @@ UINT32 HvcSysPipeControl (UINT32 PipeId, UINT32 Control);
 HypBootInfo *GetVmData (VOID);
 BOOLEAN IsVmEnabled (VOID);
 EFI_STATUS HypUnmapMemory (UINT64 RegionAddr, UINT64 RegionSize);
+EFI_STATUS CheckAndSetVmData (BootParamlist *BootParamlistPtr);
