@@ -479,6 +479,7 @@ EFI_STATUS BoardInit (VOID)
 {
   EFI_STATUS Status;
   EFIChipInfoModemType ModemType;
+  UINT32 DdrType;
 
   Status = GetChipInfo (&platform_board_info, &ModemType);
   if (EFI_ERROR (Status))
@@ -487,6 +488,12 @@ EFI_STATUS BoardInit (VOID)
   Status = GetPlatformInfo (&platform_board_info);
   if (EFI_ERROR (Status))
     return Status;
+
+  Status = BoardDdrType (&DdrType);
+  if (EFI_ERROR (Status))
+    return Status;
+
+  platform_board_info.HlosSubType = (DdrType << DDR_SHIFT);
 
   if (BoardPlatformFusion ()) {
     AsciiSPrint ((CHAR8 *)platform_board_info.ChipBaseBand,
@@ -509,6 +516,8 @@ EFI_STATUS BoardInit (VOID)
           platform_board_info.ChipBaseBand));
   DEBUG ((EFI_D_VERBOSE, "Fusion Value    : %d\n",
           platform_board_info.PlatformInfo.fusion));
+  DEBUG ((EFI_D_VERBOSE, "HLOS SubType    : 0x%x\n",
+          platform_board_info.HlosSubType));
 
   return Status;
 }
@@ -695,4 +704,46 @@ BoardHwPlatformName (CHAR8 *StrHwPlatform, UINT32 Len)
     StrHwPlatform[Len - 1] = '\0';
   else
     StrHwPlatform[ChipIdValidLen - 1] = '\0';
+}
+
+EFI_STATUS BoardDdrType (UINT32 *Type)
+{
+  EFI_STATUS Status;
+  RamPartitionEntry *RamPartitions = NULL;
+  UINT32 i = 0;
+  UINT32 NumPartitions = 0;
+  UINT64 DdrSize = 0;
+
+  Status = ReadRamPartitions (&RamPartitions, &NumPartitions);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Error returned from GetRamPartitions %r\n", Status));
+    return Status;
+  }
+
+  for (i = 0; i < NumPartitions; i++) {
+    DdrSize += RamPartitions[i].AvailableLength;
+  }
+  DEBUG ((EFI_D_INFO, "Total DDR Size: 0x%016lx \n", DdrSize));
+
+  *Type = 0;
+  if (DdrSize <= DDR_256MB) {
+    *Type = DDRTYPE_256MB;
+  } else if (DdrSize <= DDR_512MB) {
+    *Type = DDRTYPE_512MB;
+  } else if (DdrSize <= DDR_1024MB) {
+    *Type = DDRTYPE_1024MB;
+  } else if (DdrSize <= DDR_2048MB) {
+    *Type = DDRTYPE_2048MB;
+  } else if (DdrSize <= DDR_3072MB) {
+    *Type = DDRTYPE_3072MB;
+  } else if (DdrSize <= DDR_4096MB) {
+    *Type = DDRTYPE_4096MB;
+  }
+
+  return Status;
+}
+
+UINT32 BoardPlatformHlosSubType (VOID)
+{
+  return platform_board_info.HlosSubType;
 }
