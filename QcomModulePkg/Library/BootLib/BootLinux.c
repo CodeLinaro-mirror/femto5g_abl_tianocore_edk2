@@ -1882,3 +1882,15 @@ BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
   return TRUE;
 }
 #endif
+
+#ifdef ENABLE_SYSTEMD_BOOTSLOT
+BOOLEAN IsSystemdBootslotEnabled (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsSystemdBootslotEnabled (VOID)
+{
+  return FALSE;
+}
+#endif
