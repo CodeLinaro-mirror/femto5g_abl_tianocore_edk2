@@ -1745,3 +1745,15 @@ BOOLEAN IsHibernationEnabled (VOID)
   return FALSE;
 }
 #endif
+
+#ifdef ENABLE_SYSTEMD_BOOTSLOT
+BOOLEAN IsSystemdBootslotEnabled (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsSystemdBootslotEnabled (VOID)
+{
+  return FALSE;
+}
+#endif
