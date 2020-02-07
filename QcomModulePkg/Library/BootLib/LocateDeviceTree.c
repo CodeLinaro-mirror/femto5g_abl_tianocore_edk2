@@ -1302,6 +1302,10 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
       current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
       board_info = BoardPlatformFoundryId () << 16;
       break;
+    case DTB_DDR:
+      current_info = ((dt_node_tmp1->dt_entry_m->board_hw_subtype) & 0x700);
+      board_info = (BoardPlatformHlosSubType () & 0x700);
+      break;
     case DTB_PMIC_MODEL:
       for (i = 0; i < 4; i++) {
         current_pmic_model[i] = (dt_node_tmp1->dt_entry_m->pmic_rev[i] & 0xff);
@@ -1342,6 +1346,9 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
     switch (dtb_info) {
     case DTB_FOUNDRY:
       current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
+      break;
+    case DTB_DDR:
+      current_info = ((dt_node_tmp1->dt_entry_m->board_hw_subtype) & 0x700);
       break;
     case DTB_PMIC_MODEL:
       for (i = 0; i < 4; i++) {
@@ -1529,6 +1536,12 @@ platform_dt_match_best (struct dt_entry_node *dt_list)
   * check, if couldn't find the exact match from DTB, will exact match 0x0.
   */
   platform_dt_absolute_compat_match (dt_list, DTB_FOUNDRY);
+
+  /* check DDR type
+  * the DDR type must exact match board DDR tpe, this is compatibility
+  * check, if couldn't find the exact match from DTB, will exact match 0x0.
+  */
+  platform_dt_absolute_compat_match (dt_list, DTB_DDR);
 
   /* check PMIC model
   * the PMIC model must exact match board PMIC model, this is compatibility
