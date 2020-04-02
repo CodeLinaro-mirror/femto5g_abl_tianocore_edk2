@@ -41,6 +41,7 @@
 #include <Protocol/EFIPmicPon.h>
 #include <Protocol/Print2.h>
 #include <Library/HypervisorMvCalls.h>
+#include <Library/EarlyUsbInit.h>
 
 #include "AutoGen.h"
 #include <DeviceInfo.h>
@@ -65,6 +66,8 @@ STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
 STATIC CHAR8 *RootCmdLine = " rootwait ro init=";
 STATIC CHAR8 *InitCmdline = INIT_BIN;
 STATIC CHAR8 *SkipRamFs = " skip_initramfs";
+
+STATIC CHAR8 *ResumeCmdLine = NULL;
 
 CHAR8 IPv4AddrBufCmdLine[MAX_IP_ADDR_BUF];
 CHAR8 IPv6AddrBufCmdLine[MAX_IP_ADDR_BUF];
@@ -393,6 +396,21 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN FlashlessBoot,
   return AsciiStrLen (*SysPath);
 }
 
+UINT32
+GetResumeCmdLine(CHAR8 **ResumeCmdLine, CHAR16 *ReqPartition)
+{
+  BOOLEAN MultiSlotBoot;
+  UINT32 len = 0;
+
+  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"swap_a");
+  len = GetSystemPath (ResumeCmdLine, MultiSlotBoot, FALSE, FALSE, (CHAR16 *)L"swap_a", (CHAR8 *)"resume");
+  if (len == 0) {
+     DEBUG ((EFI_D_ERROR, "GetSystemPath failed\n"));
+     return 0;
+  }
+  return len;
+}
+
 STATIC
 EFI_STATUS
 UpdateCmdLineParams (UpdateCmdLineParamList *Param,
@@ -557,6 +575,16 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
+  if (EarlyUsbInitEnabled()) {
+    Src = Param->UsbCompCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (IsHibernationEnabled()) {
+    Src = Param->ResumeCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
   return EFI_SUCCESS;
 }
 
@@ -592,6 +620,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   UINT32 LEVerityCmdLineLen = 0;
   CHAR8 *EarlyServicesStr = NULL;
   CHAR8 *ModemPathStr = NULL;
+  CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
+
   if (FlashlessBoot)
     goto skip_BoardSerialNum;
 
@@ -761,6 +791,15 @@ skip_BoardSerialNum:
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
   }
 
+  if (EarlyUsbInitEnabled()) {
+    GetEarlyUsbCmdlineParam(UsbCompositionCmdline);
+    CmdLineLen += AsciiStrLen (UsbCompositionCmdline);
+  }
+
+  if (IsHibernationEnabled()) {
+    CmdLineLen += GetResumeCmdLine(&ResumeCmdLine, (CHAR16 *)L"swap_a");
+  }
+
   Param.Recovery = Recovery;
   Param.MultiSlotBoot = MultiSlotBoot;
   Param.AlarmBoot = AlarmBoot;
@@ -798,6 +837,14 @@ skip_BoardSerialNum:
     Param.EarlyIPv4CmdLine = IPv4AddrBufCmdLine;
     Param.EarlyIPv6CmdLine = IPv6AddrBufCmdLine;
     Param.EarlyEthMacCmdLine = MacEthAddrBufCmdLine;
+  }
+
+  if (EarlyUsbInitEnabled()) {
+    Param.UsbCompCmdLine = UsbCompositionCmdline;
+  }
+
+  if (IsHibernationEnabled()) {
+    Param.ResumeCmdLine = ResumeCmdLine;
   }
 
   Status = UpdateCmdLineParams (&Param, FinalCmdLine);
