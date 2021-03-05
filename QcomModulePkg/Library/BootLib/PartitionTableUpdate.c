@@ -1301,6 +1301,10 @@ GetActiveSlot (Slot *ActiveSlot)
   EFI_STATUS Status = EFI_SUCCESS;
   Slot Slots[] = {{L"_a"}, {L"_b"}};
   UINT64 Priority = 0;
+#if ENABLE_LV_ATOMIC_AB
+  CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
+  UINT32 UfsBootLun = 0;
+#endif
 
   if (ActiveSlot == NULL) {
     DEBUG ((EFI_D_ERROR, "GetActiveSlot: bad parameter\n"));
@@ -1334,6 +1338,31 @@ GetActiveSlot (Slot *ActiveSlot)
   DEBUG ((EFI_D_VERBOSE, "GetActiveSlot: found active slot %s, priority %d\n",
           ActiveSlot->Suffix, Priority));
 
+#if ENABLE_LV_ATOMIC_AB
+  GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
+  if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
+    GUARD (UfsGetSetBootLun (&UfsBootLun, TRUE));
+    if (UfsBootLun == 0x1) {
+      GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
+                       Slots[0].Suffix,
+                       StrLen (Slots[0].Suffix)));
+      DEBUG ((EFI_D_INFO, "GetACtiveSlot: ufs device boot lun is %x, "
+                          " select active slot %s\n",
+                          UfsBootLun, ActiveSlot->Suffix));
+    } else if (UfsBootLun == 0x2) {
+      GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
+                       Slots[1].Suffix,
+                       StrLen (Slots[1].Suffix)));
+     DEBUG ((EFI_D_INFO, "GetACtiveSlot: ufs device boot lun is %x, "
+                          " select active slot %s\n",
+                          UfsBootLun, ActiveSlot->Suffix));
+    } else {
+      DEBUG ((EFI_D_ERROR, "Boot lun: %x invalid\n",UfsBootLun));
+      return EFI_DEVICE_ERROR;
+    }
+    return EFI_SUCCESS;
+  }
+#endif
   if (IsSuffixEmpty (ActiveSlot) == TRUE) {
     /* Check for first boot and set default slot */
     /* For First boot all A/B attributes for the slot would be 0 */
