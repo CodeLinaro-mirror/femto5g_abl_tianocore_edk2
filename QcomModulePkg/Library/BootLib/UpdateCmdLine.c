@@ -363,9 +363,36 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN FlashlessBoot,
       // after all "regular" mtd devices have been populated.
       UINT32 PartitionCount = 0;
       GetPartitionCount (&PartitionCount);
-      AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+      CurSlot = GetCurrentSlotSuffix ();
+      if (BootIntoRecovery)
+         DEBUG ((EFI_D_ERROR, " booting to recovery \n"));
+      else
+         DEBUG ((EFI_D_ERROR, " booting normal mode \n"));
+      if (MultiSlotBoot &&
+         (StrnCmp ((CONST CHAR16 *)L"_b", CurSlot.Suffix,
+          StrLen (CurSlot.Suffix)) == 0))
+         MtdBlkIndex = PartitionCount;
+      else
+         MtdBlkIndex = PartitionCount - 1;
+
+      if (IsDefinedMTDUbiBebLimit ()){
+         if(BootIntoRecovery && IsRecoveryVolumeUsed()){
+             MtdBlkIndex = RECOVERYFS_VOLUME_INDEX;
+             DEBUG ((EFI_D_ERROR, "set root = %d as  recoveryfs vol index \n", MtdBlkIndex));
+          } else {
+             DEBUG ((EFI_D_ERROR, "%d  = root index  \n", MtdBlkIndex));
+          }
+          AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+                   " rootfstype=squashfs root=/dev/mtdblock%d ubi.mtd=%d,0,%d",
+                   MtdBlkIndex, (Index - 1), MTD_UBI_BEB_LIMIT_PER1024);
+      } else {
+         if(BootIntoRecovery && IsRecoveryVolumeUsed()){
+             MtdBlkIndex = RECOVERYFS_VOLUME_INDEX;
+             DEBUG ((EFI_D_ERROR, "%d set recoveryfs vol index else \n", MtdBlkIndex));
+         }
+          AsciiSPrint (*SysPath, MAX_PATH_SIZE,
                    " rootfstype=squashfs root=/dev/mtdblock%d ubi.mtd=%d",
-                   (PartitionCount - 1), (Index - 1));
+                   MtdBlkIndex, (Index - 1));
     } else if (IsDefinedMTDUbiBebLimit ()) {
       /* Attach MTD device (Index - 1) using default VID header offset and
        * reserve MTD_UBI_BEB_LIMIT_PER1024*nand_size_in_blocks/1024 erase blocks
