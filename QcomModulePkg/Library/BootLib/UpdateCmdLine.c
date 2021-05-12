@@ -85,7 +85,7 @@ STATIC CHAR8 MacEthAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 
 /* Display command line related structures */
-#define MAX_DISPLAY_CMD_LINE 256
+#define MAX_DISPLAY_CMD_LINE (256 + MAX_DISPLAY_CMDLINE_LEN)
 STATIC CHAR8 DisplayCmdLine[MAX_DISPLAY_CMD_LINE];
 STATIC UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
 
@@ -296,6 +296,8 @@ TargetBatterySocOk (UINT32 *BatteryVoltage)
 STATIC VOID GetDisplayCmdline (VOID)
 {
   EFI_STATUS Status;
+  CHAR8 *Src = NULL;
+  UINT32 SrcLen = 0;
 
   Status = gRT->GetVariable ((CHAR16 *)L"DisplayPanelConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &DisplayCmdLineLen,
@@ -304,6 +306,13 @@ STATIC VOID GetDisplayCmdline (VOID)
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get Panel Config, %r\n", Status));
   }
+
+  Status = ReadDisplayCmdLine (&Src, &SrcLen);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Unable to read display cmdline, %r\n", Status));
+  }
+
+  AsciiStrCatS (DisplayCmdLine, DisplayCmdLineLen, Src);
 }
 
 /*
