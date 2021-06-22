@@ -841,8 +841,9 @@ ParseGptHeader (struct GptHeaderData *GptHeader,
     DEBUG ((EFI_D_ERROR, "Header CRC mismatch CrcVal = %u and CrcOrig = %u\n",
             CrcVal, CrcOrig));
     return FAILURE;
-  } else
+  } else {
     PUT_LONG (&GptBuffer[HEADER_CRC_OFFSET], CrcVal);
+  }
 
   CurrentLba = GET_LLWORD_FROM_BYTE (&GptBuffer[PRIMARY_HEADER_OFFSET]);
   GptHeader->FirstUsableLba =
