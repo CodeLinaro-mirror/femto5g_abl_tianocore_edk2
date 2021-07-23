@@ -1109,7 +1109,7 @@ static void erase_swap_signature(void)
 		printf("Failed to erase swap signature\n");
 }
 
-void BootIntoHibernationImage(BootInfo *Info)
+void BootIntoHibernationImage(BootInfo *Info, BOOLEAN *SetRotAndBootState)
 {
 	int ret;
 
@@ -1120,17 +1120,23 @@ void BootIntoHibernationImage(BootInfo *Info)
 	if (check_for_valid_header() < 0)
 		return;
 
-	Status = LoadImageAndAuth (Info);
+	if (!SetRotAndBootState) {
+		printf("SetRotAndBootState cannot be NULL.\n");
+		goto err;
+	}
+
+	Status = LoadImageAndAuth (Info, TRUE, FALSE);
 	if (Status != EFI_SUCCESS) {
 		DEBUG ((EFI_D_ERROR, "Failed to set ROT and Bootstate : %r\n", Status));
 		goto err;
 	}
 
-	upa->array = AllocateZeroPool(TOTAL_REQUIRED_UNUSED_PFNS * sizeof(unsigned long));
-	if (!upa->array) {
-		printf("Memory alloc failed Line %d\n", __LINE__);
-		return;
-	}
+	/* ROT and BootState are set only once per boot.
+	 * set variable to TRUE to Avoid setting second
+	 * time incase hbernation resume fails at restore
+         * snapshot stage..
+	 */
+	*SetRotAndBootState = TRUE;
 
 	ret = restore_snapshot_image();
 	if (ret) {

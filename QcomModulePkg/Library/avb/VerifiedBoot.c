@@ -1087,7 +1087,7 @@ IsValidPartition (Slot *Slot, CONST CHAR16 *Name)
 }
 
 STATIC EFI_STATUS
-LoadImageAndAuthVB2 (BootInfo *Info)
+LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,  BOOLEAN SetRotAndBootState)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   AvbSlotVerifyResult Result;
@@ -1423,12 +1423,15 @@ LoadImageAndAuthVB2 (BootInfo *Info)
   }
   Data.SystemVersion = (OSVersion & 0xFFFFF800) >> 11;
 
-  GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
-  ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
-  GUARD_OUT (SetVerifiedBootHash ((CONST CHAR8 *)&Digest, sizeof(Digest)));
-  DEBUG ((EFI_D_INFO, "VB2: Authenticate complete! boot state is: %a\n",
-          VbSn[Info->BootState].name));
+  if (!SetRotAndBootState)
+      GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
 
+  if (!HibernationResume) {
+    ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
+    GUARD_OUT (SetVerifiedBootHash ((CONST CHAR8 *)&Digest, sizeof(Digest)));
+    DEBUG ((EFI_D_INFO, "VB2: Authenticate complete! boot state is: %a\n",
+            VbSn[Info->BootState].name));
+  }
 out:
   if (Status != EFI_SUCCESS) {
     if (SlotData != NULL) {
@@ -1646,7 +1649,7 @@ skip_verification:
 }
 
 EFI_STATUS
-LoadImageAndAuth (BootInfo *Info)
+LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume, BOOLEAN SetRotAndBootState)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   BOOLEAN MdtpActive = FALSE;
@@ -1754,7 +1757,7 @@ LoadImageAndAuth (BootInfo *Info)
     Status = LoadImageAndAuthVB1 (Info);
     break;
   case AVB_2:
-    Status = LoadImageAndAuthVB2 (Info);
+    Status = LoadImageAndAuthVB2 (Info, HibernationResume, SetRotAndBootState);
     break;
   case AVB_LE:
     Status = LoadImageAndAuthForLE (Info);
