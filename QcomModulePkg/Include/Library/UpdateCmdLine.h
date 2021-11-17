@@ -89,6 +89,7 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *UsbCompCmdLine;
   CHAR8 *ResumeCmdLine;
   CHAR8 *IntegrityIMACmdline;
+  CONST CHAR8 *SystemdSlotEnv;
 } UpdateCmdLineParamList;
 
 EFI_STATUS

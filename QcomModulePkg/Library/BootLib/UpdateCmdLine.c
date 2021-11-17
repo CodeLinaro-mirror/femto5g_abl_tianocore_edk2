@@ -62,6 +62,7 @@ STATIC CONST CHAR8 *LogLevel = " quite";
 STATIC CONST CHAR8 *BatteryChgPause = " androidboot.mode=charger";
 STATIC CONST CHAR8 *MdtpActiveFlag = " mdtp";
 STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
+STATIC CHAR8 SystemdSlotEnv[] = " systemd.setenv=\"SLOT_SUFFIX=_a\"";
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
@@ -516,16 +517,22 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
   if (Param->MultiSlotBoot &&
      !IsBootDevImage ()) {
      /* Slot suffix */
-    if (IsNandABAttrSupport ()) {
+    UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
+                          Param->SlotSuffixAscii);
+    if (IsLEVariant ()) {
+      INT32 StrLen = 0;
+      StrLen = AsciiStrLen (SystemdSlotEnv);
+      SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
+      Src = Param->SystemdSlotEnv;
+    } else if (IsNandABAttrSupport ()) {
       CONST CHAR8 * SlotSuffix = " SLOT_SUFFIX=";
       AsciiStrCatS (Dst, MaxCmdLineLen, SlotSuffix);
+      Src = Param->SlotSuffixAscii;
     } else {
       Src = Param->AndroidSlotSuffix;
       AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      Src = Param->SlotSuffixAscii;
     }
-    UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
-                          Param->SlotSuffixAscii);
-    Src = Param->SlotSuffixAscii;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -745,8 +752,12 @@ skip_BoardSerialNum:
   MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
   if (MultiSlotBoot &&
      !IsBootDevImage ()) {
+    if (IsLEVariant ()) {
+      CmdLineLen += AsciiStrLen (SystemdSlotEnv);
+    } else {
     /* Add additional length for slot suffix */
-    CmdLineLen += AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
+      CmdLineLen += AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
+    }
   }
 
   if ((IsBuildAsSystemRootImage () &&
@@ -859,6 +870,7 @@ skip_BoardSerialNum:
   Param.CvmSystemPtnCmdLine = CvmSystemPtnCmdLine;
   Param.EarlyServicesCmdLine = EarlyServicesStr;
   Param.ModemPathCmdLine = ModemPathStr;
+  Param.SystemdSlotEnv = SystemdSlotEnv;
 
   if (EarlyEthEnabled ()) {
     Param.EarlyIPv4CmdLine = IPv4AddrBufCmdLine;
