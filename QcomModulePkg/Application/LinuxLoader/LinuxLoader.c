@@ -52,6 +52,10 @@
 #define MAX_NUM_FS 10
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
 
+#if HIBERNATION_SUPPORT_INSECURE
+void BootIntoHibernationImage(BootInfo *Info, BOOLEAN *SetRotAndBootState);
+#endif
+
 STATIC BOOLEAN BootReasonAlarm = FALSE;
 STATIC BOOLEAN BootIntoFastboot = FALSE;
 STATIC BOOLEAN BootIntoRecovery = FALSE;
@@ -173,8 +177,12 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
 
   UINT32 BootReason = NORMAL_MODE;
   UINT32 KeyPressed = SCAN_NULL;
+  /* SilentMode Boot */
+  CHAR8 SilentBootMode = NON_SILENT_MODE;
   /* MultiSlot Boot */
   BOOLEAN MultiSlotBoot;
+ /* set ROT and BootSatte only once per boot*/
+  BOOLEAN SetRotAndBootState = FALSE;
 
   DEBUG ((EFI_D_INFO, "Loader Build Info: %a %a\n", __DATE__, __TIME__));
   DEBUG ((EFI_D_VERBOSE, "LinuxLoader Load Address to debug ABL: 0x%llx\n",
@@ -273,6 +281,18 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
       goto stack_guard_update_default;
     }
     break;
+  case SILENT_MODE:
+    SilentBootMode = SILENT_MODE;
+    break;
+  case NON_SILENT_MODE:
+    SilentBootMode = NON_SILENT_MODE;
+    break;
+  case FORCED_SILENT:
+    SilentBootMode = FORCED_SILENT;
+    break;
+  case FORCED_NON_SILENT:
+    SilentBootMode = FORCED_NON_SILENT;
+    break;
   default:
     if (BootReason != NORMAL_MODE) {
       DEBUG ((EFI_D_ERROR,
@@ -296,16 +316,23 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   DEBUG ((EFI_D_INFO, "KeyPress:%u, BootReason:%u\n", KeyPressed, BootReason));
   DEBUG ((EFI_D_INFO, "Fastboot=%d, Recovery:%d\n",
                                           BootIntoFastboot, BootIntoRecovery));
+  DEBUG ((EFI_D_INFO, "SilentBoot Mode:%u\n", SilentBootMode));
   if (!GetVmData ()) {
     DEBUG ((EFI_D_ERROR, "VM Hyp calls not present\n"));
   }
 
-  if (!BootIntoFastboot) {
+  if(BootIntoFastboot)
+      goto fastboot;
+  else {
     BootInfo Info = {0};
     Info.MultiSlotBoot = MultiSlotBoot;
     Info.BootIntoRecovery = BootIntoRecovery;
     Info.BootReasonAlarm = BootReasonAlarm;
-    Status = LoadImageAndAuth (&Info);
+    Info.SilentBootMode = SilentBootMode;
+  #if HIBERNATION_SUPPORT_INSECURE
+    BootIntoHibernationImage(&Info, &SetRotAndBootState);
+  #endif
+    Status = LoadImageAndAuth(&Info, FALSE, SetRotAndBootState);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
       goto fastboot;

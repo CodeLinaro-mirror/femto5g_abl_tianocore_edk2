@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-/* Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -120,8 +120,7 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
   size_t digest_len;
   const char* found;
   uint64_t image_size;
-  static bool bootImgLoaded = FALSE;
-  static bool vendorBootImgLoaded = FALSE;
+  bool Kpi_Flag = 0;
 
   if (!avb_hash_descriptor_validate_and_byteswap(
           (const AvbHashDescriptor*)descriptor, &hash_desc)) {
@@ -190,11 +189,9 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     goto out;
   }
 
-  if ((Avb_StrnCmp ("boot", part_name, 4) == 0 &&
-      !bootImgLoaded) ||
-      (Avb_StrnCmp ("vendor_boot", part_name, 11) == 0 &&
-      !vendorBootImgLoaded)) {
+  if (Avb_StrnCmp ("boot", part_name, 4) == 0) {
     BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
+    Kpi_Flag = 1;
   }
 
   io_ret = ops->read_from_partition(
@@ -213,14 +210,9 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     goto out;
   }
 
-  if (Avb_StrnCmp ("boot", part_name, 4) == 0 &&
-      !bootImgLoaded) {
-    bootImgLoaded = TRUE;
+  if (Kpi_Flag) {
     BootStatsSetTimeStamp (BS_KERNEL_LOAD_DONE);
-  } else if (Avb_StrnCmp ("vendor_boot", part_name, 11) == 0 &&
-            !vendorBootImgLoaded) {
-    vendorBootImgLoaded = TRUE;
-    BootStatsSetTimeStamp (BS_KERNEL_LOAD_DONE);
+    BootStatsSetTimeStamp (BS_BOOTIMAGE_CHECKSUM_START);
   }
 
   if (Avb_StrnCmp ( (CONST CHAR8*)hash_desc.hash_algorithm, "sha256",
@@ -257,6 +249,9 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     ret = AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION;
     goto out;
   } else {
+    if (Kpi_Flag) {
+      BootStatsSetTimeStamp (BS_BOOTIMAGE_CHECKSUM_DONE);
+    }
     avb_debugv (part_name, ": success: Image verification completed\n", NULL);
   }
 
