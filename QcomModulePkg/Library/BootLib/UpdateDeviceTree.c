@@ -41,6 +41,7 @@
 #include <Protocol/EFIDDRGetConfig.h>
 #include <Protocol/EFIRng.h>
 #include <Library/PartialGoods.h>
+#include <Library/Board.h>
 
 #define NUM_SPLASHMEM_PROP_ELEM 4
 #define DEFAULT_CELL_SIZE 2
@@ -604,6 +605,13 @@ UpdateDeviceTree (VOID *fdt,
   DEBUG ((EFI_D_VERBOSE, "End DT fstab node update: %lu ms\n",
           GetTimerCountms ()));
 
+#ifdef SUPPORT_DISABLE_NON_BOOTDEVICE
+  Status = DisableNonBootDeviceNode (fdt);
+  if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Failed to Disable Other Boot Device:%r\n", Status));
+  }
+#endif
+
   /* Check partial goods*/
   if (FixedPcdGetBool (EnablePartialGoods)) {
     ret = UpdatePartialGoodsNode (fdt);
@@ -845,3 +853,30 @@ UpdateFstabNode (VOID *fdt)
   BootDevBuf = NULL;
   return Status;
 }
+
+#ifdef SUPPORT_DISABLE_NON_BOOTDEVICE
+EFI_STATUS
+DisableNonBootDeviceNode (VOID *fdt)
+{
+  MemCardType cardtype;
+  EFI_STATUS Status = EFI_SUCCESS;
+  INT32 NodeOffset = 0;
+
+  cardtype = CheckRootDeviceType ();
+  if (cardtype == UFS) {
+    NodeOffset = fdt_node_offset_by_prop_value (fdt, -1, "qcom,msm-bus,name", "sdhc1", sizeof("sdhc1"));
+    Status = fdt_setprop_string (fdt, NodeOffset, "status", "disabled");
+    if (Status != 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to Disable EMMC Device:%r\n", Status));
+    }
+  }
+  else if (cardtype == EMMC) {
+    NodeOffset = fdt_path_offset (fdt, "/soc/ufshc");
+    Status = fdt_setprop_string (fdt, NodeOffset, "status", "disabled");
+    if (Status != 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to Disable UFS Device:%r\n", Status));
+    }
+  }
+  return Status;
+}
+#endif

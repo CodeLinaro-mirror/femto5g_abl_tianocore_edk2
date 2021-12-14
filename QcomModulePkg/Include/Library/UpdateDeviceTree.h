@@ -92,4 +92,9 @@ UpdateVbmetaNode (VOID *fdt,
 UINT32
 fdt_check_header_ext (VOID *fdt);
 
+#ifdef SUPPORT_DISABLE_NON_BOOTDEVICE
+EFI_STATUS
+DisableNonBootDeviceNode (VOID *fdt);
+#endif
+
 #endif
