@@ -122,7 +122,7 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
   size_t digest_len;
   const char* found;
   uint64_t image_size;
-  bool Kpi_Flag = 0;
+  bool kpi_flag = 0;
 
   if (!avb_hash_descriptor_validate_and_byteswap(
           (const AvbHashDescriptor*)descriptor, &hash_desc)) {
@@ -191,11 +191,6 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     goto out;
   }
 
-  if (Avb_StrnCmp ("boot", part_name, 4) == 0) {
-    BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
-    Kpi_Flag = 1;
-  }
-
 #if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
   if ((Avb_StrnCmp ("boot", part_name, 4) == 0)) {
     ret = LoadAndVerifyBootHashPartition (ops,
@@ -206,6 +201,11 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
                                           image_buf,
                                           hash_desc.image_size);
     goto out;
+  }
+#else
+  if (Avb_StrnCmp ("boot", part_name, 4) == 0) {
+    BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
+    kpi_flag = 1;
   }
 #endif
 
@@ -225,9 +225,8 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     goto out;
   }
 
-  if (Kpi_Flag) {
+  if (kpi_flag) {
     BootStatsSetTimeStamp (BS_KERNEL_LOAD_DONE);
-    BootStatsSetTimeStamp (BS_BOOTIMAGE_CHECKSUM_START);
   }
 
   if (Avb_StrnCmp ( (CONST CHAR8*)hash_desc.hash_algorithm, "sha256",
@@ -264,9 +263,6 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     ret = AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION;
     goto out;
   } else {
-    if (Kpi_Flag) {
-      BootStatsSetTimeStamp (BS_BOOTIMAGE_CHECKSUM_DONE);
-    }
     avb_debugv (part_name, ": success: Image verification completed\n", NULL);
   }
 

@@ -224,6 +224,7 @@ INT32 BootPartitionLoad(VOID* Arg) {
   uint64_t ImageOffset;
   uint64_t SplitImageSize;
 
+  BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
   LoadVerifyInfo* ThreadBootLoad = (LoadVerifyInfo*) Arg;
   if ((NULL ==  ThreadBootLoad->ops) ||
       (NULL == ThreadBootLoad->DescDigest) ||
@@ -264,6 +265,7 @@ INT32 BootPartitionLoad(VOID* Arg) {
 
   KernIntf->Sem->SemPost(SemLoadSecond, FALSE);
 
+  BootStatsSetTimeStamp (BS_KERNEL_LOAD_DONE);
   ThreadBootLoad->Status = Status;
   ThreadStackNodeRemove (CurrentThread);
   KernIntf->Thread->ThreadExit (0);
