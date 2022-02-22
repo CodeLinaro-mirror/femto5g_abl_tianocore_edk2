@@ -1,5 +1,6 @@
 #/*
 # * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+# * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
 # *
 # * Redistribution and use in source and binary forms, with or without
 # * modification, are permitted provided that the following conditions are
@@ -96,6 +97,7 @@
   GCC:*_*_*_DLINK_FLAGS = -Ttext=0x0
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO
   GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\"
+  GCC:*_*_*_CC_FLAGS = -DAUDIO_FRAMEWORK=\"$(PRODUCT_AUDIO_FRAMEWORK)\"
 
   !if $(VERIFIED_BOOT)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT
