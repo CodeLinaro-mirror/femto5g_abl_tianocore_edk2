@@ -1399,6 +1399,14 @@ CmdDownload (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   /* NumBytesString is a 8 bit string, InitStrLen is 4, and the AsciiStrnCpyS()
    * require "DestMax > SourceLen", so init length of Response as 13.
    */
+  if ((sizeof (Response) - InitStrLen) < AsciiStrLen (NumBytesString)) {
+    DEBUG ((EFI_D_ERROR,
+            "ERROR: Data size (%d) is more than max download size (%d)\n",
+            sizeof (Response) - InitStrLen, AsciiStrLen (NumBytesString)));
+    FastbootFail ("Requested download size is more than max allowed\n");
+    return;
+  }
+
   AsciiStrnCpyS (Response + InitStrLen, sizeof (Response) - InitStrLen,
                  NumBytesString, AsciiStrLen (NumBytesString));
 
