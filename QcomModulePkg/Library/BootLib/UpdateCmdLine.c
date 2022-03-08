@@ -307,6 +307,10 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN FlashlessBoot,
   CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
 
+#if defined(NAD_PARTITION) && defined(INITRAMFS_BUNDLE)
+  CHAR8 *RootInitramfs = " root=/dev/ram";
+#endif
+
   *SysPath = AllocateZeroPool (sizeof (CHAR8) * MAX_PATH_SIZE);
   if (!*SysPath) {
     DEBUG ((EFI_D_ERROR, "Failed to allocated memory for System path query\n"));
@@ -390,9 +394,32 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN FlashlessBoot,
           } else {
              DEBUG ((EFI_D_ERROR, "%d  = root index  \n", MtdBlkIndex));
           }
+#ifdef NAD_PARTITION
+    #ifdef INITRAMFS_BUNDLE
+          if(BootIntoRecovery != 0)
+          {
+             AsciiSPrint (*SysPath, MAX_PATH_SIZE, " recovery=%d", MtdBlkIndex);
+          }
+          AsciiStrnCatS (*SysPath, MAX_PATH_SIZE, RootInitramfs, AsciiStrLen(RootInitramfs) );
+    #else//INITRAMFS_BUNDLE
+          if(BootIntoRecovery == 0)
+          {
+             AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+                     " rootfstype=squashfs ubi.mtd=%d,0,%d ubi.block=0,%d root=/dev/ubiblock0_%d",
+                     (Index - 1), MTD_UBI_BEB_LIMIT_PER1024, MtdBlkIndex, MtdBlkIndex);
+          }
+          else
+          {
+             AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+                     " rootfstype=squashfs ubi.mtd=%d,0,%d ubi.block=0,%d root=/dev/ubiblock0_%d",
+                     (Index - 1), MTD_UBI_BEB_LIMIT_PER1024, MtdBlkIndex, MtdBlkIndex);
+          }
+    #endif//INITRAMFS_BUNDLE
+#else
           AsciiSPrint (*SysPath, MAX_PATH_SIZE,
                    " rootfstype=squashfs root=/dev/mtdblock%d ubi.mtd=%d,0,%d",
                    MtdBlkIndex, (Index - 1), MTD_UBI_BEB_LIMIT_PER1024);
+#endif//NAD_PARTITION
       } else {
          if(BootIntoRecovery && IsRecoveryVolumeUsed()){
              MtdBlkIndex = RECOVERYFS_VOLUME_INDEX;
@@ -603,13 +630,14 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
       (Param->MultiSlotBoot &&
       !IsBootDevImage ())) {
 
+#ifndef INITRAMFS_BUNDLE
        /* Skip Initramfs*/
        if (!IsDynamicPartitionSupport () &&
            !Param->Recovery) {
          Src = Param->SkipRamFs;
          AsciiStrCatS (Dst, MaxCmdLineLen, Src);
        }
-
+#endif
      /* Add root command line */
      Src = Param->RootCmdLine;
      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
@@ -825,9 +853,11 @@ skip_BoardSerialNum:
     CmdLineLen += AsciiStrLen (RootCmdLine);
     CmdLineLen += AsciiStrLen (InitCmdline);
 
+#ifndef INITRAMFS_BUNDLE
        if (!IsDynamicPartitionSupport () &&
            !Recovery)
          CmdLineLen += AsciiStrLen (SkipRamFs);
+#endif
   }
 
   GetDisplayCmdline ();
