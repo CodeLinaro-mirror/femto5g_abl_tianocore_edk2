@@ -195,6 +195,9 @@
   !if $(NAND_AB_ATTR_SUPPORT)
       GCC:*_*_*_CC_FLAGS = -DNAND_AB_ATTR_SUPPORT
   !endif
+  !if $(INITRAMFS_BUNDLE)
+      GCC:*_*_*_CC_FLAGS = -DINITRAMFS_BUNDLE
+  !endif
 
 [PcdsFixedAtBuild.common]
 
