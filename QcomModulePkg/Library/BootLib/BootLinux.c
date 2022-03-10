@@ -1095,7 +1095,6 @@ BootLinux (BootInfo *Info)
   PreparePlatformHardware ();
 
   BootStatsSetTimeStamp (BS_BL_END);
-  BootStatsSetTimeStamp (BS_KERNEL_ENTRY);
 
   if (IsVmEnabled ()) {
     DisableHypUartUsageForLogging ();
