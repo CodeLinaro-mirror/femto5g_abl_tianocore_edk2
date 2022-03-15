@@ -24,6 +24,38 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following
+ * license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ * * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following
+ * disclaimer in the documentation and/or other materials provided
+ * with the distribution.
+ * * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ * contributors may be used to endorse or promote products derived
+ * from this software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
 */
 #if HIBERNATION_SUPPORT_INSECURE
 
@@ -576,6 +608,15 @@ static int decrypt_page(void *encrypt_data)
 }
 #endif
 
+static void *memset(void *Destination, int Value, int Count)
+{
+  CHAR8 *Ptr = Destination;
+  while (Count--)
+          *Ptr++ = Value;
+
+  return Destination;
+}
+
 static int read_swap_info_struct(void)
 {
 	struct swsusp_info *info;
@@ -587,6 +628,8 @@ static int read_swap_info_struct(void)
 		printf("Memory alloc failed Line %d\n",__LINE__);
 		return -1;
 	}
+
+	memset(info, 0, sizeof(struct swsusp_info));
 	if (read_image(SWAP_INFO_OFFSET, info, 1)) {
 		printf("Failed to read Line %d\n", __LINE__);
 		FreePages(info, 1);
@@ -1227,16 +1270,6 @@ static int init_ta_and_get_key(struct secs2d_ta_handle *ta_handle)
 	}
 	gBS->CopyMem ((void *)dp.unwrapped_key, (void *)rsp.unwrapkey_rsp.key_buffer, 32);
 	return 0;
-}
-
-
-static void *memset(void *Destination, int Value, int Count)
-{
-  CHAR8 *Ptr = Destination;
-  while (Count--)
-          *Ptr++ = Value;
-
-  return Destination;
 }
 
 static int init_aes_decrypt(void)
