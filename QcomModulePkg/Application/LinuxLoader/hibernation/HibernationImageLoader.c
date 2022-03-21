@@ -39,6 +39,7 @@
 #include <VerifiedBoot.h>
 #include <Library/aes/aes_public.h>
 #include <Protocol/EFIQseecom.h>
+#include "KeymasterClient.h"
 
 #define BUG(fmt, ...) {\
 		printf("Fatal error " fmt, ##__VA_ARGS__);\
@@ -557,8 +558,10 @@ static int decrypt_page(void *encrypt_data)
 		return -1;
 	if (SW_Cipher_GetParam(SW_CIPHER_PARAM_TAG, (void*)(dp.auth_cur), dp.authsize))
 		return -1;
-
-	/* Compare tag output here */
+	if (memcmp(dp.auth_cur, authtags, dp.authsize)) {
+		printf("Auth Comparsion failed\n");
+		return -1;
+	}
 
 	gBS->CopyMem ((void *)(encrypt_data), (void *)(dp.out), PAGE_SIZE);
 	SW_Cipher_DeInit();
@@ -1309,6 +1312,12 @@ void BootIntoHibernationImage(BootInfo *Info, BOOLEAN *SetRotAndBootState)
          * snapshot stage..
 	 */
 	*SetRotAndBootState = TRUE;
+
+	Status = KeyMasterFbeSetSeed();
+	if (Status != EFI_SUCCESS) {
+		DEBUG ((EFI_D_ERROR, "Failed to set seed for fbe : %r\n", Status));
+		goto err;
+	}
 
 	ret = restore_snapshot_image();
 	if (ret) {
