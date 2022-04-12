@@ -18,8 +18,8 @@ found at
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2015 - 2020, The Linux Foundation. All rights reserved.
- *
+ * Copyright (c) 2015 - 2020,2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -1399,6 +1399,14 @@ CmdDownload (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   /* NumBytesString is a 8 bit string, InitStrLen is 4, and the AsciiStrnCpyS()
    * require "DestMax > SourceLen", so init length of Response as 13.
    */
+  if ((sizeof (Response) - InitStrLen) < AsciiStrLen (NumBytesString)) {
+    DEBUG ((EFI_D_ERROR,
+            "ERROR: Data size (%d) is more than max download size (%d)\n",
+            sizeof (Response) - InitStrLen, AsciiStrLen (NumBytesString)));
+    FastbootFail ("Requested download size is more than max allowed\n");
+    return;
+  }
+
   AsciiStrnCpyS (Response + InitStrLen, sizeof (Response) - InitStrLen,
                  NumBytesString, AsciiStrLen (NumBytesString));
 
@@ -2820,6 +2828,7 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   Info.Images[0].Name = "boot";
   Info.NumLoadedImages = 1;
   Info.MultiSlotBoot = PartitionHasMultiSlot (L"boot");
+  Info.HeaderVersion = hdr->header_version;
 
   if (Info.MultiSlotBoot) {
     Status = ClearUnbootable ();

@@ -1021,6 +1021,9 @@ BootLinux (BootInfo *Info)
     return EFI_BAD_BUFFER_SIZE;
   }
 
+  BootParamlistPtr.ExtraCmdLine = (CHAR8 *)&(((boot_img_hdr *)
+                          (BootParamlistPtr.ImageBuffer))->extra_cmdline[0]);
+
   DEBUG ((EFI_D_VERBOSE, "Kernel Load Address: 0x%x\n",
                                         BootParamlistPtr.KernelLoadAddr));
   DEBUG ((EFI_D_VERBOSE, "Kernel Size Actual: 0x%x\n",
@@ -1034,6 +1037,22 @@ BootLinux (BootInfo *Info)
   DEBUG (
       (EFI_D_VERBOSE, "Device Tree Load Address: 0x%x\n",
                              BootParamlistPtr.DeviceTreeLoadAddr));
+
+  if (BootParamlistPtr.ExtraCmdLine[0]) {
+    UINT32 FullCmdLen = BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE;
+    CHAR8* FullCmdLine = AllocateZeroPool (FullCmdLen);
+
+    if (!FullCmdLine)
+      return EFI_OUT_OF_RESOURCES;
+
+    AsciiStrCpyS (FullCmdLine, FullCmdLen, BootParamlistPtr.CmdLine);
+    AsciiStrCatS (FullCmdLine, FullCmdLen, BootParamlistPtr.ExtraCmdLine);
+    BootParamlistPtr.CmdLine = FullCmdLine;
+    BootParamlistPtr.CmdLine[FullCmdLen - 1] = '\0';
+  }
+  else {
+    BootParamlistPtr.CmdLine[BOOT_ARGS_SIZE - 1] = '\0';
+  }
 
   if (AsciiStrStr (BootParamlistPtr.CmdLine, "root=")) {
     BootDevImage = TRUE;
@@ -1188,6 +1207,9 @@ CheckImageHeader (VOID *ImageHdrBuffer,
     SecondSize = ((boot_img_hdr *)(ImageHdrBuffer))->second_size;
     *PageSize = ((boot_img_hdr *)(ImageHdrBuffer))->page_size;
   } else {
+    if (!VendorImageHdrBuffer)
+      return EFI_INVALID_PARAMETER;
+
     if (CompareMem ((VOID *)((vendor_boot_img_hdr_v3 *)
                      (VendorImageHdrBuffer))->magic,
                      VENDOR_BOOT_MAGIC, VENDOR_BOOT_MAGIC_SIZE)) {
