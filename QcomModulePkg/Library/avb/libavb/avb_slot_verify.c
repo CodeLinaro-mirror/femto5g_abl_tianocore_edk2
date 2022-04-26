@@ -321,6 +321,7 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
   AvbSlotVerifyResult ret;
   AvbIOResult io_ret;
   uint8_t* image_buf = NULL;
+  size_t part_num_read;
   bool image_preloaded = false;
   uint8_t* digest;
   size_t digest_len;
@@ -411,12 +412,13 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     avb_debugv(part_name, ": Loading entire partition.\n", NULL);
   }
 
-  ret = load_full_partition(
-      ops, part_name, image_size, &image_buf, &image_preloaded);
-  if (ret != AVB_SLOT_VERIFY_RESULT_OK) {
-    goto out;
-  }
+   image_buf = avb_malloc(image_size);
+   if (image_buf == NULL) {
+      ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
+      goto out;
+   } 
 
+#if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
   if ((avb_strncmp ("boot", part_name, 4) == 0)) {
     ret = LoadAndVerifyBootHashPartition (ops,
                                           hash_desc,
@@ -427,6 +429,23 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
                                           hash_desc.image_size);
     goto out;
   }
+#endif
+
+    io_ret = ops->read_from_partition(
+        ops, part_name, 0 /* offset */, image_size, image_buf, &part_num_read);
+    if (io_ret == AVB_IO_RESULT_ERROR_OOM) {
+      ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
+      goto out;
+    } else if (io_ret != AVB_IO_RESULT_OK) {
+      avb_errorv(part_name, ": Error loading data from partition.\n", NULL);
+      ret = AVB_SLOT_VERIFY_RESULT_ERROR_IO;
+      goto out;
+    }
+    if (part_num_read != image_size) {
+      avb_errorv(part_name, ": Read fewer than requested bytes.\n", NULL);
+      ret = AVB_SLOT_VERIFY_RESULT_ERROR_IO;
+      goto out;
+    }
 
   // Although only one of the type might be used, we have to defined the
   // structure here so that they would live outside the 'if/else' scope to be
