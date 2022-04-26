@@ -196,6 +196,7 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     Kpi_Flag = 1;
   }
 
+#if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
   if ((Avb_StrnCmp ("boot", part_name, 4) == 0)) {
     ret = LoadAndVerifyBootHashPartition (ops,
                                           hash_desc,
@@ -206,6 +207,8 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
                                           hash_desc.image_size);
     goto out;
   }
+#endif
+
   io_ret = ops->read_from_partition(
       ops, part_name, 0 /* offset */, image_size, image_buf, &part_num_read);
   if (io_ret == AVB_IO_RESULT_ERROR_OOM) {
