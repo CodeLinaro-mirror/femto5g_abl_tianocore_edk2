@@ -229,6 +229,5 @@ UINT64 SetandGetLoadAddr (BootParamlist *BootParamlistPtr, AddrType Type);
 BOOLEAN IsNANDSquashFsSupport (VOID);
 BOOLEAN IsEnableDisplayMenuFlagSupported (VOID);
 BOOLEAN IsSystemdBootslotEnabled (VOID);
-BOOLEAN EarlyServicesEnabled (VOID);
 BOOLEAN IsHibernationEnabled (VOID);
 #endif

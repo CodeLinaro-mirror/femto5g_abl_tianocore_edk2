@@ -142,9 +142,6 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
 #ifdef RAMDISK_RELOCATION_ENABLED
   UINT64 RamDiskLoadAddress = RAMDISK_LOAD_ADDRESS;
 #endif
-  UINT64 KernelLoadAddr_new = 0xC0000000;
-  UINT64 KernelSizeReserved_new = 0x0C800000;
-
   if (BootParamlistPtr == NULL ) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
     return EFI_INVALID_PARAMETER;
@@ -154,14 +151,14 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
    * Query the kernel load address and size from UEFI core, if it's not
    * successful use the predefined load addresses */
   if (QueryBootParams (&KernelLoadAddr, &KernelSizeReserved)) {
-    BootParamlistPtr->KernelLoadAddr = KernelLoadAddr_new;
+    BootParamlistPtr->KernelLoadAddr = KernelLoadAddr;
     if (BootParamlistPtr->BootingWith32BitKernel) {
          BootParamlistPtr->KernelLoadAddr += KERNEL_32BIT_LOAD_OFFSET;
     } else {
          BootParamlistPtr->KernelLoadAddr += KERNEL_64BIT_LOAD_OFFSET;
     }
 
-    BootParamlistPtr->KernelEndAddr = KernelLoadAddr_new + KernelSizeReserved_new;
+    BootParamlistPtr->KernelEndAddr = KernelLoadAddr + KernelSizeReserved;
   } else {
     DEBUG ((EFI_D_VERBOSE, "QueryBootParams Failed: "));
     /* If Query of boot params fails, RamdiskEndAddress is end of the
@@ -173,17 +170,17 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
          RamdiskEndAddress. Using pre-defined offset for backward
          compatability */
       BootParamlistPtr->KernelLoadAddr =
-            (EFI_PHYSICAL_ADDRESS) (KernelLoadAddr_new |
+            (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr->BaseMemory |
                                     PcdGet32 (KernelLoadAddress32));
       KernelSizeReserved = PcdGet32 (RamdiskEndAddress32);
     } else {
       BootParamlistPtr->KernelLoadAddr =
-            (EFI_PHYSICAL_ADDRESS) (KernelLoadAddr_new |
+            (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr->BaseMemory |
                                     PcdGet32 (KernelLoadAddress));
       KernelSizeReserved = PcdGet32 (RamdiskEndAddress);
     }
 
-    BootParamlistPtr->KernelEndAddr = KernelLoadAddr_new +
+    BootParamlistPtr->KernelEndAddr = BootParamlistPtr->BaseMemory +
                                        KernelSizeReserved;
     DEBUG ((EFI_D_VERBOSE, "calculating dynamic offsets\n"));
   }
@@ -1535,18 +1532,6 @@ BOOLEAN IsLEVariant (VOID)
 }
 #else
 BOOLEAN IsLEVariant (VOID)
-{
-  return FALSE;
-}
-#endif
-
-#ifdef ENABLE_EARLY_SERVICES
-BOOLEAN EarlyServicesEnabled (VOID)
-{
-  return TRUE;
-}
-#else
-BOOLEAN EarlyServicesEnabled (VOID)
 {
   return FALSE;
 }
