@@ -60,6 +60,8 @@
 #include "avb_vbmeta_image.h"
 #include "avb_version.h"
 #include "BootStats.h"
+#include "avb_load_verify_parallel.h"
+
 
 /* Maximum allow length (in bytes) of a partition name, including
  * ab_suffix.
@@ -193,6 +195,19 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
     Kpi_Flag = 1;
   }
+
+#if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
+  if ((Avb_StrnCmp ("boot", part_name, 4) == 0)) {
+    ret = LoadAndVerifyBootHashPartition (ops,
+                                          hash_desc,
+                                          part_name,
+                                          desc_digest,
+                                          desc_salt,
+                                          image_buf,
+                                          hash_desc.image_size);
+    goto out;
+  }
+#endif
 
   io_ret = ops->read_from_partition(
       ops, part_name, 0 /* offset */, image_size, image_buf, &part_num_read);

@@ -3,6 +3,7 @@
  * All rights reserved.
  *
  * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -106,6 +107,28 @@ GetRebootReason (UINT32 *ResetReason)
   return Status;
 }
 
+
+STATIC VOID
+SetDefaultAudioFw ()
+{
+  CHAR8 AudioFW[MAX_AUDIO_FW_LENGTH];
+  STATIC CHAR8* Src;
+  STATIC UINT32 Length;
+  EFI_STATUS Status;
+
+  Status = ReadAudioFrameWork (&Src, &Length);
+
+  if ((Status == EFI_SUCCESS) && (AsciiStrLen (Src) == 0) &&
+       (AsciiStrLen (AUDIO_FRAMEWORK) > 0)) {
+    AsciiStrnCpyS(AudioFW, MAX_AUDIO_FW_LENGTH, AUDIO_FRAMEWORK,
+                     AsciiStrLen (AUDIO_FRAMEWORK));
+
+    StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIO_FRAMEWORK));
+  } else
+     DEBUG ((EFI_D_ERROR, "TARGET_AUDIO_FRAMEWORK is NOT updated length =%d, %a\n",
+              Length, AUDIO_FRAMEWORK));
+}
+
 BOOLEAN IsABRetryCountUpdateRequired (VOID)
 {
   BOOLEAN BatteryStatus;
@@ -203,6 +226,8 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     DEBUG ((EFI_D_ERROR, "Error reading key status: %r\n", Status));
     goto stack_guard_update_default;
   }
+
+  SetDefaultAudioFw ();
 
   // check for reboot mode
   Status = GetRebootReason (&BootReason);
