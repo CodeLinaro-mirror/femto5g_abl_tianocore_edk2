@@ -598,6 +598,9 @@ DisplayVerifiedBootMenu (DISPLAY_MENU_TYPE Type)
 
   if (IsEnableDisplayMenuFlagSupported ()) {
     OptionMenuInfo = &gMenuInfo;
+
+DEBUG ((EFI_D_VERBOSE, "[%p]\n", OptionMenuInfo));
+
     DrawMenuInit ();
 
     /* Initialize the last_msg_type */

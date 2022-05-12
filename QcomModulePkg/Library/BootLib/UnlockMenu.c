@@ -308,6 +308,9 @@ DisplayUnlockMenu (INTN Type, BOOLEAN Value)
 
   if (IsEnableDisplayMenuFlagSupported ()) {
     OptionMenuInfo = &gMenuInfo;
+
+DEBUG ((EFI_D_VERBOSE, "[%p]\n", OptionMenuInfo));
+
     DrawMenuInit ();
 
     /* Initialize the last menu type */
