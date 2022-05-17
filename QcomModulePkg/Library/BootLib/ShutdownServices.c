@@ -159,7 +159,7 @@ EFI_STATUS PreparePlatformHardware (EFI_KERNEL_PROTOCOL *KernIntf,
 VOID
 RebootDevice (UINT8 RebootReason)
 {
-  ResetDataType ResetData;
+  static ResetDataType ResetData;
   EFI_STATUS Status = EFI_INVALID_PARAMETER;
 
   WaitForFlashFinished ();
