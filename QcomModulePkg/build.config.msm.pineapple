@@ -2,7 +2,7 @@
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.la.common
 
-MSM_ARCH=kalama
+MSM_ARCH=pineapple
 BOOTLOADER_ARCH=AARCH64
 
 MAKE_FLAGS=("USER_BUILD_VARIANT=${USER_BUILD_VARIANT}")
