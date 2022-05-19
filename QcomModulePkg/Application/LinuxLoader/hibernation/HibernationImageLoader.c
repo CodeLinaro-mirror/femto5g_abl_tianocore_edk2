@@ -46,7 +46,6 @@
 
 /* Reserved some free memory for UEFI use */
 #define RESERVE_FREE_SIZE	1024*1024*10
-
 struct free_ranges {
 	UINT64 start;
 	UINT64 end;
@@ -60,13 +59,11 @@ static int free_range_count;
 static unsigned int nr_copy_pages;
 /* number of meta pages or pages which hold pfn indexes */
 static unsigned int nr_meta_pages;
-
+/* number of image kernel pages bounced due to conflict with UEFI */
 static unsigned long bounced_pages;
 
-UINT64 relocation_base_addr;
-static struct swsusp_header *swsusp_header;
+static UINT64 relocation_base_addr;
 static struct arch_hibernate_hdr *resume_hdr;
-static struct swsusp_info *swsusp_info;
 
 struct pfn_block {
 	unsigned long base_pfn;
@@ -81,6 +78,15 @@ struct kernel_pfn_iterator {
 };
 static struct kernel_pfn_iterator kernel_pfn_iterator;
 
+/*
+ * Bounce Pages - During the copy of pages from snapshot image to
+ * RAM, certain pages can conflicts with concurrently running UEFI/ABL
+ * pages. These pages are copied temporarily to bounce pages. And
+ * during later stage, upon exit from UEFI boot services, these
+ * bounced pages are copied to their real destination. bounce_pfn_entry
+ * is used to store the location of temporary bounce pages and their
+ * real destination.
+ */
 struct bounce_pfn_entry {
 	UINT64 dst_pfn;
 	UINT64 src_pfn;
@@ -99,8 +105,9 @@ struct bounce_pfn_entry {
 #define	ENTRIES_PER_TABLE	(PAGE_SIZE / BOUNCE_TABLE_ENTRY_SIZE) - 1
 
 /*
+ * Bounce Tables -  bounced pfn entries are stored in bounced tables.
  * Bounce tables are discontinuous pages linked by the last element
- * of the page.
+ * of the page. Bounced table are allocated using unused pfn allocator.
  *
  *       ---------          	      ---------
  * 0   | dst | src |	----->	0   | dst | src |
@@ -117,19 +124,20 @@ struct bounce_table {
 	unsigned long padding;
 };
 
-/*
- * Base bounce table of bounced entries that will be passed to
- * relocation code.
- */
-struct bounce_table *base_bounce_table;
-
 struct bounce_table_iterator {
+	struct bounce_table *first_table;
 	struct bounce_table *cur_table;
 	/* next available free table entry */
 	int cur_index;
 };
-struct bounce_table_iterator bti;
+struct bounce_table_iterator table_iterator;
 
+#define PFN_INDEXES_PER_PAGE		512
+/* Final entry is used to link swap_map pages together */
+#define ENTRIES_PER_SWAPMAP_PAGE 	(PFN_INDEXES_PER_PAGE - 1)
+
+#define SWAP_INFO_OFFSET        2
+#define FIRST_PFN_INDEX_OFFSET	(SWAP_INFO_OFFSET + 1)
 /*
  * target_addr  : address where page allocation is needed
  *
@@ -141,8 +149,8 @@ static int CheckFreeRanges (UINT64 target_addr)
 	int i = 0;
 	while (i < free_range_count) {
 		if (target_addr >= free_range_buf[i].start &&
-			target_addr < free_range_buf[i].end)
-		return 1;
+				target_addr < free_range_buf[i].end)
+			return 1;
 		i++;
 	}
 	return 0;
@@ -254,7 +262,7 @@ static void preallocate_free_ranges(void)
 			range_size -=  RESERVE_FREE_SIZE;
 			num_pages = range_size/PAGE_SIZE;
 			printf("Reserved range = 0x%lx - 0x%lx\n", free_range_buf[i].start,
-								alloc_addr - 1);
+					alloc_addr - 1);
 			/* Modify the free range start */
 			free_range_buf[i].start = alloc_addr;
 		} else {
@@ -266,7 +274,7 @@ static void preallocate_free_ranges(void)
 				num_pages, &alloc_addr);
 		if(ret)
 			printf("Fatal error alloc LINE %d alloc_addr = 0x%lx\n",
-							__LINE__, alloc_addr);
+					__LINE__, alloc_addr);
 	}
 }
 
@@ -285,7 +293,7 @@ static int get_uefi_memory_map(void)
 	MemMap     = NULL;
 
 	Status = gBS->GetMemoryMap (&MemMapSize, MemMap, &MapKey,
-				&DescriptorSize, &DescriptorVersion);
+			&DescriptorSize, &DescriptorVersion);
 	if (Status != EFI_BUFFER_TOO_SMALL) {
 		DEBUG ((EFI_D_ERROR, "ERROR: Undefined response get memory map\n"));
 		return -1;
@@ -299,12 +307,12 @@ static int get_uefi_memory_map(void)
 	MemMap = AllocateZeroPool (MemMapSize);
 	if (!MemMap) {
 		DEBUG ((EFI_D_ERROR,
-			"ERROR: Failed to allocate memory for memory map\n"));
+					"ERROR: Failed to allocate memory for memory map\n"));
 		return -1;
 	}
 	MemMapPtr = MemMap;
 	Status = gBS->GetMemoryMap (&MemMapSize, MemMap, &MapKey,
-				&DescriptorSize, &DescriptorVersion);
+			&DescriptorSize, &DescriptorVersion);
 	if (EFI_ERROR (Status)) {
 		DEBUG ((EFI_D_ERROR, "ERROR: Failed to query memory map\n"));
 		FreePool (MemMapPtr);
@@ -315,7 +323,7 @@ static int get_uefi_memory_map(void)
 			free_range_buf[index].start = MemMap->PhysicalStart;
 			free_range_buf[index].end =  MemMap->PhysicalStart + MemMap->NumberOfPages * PAGE_SIZE;
 			DEBUG ((EFI_D_ERROR, "Free Range 0x%lx --- 0x%lx\n",free_range_buf[index].start,
-					free_range_buf[index].end));
+						free_range_buf[index].end));
 			index++;
 		}
 		MemMap = (EFI_MEMORY_DESCRIPTOR *)((UINTN)MemMap + DescriptorSize);
@@ -348,13 +356,12 @@ static int read_image(unsigned long offset, VOID *Buff, int nr_pages) {
 	if ((MAX_UINT64 / (BlockIo->Media->LastBlock + 1)) <
 			(UINT64)BlockIo->Media->BlockSize) {
 		DEBUG ((EFI_D_ERROR,
-			"Integer overflow while multiplying LastBlock and BlockSize\n"));
+					"Integer overflow while multiplying LastBlock and BlockSize\n"));
 		return -1;
 	}
 
 	/* Check what is the block size of the mmc and scale the offset accrodingly
 	 * right now blocksize = page_size = 4096 */
-
 	Status = BlockIo->ReadBlocks (BlockIo,
 			BlockIo->Media->MediaId,
 			offset,
@@ -368,17 +375,36 @@ static int read_image(unsigned long offset, VOID *Buff, int nr_pages) {
 	return 0;
 }
 
+static int is_current_table_full(struct bounce_table_iterator *bti)
+{
+	return (bti->cur_index == ENTRIES_PER_TABLE);
+}
+
+static void alloc_next_table(struct bounce_table_iterator *bti)
+{
+	/* Allocate and chain next bounce table */
+	bti->cur_table->next_bounce_table = get_unused_pfn() << PAGE_SHIFT;
+	bti->cur_table = (struct bounce_table *) bti->cur_table->next_bounce_table;
+	bti->cur_index = 0;
+}
+
+static struct bounce_pfn_entry * find_next_bounce_entry(void)
+{
+	struct bounce_table_iterator *bti = &table_iterator;
+
+	if (is_current_table_full(bti))
+		alloc_next_table(bti);
+
+	return &bti->cur_table->bounce_entry[bti->cur_index++];
+}
+
 static void update_bounce_entry(UINT64 dst_pfn, UINT64 src_pfn)
 {
-	if (bti.cur_index == ENTRIES_PER_TABLE) {
-		/* Allocate and chain next bounce table */
-		bti.cur_table->next_bounce_table = get_unused_pfn() << PAGE_SHIFT;
-		bti.cur_table = (struct bounce_table *) bti.cur_table->next_bounce_table;
-		bti.cur_index = 0;
-	}
+	struct bounce_pfn_entry *entry;
 
-	bti.cur_table->bounce_entry[bti.cur_index].dst_pfn = dst_pfn;
-	bti.cur_table->bounce_entry[bti.cur_index++].src_pfn = src_pfn;
+	entry = find_next_bounce_entry();
+	entry->dst_pfn = dst_pfn;
+	entry->src_pfn = src_pfn;
 	bounced_pages++;
 }
 
@@ -399,124 +425,169 @@ static void copy_page_to_dst(unsigned long src_pfn, unsigned long dst_pfn)
 	}
 }
 
-static void print_kernel_details(struct swsusp_info *info)
+static void print_image_kernel_details(struct swsusp_info *info)
 {
 	/*TODO: implement printing of kernel details here*/
 	return;
 }
 
+/*
+ * swap_map pages are at offsets 1, 513, 1025, 1537,....
+ * This function returns true if offset belongs to a swap_map page.
+ */
 static int check_swap_map_page(unsigned long offset)
 {
-	return !((offset -1) % PFNS_PER_PAGE);
+	return (offset % PFN_INDEXES_PER_PAGE) == 1;
 }
 
-static int swsusp_read(void)
+static int read_swap_info_struct(void)
 {
 	struct swsusp_info *info;
-	int ret;
-	unsigned long start_ms, temp, disk_read_ms = 0;
-	unsigned long copy_page_ms = 0;
-	unsigned long offset;
-	unsigned long src_pfn, dst_pfn;
-	unsigned int pending_pages, nr_read_pages;
-	unsigned long *kernel_pfns;
-	unsigned long pfn_index = 0;
-	unsigned long MBs, MBPS, DDR_MBPS;
-	unsigned long read_size;
-	unsigned long read_meta_pages, rem_meta_pages;
-	void *disk_read_buffer;
-
-	start_ms = GetTimerCountms();
-
-	disk_read_buffer =  AllocatePages (DISK_BUFFER_PAGES);
-	if (!disk_read_buffer) {
-		printf("Disk buffer alloc failed\n");
-		return -1;
-	} else {
-		printf("Disk buffer alloction at 0x%p - 0x%p\n", disk_read_buffer,
-				disk_read_buffer + DISK_BUFFER_SIZE - 1);
-	}
-
+	BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
 	info = AllocatePages(1);
 	if (!info) {
 		printf("Failed to allocate memory for swsusp_info %d\n",__LINE__);
-		FreePages(disk_read_buffer, DISK_BUFFER_PAGES);
 		return -1;
 	}
 
-	/* read swsusp_info struct at offset 2 */
-	ret = read_image(SWAP_INFO_OFFSET, info, 1);
-	if (ret) {
+	if (read_image(SWAP_INFO_OFFSET, info, 1)) {
 		printf("Failed to read swsusp_info %d\n", __LINE__);
+		FreePages(info, 1);
 		return -1;
 	}
 
 	resume_hdr = (struct arch_hibernate_hdr *)info;
-	swsusp_info = info;
 	nr_meta_pages = info->pages - info->image_pages - 1;
 	nr_copy_pages = info->image_pages;
-	printf("Total pages to copy = %lu Total meta pages = %lu\n", nr_copy_pages, nr_meta_pages);
-	offset = SWAP_INFO_OFFSET + 1 ;
+	printf("Total pages to copy = %lu Total meta pages = %lu\n",
+			nr_copy_pages, nr_meta_pages);
+	print_image_kernel_details(info);
+	return 0;
+}
 
-	/* Allocate memory for kernel pfn indexes */
-	kernel_pfns = AllocatePages(nr_meta_pages);
-	if (!kernel_pfns) {
-		printf("Failed to allocate memory for storing pfn meta data %d\n",
-			__LINE__);
-		return -1;
+/*
+ * Reads image kernel pfn indexes by stripping off interleaved swap_map pages.
+ *
+ * swap_map pages are particularly useful when swap slot allocations are
+ * randomized. For bootloader based hibernation we have disabled this for
+ * performance reasons. But swap_map pages are still interleaved because
+ * kernel/power/snapshot.c is written to handle both scenarios(sequential
+ * and randomized swap slot).
+ *
+ * Snapshot layout in disk with randomization disabled for swap allocations in
+ * kernel looks likes:
+ *
+ *			disk offsets
+ *				|
+ *				|
+ * 				V
+ * 				   -----------------------
+ * 				0 |     header		  |
+ * 				  |-----------------------|
+ * 				1 |  swap_map page 0	  |
+ * 				  |-----------------------|	      ------
+ * 				2 |  swsusp_info struct	  |		 ^
+ * 	------			  |-----------------------|		 |
+ * 	  ^			3 |  PFN INDEX Page 0	  |		 |
+ * 	  |		          |-----------------------|		 |
+ * 	  |	 		4 |  PFN INDEX Page 1	  |	      	 |
+ *   	  |			  |-----------------------|	511 swap map entries
+ * 510 pfn index pages		  |     :       :         |		 |
+ *  	  |			  |  	:	:	  |		 |
+ *  	  |			  |  	:	:	  |		 |
+ *  	  |			  |-----------------------|		 |
+ *  	  V		      512 |  PFN INDEX Page 509	  |		 V
+ * 	------	    	          |-----------------------|	       -----
+ * 		    	      513 |  swap_map page 1  	  |
+ * 	------			  |-----------------------|	       ------
+ * 	  ^		      514 |  PFN INDEX Page 510   |		 ^
+ * 	  |		          |-----------------------|		 |
+ * 	  |	 	      515 |  PFN INDEX Page 511	  |		 |
+ *   	  |			  |-----------------------|		 |
+ * 511 pfn index pages		  |     :       :         |	511 swap map entries
+ *  	  |			  |  	:	:	  |		 |
+ *  	  |			  |  	:	:	  |		 |
+ *  	  |			  |-----------------------|		 |
+ *  	  V		     1024 |  PFN INDEX Page 1021  |		 V
+ * 	------	    	          |-----------------------|	       ------
+ * 		    	     1025 |  swap_map page 2  	  |
+ * 	------			  |-----------------------|
+ * 	  ^		     1026 |  PFN INDEX Page 1022  |
+ * 	  |		          |-----------------------|
+ * 	  |	 	     1027 |  PFN INDEX Page 1023  |
+ *   	  |			  |-----------------------|
+ * 511 pfn index pages		  |     :       :         |
+ *  	  |			  |  	:	:	  |
+ *  	  |			  |  	:	:	  |
+ *  	  |			  |-----------------------|
+ *  	  V		     1536 |  PFN INDEX Page 1532  |
+ * 	------	    	          |-----------------------|
+ * 		    	     1537 |  swap_map page 3  	  |
+ * 				  |-----------------------|
+ * 			     1538 |  PFN INDEX Page 1533  |
+ * 			          |-----------------------|
+ * 			     1539 |  PFN INDEX Page 1534  |
+ * 				  |-----------------------|
+ * 				  |     :       :         |
+ * 				  |  	:	:	  |
+ */
+static unsigned long* read_kernel_image_pfn_indexes(unsigned long *offset)
+{
+	unsigned long *pfn_array, *array_index;
+	unsigned long pending_pages = nr_meta_pages;
+	unsigned long pages_to_read, pages_read = 0;
+	unsigned long disk_offset;
+	int loop = 0, ret;
+
+	pfn_array = AllocatePages(nr_meta_pages);
+	if (!pfn_array) {
+		printf("Memory alloc failed Line %d\n", __LINE__);
+		return NULL;
 	}
 
-	/* First swap_map page can have max (PFNS_PER_PAGE - 2) pfn indexes */
-	read_size = nr_meta_pages < (PFNS_PER_PAGE - 2) ? nr_meta_pages : PFNS_PER_PAGE - 2;
-	ret = read_image(offset, kernel_pfns, read_size);
-	if (ret) {
-		printf("Failed to read meta pages from disk %d\n", __LINE__);
-		return -1;
-	}
-	offset += read_size;
-	read_meta_pages = read_size;
-
-	if (nr_meta_pages >= PFNS_PER_PAGE - 2) {
-		/* skip swap_map page */
-		offset++;
-		while (nr_meta_pages != read_meta_pages) {
-			rem_meta_pages = nr_meta_pages - read_meta_pages;
-			read_size = rem_meta_pages > PFNS_PER_PAGE - 1 ? PFNS_PER_PAGE - 1 : rem_meta_pages;
-			ret = read_image(offset, kernel_pfns + read_meta_pages * PFNS_PER_PAGE, read_size);
-			if (ret) {
-				printf("Failed to read meta pages from disk %d\n", __LINE__);
-				return -1;
-			}
-			read_meta_pages += read_size;
-			offset += read_size;
-
-			/* skip swap_map page */
-			if (read_size == PFNS_PER_PAGE - 1)
-				offset++;
-		}
-	}
-
-	if (read_meta_pages != nr_meta_pages) {
-		printf("Mismatch in reading nr_meta_pages\n");
-		return -1;
-	}
-
-	print_kernel_details(info);
-	get_uefi_memory_map();
+	disk_offset = FIRST_PFN_INDEX_OFFSET;
 	/*
-	 * No dynamic allocation beyond this point. If not honored it will
-	 * result in corruption of pages.
+	 * First swap_map page has one less pfn_index page
+	 * because of presence of swsusp_info struct. Handle
+	 * it separately.
 	 */
-	preallocate_free_ranges();
+	pages_to_read = MIN(pending_pages, ENTRIES_PER_SWAPMAP_PAGE - 1);
+	array_index = pfn_array;
+	do {
+		ret = read_image(disk_offset, array_index, pages_to_read);
+		if (ret) {
+			printf("Disk read failed Line %d\n", __LINE__);
+			goto err;
+		}
+		pages_read += pages_to_read;
+		pending_pages -= pages_to_read;
+		if (!pending_pages)
+			break;
+		loop++;
+		disk_offset = loop * PFN_INDEXES_PER_PAGE + 2;
+		pages_to_read = MIN(pending_pages, ENTRIES_PER_SWAPMAP_PAGE);
+		array_index = pfn_array + pages_read * PFN_INDEXES_PER_PAGE;
+	} while (1);
 
-	populate_unused_pfn_array(kernel_pfns);
-	reset_upa_index();
+	*offset = disk_offset + pages_to_read;
+	return pfn_array;
+err:
+	FreePages(pfn_array, nr_meta_pages);
+	return NULL;
+}
 
-	base_bounce_table = (struct bounce_table *)(get_unused_pfn() << PAGE_SHIFT);
-	bti.cur_table = base_bounce_table;
+static int read_data_pages(unsigned long *kernel_pfn_indexes,
+		unsigned long offset, void *disk_read_buffer)
+{
+	unsigned int pending_pages, nr_read_pages;
+	unsigned long temp, disk_read_ms = 0;
+	unsigned long copy_page_ms = 0;
+	unsigned long src_pfn, dst_pfn;
+	unsigned long pfn_index = 0;
+	unsigned long MBs, MBPS, DDR_MBPS;
+	int ret;
 
 	pending_pages = nr_copy_pages;
-	printf("Reading pages:     ");
 	while (pending_pages > 0) {
 		/* read pages in chunks to improve disk read performance */
 		nr_read_pages = pending_pages > DISK_BUFFER_PAGES ? DISK_BUFFER_PAGES : pending_pages;
@@ -524,14 +595,14 @@ static int swsusp_read(void)
 		ret = read_image(offset, disk_read_buffer, nr_read_pages);
 		disk_read_ms += (GetTimerCountms() - temp);
 		if (ret < 0) {
-			printf("Failed to read data pages from disc %d\n", __LINE__);
-			break;
+			printf("Failed to read data pages from disk %d\n", __LINE__);
+			return -1;
 		}
 		src_pfn = (unsigned long) disk_read_buffer >> PAGE_SHIFT;
 		while (nr_read_pages > 0) {
-			/* Skip swap_map pages */
+			/* skip swap_map pages */
 			if (!check_swap_map_page(offset)) {
-				dst_pfn = kernel_pfns[pfn_index++];
+				dst_pfn = kernel_pfn_indexes[pfn_index++];
 				pending_pages--;
 				temp = GetTimerCountms();
 				copy_page_to_dst(src_pfn, dst_pfn);
@@ -542,17 +613,11 @@ static int swsusp_read(void)
 			offset++;
 		}
 	}
-	printf("Done. \n");
-	if (ret < 0) {
-		printf("error swsusp_read\n");
-		return -1;
-	}
-
+	BootStatsSetTimeStamp (BS_KERNEL_LOAD_DONE);
 	MBs = (nr_copy_pages*PAGE_SIZE)/(1024*1024);
 	MBPS = (MBs*1000)/disk_read_ms;
 	DDR_MBPS = (MBs*1000)/copy_page_ms;
 	printf("Image size = %lu MBs\n", MBs);
-	printf("Time loading image (excluding bounce buffers) = %lu msecs\n", (GetTimerCountms() - start_ms));
 	printf("Time spend - disk IO = %lu msecs (BW = %llu MBps)\n", disk_read_ms, MBPS);
 	printf("Time spend - DDR copy = %llu msecs (BW = %llu MBps)\n", copy_page_ms, DDR_MBPS);
 
@@ -605,12 +670,15 @@ static int restore_snapshot_image(void)
 	printf("Time loading image (excluding bounce buffers) = %lu msecs\n", (GetTimerCountms() - start_ms));
 	printf("Image restore Completed...\n");
 	printf("Total bounced Pages = %d (%lu MBs)\n", bounced_pages, (bounced_pages*PAGE_SIZE)/(1024*1024));
-	return 0;
+err:
+	FreePages(disk_read_buffer, DISK_BUFFER_PAGES);
+	return ret;
 }
 
 static void copy_bounce_and_boot_kernel(UINT64 relocateAddress)
 {
 	int Status;
+	struct bounce_table_iterator *bti = &table_iterator;
 	unsigned long cpu_resume = (unsigned long )resume_hdr->phys_reenter_kernel;
 
 	/* TODO:
@@ -627,28 +695,59 @@ static void copy_bounce_and_boot_kernel(UINT64 relocateAddress)
 	printf("Disable UEFI Boot services\n");
 	printf("Kernel entry point = 0x%lx\n", cpu_resume);
 
-	/*Shut down UEFI boot services*/
+	BootStatsSetTimeStamp (BS_BL_END);
+
+	/* Shut down UEFI boot services */
 	Status = ShutdownUefiBootServices ();
 	if (EFI_ERROR (Status)) {
 		DEBUG ((EFI_D_ERROR,
-			"ERROR: Can not shutdown UEFI boot services. Status=0x%X\n",
-			Status));
+					"ERROR: Can not shutdown UEFI boot services. Status=0x%X\n",
+					Status));
 		return;
 	}
 
 	asm __volatile__ (
-		"mov x18, %[table_base]\n"
-		"mov x19, %[count]\n"
-		"mov x20, %[bounce_base]\n"
-		"mov x21, %[resume]\n"
-		"mov x22, %[disable_cache]\n"
-		"b JumpToKernel"
-		:
-		:[table_base] "r" (base_bounce_table),
-		[count] "r" (bounced_pages),
-		[resume] "r" (cpu_resume),
-		[disable_cache] "r" (PreparePlatformHardware)
-		:"x18", "x19", "x20", "x21", "x22", "memory");
+			"mov x18, %[table_base]\n"
+			"mov x19, %[count]\n"
+			"mov x21, %[resume]\n"
+			"mov x22, %[disable_cache]\n"
+			"b JumpToKernel"
+			:
+			:[table_base] "r" (bti->first_table),
+			[count] "r" (bounced_pages),
+			[resume] "r" (cpu_resume),
+			[disable_cache] "r" (PreparePlatformHardware)
+			:"x18", "x19", "x21", "x22", "memory");
+}
+
+static int check_for_valid_header(void)
+{
+	int ret;
+
+	struct swsusp_header *swsusp_header;
+
+	swsusp_header = AllocatePages(1);
+	if(!swsusp_header) {
+		printf("AllocatePages failed Line = %d\n", __LINE__);
+		return -1;
+	}
+
+	if (read_image(0, swsusp_header, 1)) {
+		printf("Failed to read image at offset 0\n");
+		goto read_image_error;
+	}
+
+	if(memcmp(HIBERNATE_SIG, swsusp_header->sig, 10)) {
+		printf("Signature not found. Aborting hibernation\n");
+		goto read_image_error;
+	}
+
+	printf("Signature found. Proceeding with disk read...\n");
+	return 0;
+
+read_image_error:
+	FreePages(swsusp_header, 1);
+	return -1;
 }
 
 void BootIntoHibernationImage(BootInfo *Info)
@@ -658,37 +757,25 @@ void BootIntoHibernationImage(BootInfo *Info)
 	printf("===============================\n");
 	printf("Entrying Hibernation restore\n");
 
+	if (check_for_valid_header() < 0)
+		return;
 
-	reset_upa_index();
-
-	swsusp_header = AllocatePages(1);
-	if(!swsusp_header) {
-		printf("AllocatePages failed\n");
-		goto free_upa;
+	upa->array = AllocateZeroPool(TOTAL_REQUIRED_UNUSED_PFNS * sizeof(unsigned long));
+	if (!upa->array) {
+		printf("Failed to allocate memory for free pfn array\n");
+		return;
 	}
 
-	ret = read_image(0, swsusp_header, 1);
+	ret = restore_snapshot_image();
 	if (ret) {
-		printf("Failed to read image at offset 0\n");
-		goto read_image_error;
+		printf("Failed restore_snapshot_image \n");
+		return;			
 	}
 
-	if(!memcmp(HIBERNATE_SIG, swsusp_header->sig, 10)) {
-		printf("Signature found. Proceeding with disk read...\n");
-	} else {
-		printf("Signature not found. Aborting hibernation\n");
-		goto read_image_error;
-	}
+	relocation_base_addr = get_unused_pfn() << PAGE_SHIFT;
+	copy_bounce_and_boot_kernel(relocation_base_addr);
+	/* We should not reach here */
 
-	ret = swsusp_read();
-	if (ret) {
-		printf("Failed swsusp_read \n");
-		goto read_image_error;
-	printf("Signature found. Proceeding with disk read...\n");
-	return 0;
-
-read_image_error:
-	FreePages(swsusp_header, 1);
-	return -1;
+	return;
 }
 #endif

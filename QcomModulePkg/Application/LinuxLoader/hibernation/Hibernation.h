@@ -29,7 +29,6 @@
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
-
 #if HIBERNATION_SUPPORT_INSECURE
 
 #define __aligned(x)	__attribute__((aligned(x)))
@@ -40,8 +39,6 @@
 #define PAGE_SIZE	(_AC(1, UL) << PAGE_SHIFT)
 #define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
 #define HIBERNATE_SIG           "S1SUSPEND"
-#define PFNS_PER_PAGE           512
-#define SWAP_INFO_OFFSET        2
 #define __NEW_UTS_LEN 64
 
 /* Return True if integer overflow will occur */
@@ -50,8 +47,8 @@
 
 EFI_STATUS
 PartitionGetInfo (IN CHAR16 *PartitionName,
-		  OUT EFI_BLOCK_IO_PROTOCOL **BlockIo,
-		  OUT EFI_HANDLE **Handle);
+		OUT EFI_BLOCK_IO_PROTOCOL **BlockIo,
+		OUT EFI_HANDLE **Handle);
 void JumpToKernel (void);
 typedef VOID (*HIBERNATION_KERNEL)(VOID);
 typedef unsigned int u32;
@@ -88,7 +85,7 @@ struct swsusp_info {
 } __aligned(PAGE_SIZE);
 
 struct arch_hibernate_hdr_invariants {
-        char            uts_version[__NEW_UTS_LEN + 1];
+	char            uts_version[__NEW_UTS_LEN + 1];
 };
 
 struct arch_hibernate_hdr {
