@@ -38,6 +38,8 @@
 #include <Library/ShutdownServices.h>
 #include <Library/StackCanary.h>
 #include "Hibernation.h"
+#include "BootStats.h"
+#include <Library/DxeServicesTableLib.h>
 
 #define BUG(fmt, ...) {\
 		printf("Fatal error " fmt, ##__VA_ARGS__);\
@@ -54,6 +56,11 @@ struct free_ranges {
 /* Holds free memory ranges read from UEFI memory map */
 static struct free_ranges free_range_buf[100];
 static int free_range_count;
+
+struct mapped_range {
+	UINT64 start, end;
+	struct mapped_range *next;
+};
 
 /* number of data pages to be copied from swap */
 static unsigned int nr_copy_pages;
@@ -277,12 +284,49 @@ static void preallocate_free_ranges(void)
 		ret = gBS->AllocatePages(AllocateAddress, EfiBootServicesData,
 				num_pages, &alloc_addr);
 		if(ret)
-			printf("Fatal error alloc LINE %d alloc_addr = 0x%lx\n",
-					__LINE__, alloc_addr);
+			printf("WARN: Prealloc failed LINE %d alloc_addr = 0x%lx\n",
+							__LINE__, alloc_addr);
 	}
 }
 
-static int get_uefi_memory_map(void)
+/* Assumption: There is no overlap in the regions */
+static struct mapped_range *add_range_sorted(struct mapped_range *head, UINT64 start, UINT64 end)
+{
+	struct mapped_range *elem, *p;
+	EFI_STATUS status;
+
+	status = gBS->AllocatePool(EfiBootServicesData, sizeof(struct mapped_range), (VOID *)&elem);
+	if (status != EFI_SUCCESS) {
+		printf("Failed to AllocatePool %d\n", __LINE__);
+		return NULL;
+	}
+	elem->start = start;
+	elem->end = end;
+	elem->next = NULL;
+
+	if (head == NULL)
+		return elem;
+
+	if (start <= head->start) {
+		elem->next = head;
+		return elem;
+	}
+
+	p = head;
+	while (p->next != NULL && p->next->start < start)
+		p = p->next;
+
+	elem->next = p->next;
+	p->next = elem;
+
+	return head;
+}
+
+/*
+ * Get the UEFI memory map to collect ranges of
+ * memory of type EfiConventional
+ */
+static int get_conventional_memory_ranges(void)
 {
 	EFI_MEMORY_DESCRIPTOR	*MemMap;
 	EFI_MEMORY_DESCRIPTOR	*MemMapPtr;
@@ -299,26 +343,25 @@ static int get_uefi_memory_map(void)
 	Status = gBS->GetMemoryMap (&MemMapSize, MemMap, &MapKey,
 			&DescriptorSize, &DescriptorVersion);
 	if (Status != EFI_BUFFER_TOO_SMALL) {
-		DEBUG ((EFI_D_ERROR, "ERROR: Undefined response get memory map\n"));
+		printf("ERROR: Undefined response get memory map\n");
 		return -1;
 	}
 	if (CHECK_ADD64 (MemMapSize, EFI_PAGE_SIZE)) {
-		DEBUG ((EFI_D_ERROR, "ERROR: integer Overflow while adding additional"
-					"memory to MemMapSize"));
+		printf("ERROR: integer Overflow while adding additional"
+					"memory to MemMapSize");
 		return -1;
 	}
 	MemMapSize = MemMapSize + EFI_PAGE_SIZE;
 	MemMap = AllocateZeroPool (MemMapSize);
 	if (!MemMap) {
-		DEBUG ((EFI_D_ERROR,
-					"ERROR: Failed to allocate memory for memory map\n"));
+		printf("ERROR: Failed to allocate memory for memory map\n");
 		return -1;
 	}
 	MemMapPtr = MemMap;
 	Status = gBS->GetMemoryMap (&MemMapSize, MemMap, &MapKey,
 			&DescriptorSize, &DescriptorVersion);
 	if (EFI_ERROR (Status)) {
-		DEBUG ((EFI_D_ERROR, "ERROR: Failed to query memory map\n"));
+		printf("ERROR: Failed to query memory map\n");
 		FreePool (MemMapPtr);
 		return -1;
 	}
@@ -326,8 +369,8 @@ static int get_uefi_memory_map(void)
 		if (MemMap->Type == EfiConventionalMemory) {
 			free_range_buf[index].start = MemMap->PhysicalStart;
 			free_range_buf[index].end =  MemMap->PhysicalStart + MemMap->NumberOfPages * PAGE_SIZE;
-			DEBUG ((EFI_D_ERROR, "Free Range 0x%lx --- 0x%lx\n",free_range_buf[index].start,
-						free_range_buf[index].end));
+			printf("Free Range 0x%lx --- 0x%lx\n", free_range_buf[index].start,
+					free_range_buf[index].end);
 			index++;
 		}
 		MemMap = (EFI_MEMORY_DESCRIPTOR *)((UINTN)MemMap + DescriptorSize);
@@ -655,6 +698,134 @@ static int read_data_pages(unsigned long *kernel_pfn_indexes,
 	return 0;
 }
 
+static struct mapped_range * get_uefi_sorted_memory_map()
+{
+	EFI_MEMORY_DESCRIPTOR	*MemMap;
+	EFI_MEMORY_DESCRIPTOR	*MemMapPtr;
+	UINTN			MemMapSize;
+	UINTN			MapKey, DescriptorSize;
+	UINTN			Index;
+	UINT32			DescriptorVersion;
+	EFI_STATUS		Status;
+
+	struct mapped_range * uefi_map = NULL;
+	MemMapSize = 0;
+	MemMap     = NULL;
+
+	Status = gBS->GetMemoryMap (&MemMapSize, MemMap, &MapKey,
+				&DescriptorSize, &DescriptorVersion);
+	if (Status != EFI_BUFFER_TOO_SMALL) {
+		printf("ERROR: Undefined response get memory map\n");
+		return NULL;
+	}
+	if (CHECK_ADD64 (MemMapSize, EFI_PAGE_SIZE)) {
+		printf("ERROR: integer Overflow while adding additional"
+					"memory to MemMapSize");
+		return NULL;
+	}
+	MemMapSize = MemMapSize + EFI_PAGE_SIZE;
+	MemMap = AllocateZeroPool (MemMapSize);
+	if (!MemMap) {
+		printf("ERROR: Failed to allocate memory for memory map\n");
+		return NULL;
+	}
+	MemMapPtr = MemMap;
+	Status = gBS->GetMemoryMap (&MemMapSize, MemMap, &MapKey,
+				&DescriptorSize, &DescriptorVersion);
+	if (EFI_ERROR (Status)) {
+		printf("ERROR: Failed to query memory map\n");
+		FreePool (MemMapPtr);
+		return NULL;
+	}
+	for (Index = 0; Index < MemMapSize / DescriptorSize; Index ++) {
+		uefi_map = add_range_sorted(uefi_map,
+			MemMap->PhysicalStart,
+			MemMap->PhysicalStart + MemMap->NumberOfPages * PAGE_SIZE);
+
+		if (!uefi_map) {
+			printf("ERROR: uefi_map is NULL\n");
+			return NULL;
+		}
+
+		MemMap = (EFI_MEMORY_DESCRIPTOR *)((UINTN)MemMap + DescriptorSize);
+	}
+	FreePool (MemMapPtr);
+	return uefi_map;
+}
+
+static EFI_STATUS create_mapping(UINTN addr, UINTN size)
+{
+	EFI_STATUS status;
+	EFI_GCD_MEMORY_SPACE_DESCRIPTOR Descriptor;
+
+	printf("Address: %llx Size: %llx\n", addr, size);
+
+	status = gDS->GetMemorySpaceDescriptor(addr, &Descriptor);
+	if (EFI_ERROR(status)) {
+		printf("Failed getMemorySpaceDescriptor Line %d\n", __LINE__);
+		return status;
+	}
+
+	if (Descriptor.GcdMemoryType != EfiGcdMemoryTypeMemoryMappedIo) {
+		if (Descriptor.GcdMemoryType != EfiGcdMemoryTypeNonExistent) {
+			status = gDS->RemoveMemorySpace(addr, size);
+			printf("Failed RemoveMemorySpace %d\n", __LINE__);
+		}
+		status = gDS->AddMemorySpace(EfiGcdMemoryTypeReserved, addr, size, EFI_MEMORY_UC);
+		if (EFI_ERROR(status)) {
+			printf("Failed to AddMemorySpace 0x%x, size 0x%x\n", addr, size);
+			return status;
+		}
+
+		status = gDS->SetMemorySpaceAttributes(addr, size, EFI_MEMORY_UC);
+		if (EFI_ERROR(status)) {
+			printf("Failed to SetMemorySpaceAttributes 0x%x, size 0x%x\n", addr, size);
+				return status;
+		}
+	}
+
+	return EFI_SUCCESS;
+}
+
+/*
+ * Determine the unmapped uefi memory from the list 'uefi_mapped_sorted_list'
+ * and map all the unmapped regions.
+ */
+static EFI_STATUS uefi_map_unmapped()
+{
+	struct mapped_range * uefi_mapped_sorted_list, * cur, * next;
+	EFI_STATUS Status;
+
+	uefi_mapped_sorted_list = get_uefi_sorted_memory_map();
+	if (!uefi_mapped_sorted_list) {
+		printf("ERROR: Unable to get UEFI memory map\n");
+		return -1;
+	}
+
+	cur = uefi_mapped_sorted_list;
+	next = cur->next;
+
+	while (cur) {
+		if (next && (next->start > cur->end)) {
+			Status = create_mapping(cur->end, next->start - cur->end);
+			if (Status != EFI_SUCCESS) {
+				printf("ERROR: Mapping failed\n");
+				return Status;
+			}
+		}
+		Status = gBS->FreePool(cur);
+		if(Status != EFI_SUCCESS) {
+			printf("FreePool failed %d\n", __LINE__);
+			return -1;
+		}
+		cur = next;
+		if (next)
+			next = next->next;
+	}
+
+	return EFI_SUCCESS;
+}
+
 static int restore_snapshot_image(void)
 {
 	int ret;
@@ -682,11 +853,18 @@ static int restore_snapshot_image(void)
 				disk_read_buffer + DISK_BUFFER_SIZE - 1);
 	}
 
+	printf("Mapping Regions:\n");
+	ret = uefi_map_unmapped();
+	if (ret < 0) {
+		printf("Error mapping unmapped regions\n");
+		goto err;
+	}
+
 	/*
 	 * No dynamic allocation beyond this point. If not honored it will
 	 * result in corruption of pages.
 	 */
-	get_uefi_memory_map();
+	get_conventional_memory_ranges();
 	preallocate_free_ranges();
 
 	bti->first_table = (struct bounce_table *)(get_unused_pfn() << PAGE_SHIFT);
