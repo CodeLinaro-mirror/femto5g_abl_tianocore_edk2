@@ -78,6 +78,7 @@ struct kernel_pfn_iterator {
 };
 static struct kernel_pfn_iterator kernel_pfn_iterator;
 
+static struct swsusp_header *swsusp_header;
 /*
  * Bounce Pages - During the copy of pages from snapshot image to
  * RAM, certain pages can conflicts with concurrently running UEFI/ABL
@@ -136,8 +137,11 @@ struct bounce_table_iterator table_iterator;
 /* Final entry is used to link swap_map pages together */
 #define ENTRIES_PER_SWAPMAP_PAGE 	(PFN_INDEXES_PER_PAGE - 1)
 
-#define SWAP_INFO_OFFSET        2
+#define SWAP_INFO_OFFSET        (swsusp_header->image + 1)
 #define FIRST_PFN_INDEX_OFFSET	(SWAP_INFO_OFFSET + 1)
+
+#define SWAP_PARTITION_NAME	L"swap"
+
 /*
  * target_addr  : address where page allocation is needed
  *
@@ -213,7 +217,7 @@ static unsigned long get_unused_kernel_pfn(void)
 		find_next_available_block(iter);
 
 	iter->cur_block.available_pfns--;
-	return iter->cur_block.base_pfn++;
+	return ++iter->cur_block.base_pfn;
 }
 
 /*
@@ -333,38 +337,55 @@ static int get_uefi_memory_map(void)
 	return 0;
 }
 
-static int read_image(unsigned long offset, VOID *Buff, int nr_pages) {
+struct partition_details {
+	EFI_BLOCK_IO_PROTOCOL *BlockIo;
+	EFI_HANDLE *Handle;
+	int blocksPerPage;
+};
+static struct partition_details swap_details;
 
+static int verify_swap_partition(void)
+{
 	int Status;
 	EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
 	EFI_HANDLE *Handle = NULL;
 
-	Status = PartitionGetInfo (L"system_b", &BlockIo, &Handle);
+	Status = PartitionGetInfo (SWAP_PARTITION_NAME, &BlockIo, &Handle);
 	if (Status != EFI_SUCCESS)
 		return Status;
 
 	if (!Handle) {
-		DEBUG ((EFI_D_ERROR, "EFI handle for system_b is corrupted\n"));
+		printf("EFI handle for swap partition is corrupted\n");
 		return -1;
 	}
 
 	if (CHECK_ADD64 (BlockIo->Media->LastBlock, 1)) {
-		DEBUG ((EFI_D_ERROR, "Integer overflow while adding LastBlock and 1\n"));
+		printf("Integer overflow while adding LastBlock and 1\n");
 		return -1;
 	}
 
 	if ((MAX_UINT64 / (BlockIo->Media->LastBlock + 1)) <
 			(UINT64)BlockIo->Media->BlockSize) {
-		DEBUG ((EFI_D_ERROR,
-					"Integer overflow while multiplying LastBlock and BlockSize\n"));
+		printf("Integer overflow while multiplying LastBlock and BlockSize\n");
 		return -1;
 	}
 
-	/* Check what is the block size of the mmc and scale the offset accrodingly
-	 * right now blocksize = page_size = 4096 */
+	swap_details.BlockIo = BlockIo;
+	swap_details.Handle = Handle;
+	swap_details.blocksPerPage = EFI_PAGE_SIZE / BlockIo->Media->BlockSize;
+	return 0;
+}
+
+static int read_image(unsigned long offset, VOID *Buff, int nr_pages)
+{
+	int Status;
+	EFI_BLOCK_IO_PROTOCOL *BlockIo = swap_details.BlockIo;
+	EFI_LBA Lba;
+
+	Lba = offset * swap_details.blocksPerPage;
 	Status = BlockIo->ReadBlocks (BlockIo,
 			BlockIo->Media->MediaId,
-			offset,
+			Lba,
 			EFI_PAGE_SIZE * nr_pages,
 			(VOID*)Buff);
 	if (Status != EFI_SUCCESS) {
@@ -432,12 +453,14 @@ static void print_image_kernel_details(struct swsusp_info *info)
 }
 
 /*
- * swap_map pages are at offsets 1, 513, 1025, 1537,....
+ * swsusp_header->image points to first swap_map page. From there onwards,
+ * swap_map pages are repeated at every PFN_INDEXES_PER_PAGE intervals.
  * This function returns true if offset belongs to a swap_map page.
  */
 static int check_swap_map_page(unsigned long offset)
 {
-	return (offset % PFN_INDEXES_PER_PAGE) == 1;
+	offset -= swsusp_header->image;
+	return (offset % PFN_INDEXES_PER_PAGE) == 0;
 }
 
 static int read_swap_info_struct(void)
@@ -446,12 +469,12 @@ static int read_swap_info_struct(void)
 	BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
 	info = AllocatePages(1);
 	if (!info) {
-		printf("Failed to allocate memory for swsusp_info %d\n",__LINE__);
+		printf("Memory alloc failed Line %d\n",__LINE__);
 		return -1;
 	}
 
 	if (read_image(SWAP_INFO_OFFSET, info, 1)) {
-		printf("Failed to read swsusp_info %d\n", __LINE__);
+		printf("Failed to read Line %d\n", __LINE__);
 		FreePages(info, 1);
 		return -1;
 	}
@@ -564,7 +587,15 @@ static unsigned long* read_kernel_image_pfn_indexes(unsigned long *offset)
 		if (!pending_pages)
 			break;
 		loop++;
-		disk_offset = loop * PFN_INDEXES_PER_PAGE + 2;
+		/*
+		 * swsusp_header->image points to first swap_map page. From there onwards,
+		 * swap_map pages are repeated at PFN_INDEXES_PER_PAGE interval.
+		 * pfn_index pages follows the swap map page. So we can arrive at
+		 * next pfn_index by using below formula,
+		 *
+		 * base_swap_map_slot + PFN_INDEXES_PER_PAGE * n + 1
+		 */
+		disk_offset = swsusp_header->image + (PFN_INDEXES_PER_PAGE * loop) + 1;
 		pages_to_read = MIN(pending_pages, ENTRIES_PER_SWAPMAP_PAGE);
 		array_index = pfn_array + pages_read * PFN_INDEXES_PER_PAGE;
 	} while (1);
@@ -595,7 +626,7 @@ static int read_data_pages(unsigned long *kernel_pfn_indexes,
 		ret = read_image(offset, disk_read_buffer, nr_read_pages);
 		disk_read_ms += (GetTimerCountms() - temp);
 		if (ret < 0) {
-			printf("Failed to read data pages from disk %d\n", __LINE__);
+			printf("Disk read failed Line %d\n", __LINE__);
 			return -1;
 		}
 		src_pfn = (unsigned long) disk_read_buffer >> PAGE_SHIFT;
@@ -722,23 +753,30 @@ static void copy_bounce_and_boot_kernel(UINT64 relocateAddress)
 
 static int check_for_valid_header(void)
 {
-	int ret;
-
-	struct swsusp_header *swsusp_header;
-
 	swsusp_header = AllocatePages(1);
-	if(!swsusp_header) {
-		printf("AllocatePages failed Line = %d\n", __LINE__);
+	if (!swsusp_header) {
+		printf("Memory alloc failed Line %d\n", __LINE__);
 		return -1;
 	}
 
-	if (read_image(0, swsusp_header, 1)) {
-		printf("Failed to read image at offset 0\n");
+	if (verify_swap_partition()) {
+		printf("Failled verify_swap_partition\n");
 		goto read_image_error;
 	}
 
-	if(memcmp(HIBERNATE_SIG, swsusp_header->sig, 10)) {
+	if (read_image(0, swsusp_header, 1)) {
+		printf("Disk read failed Line %d\n", __LINE__);
+		goto read_image_error;
+	}
+
+	if (memcmp(HIBERNATE_SIG, swsusp_header->sig, 10)) {
 		printf("Signature not found. Aborting hibernation\n");
+		goto read_image_error;
+	}
+
+	printf("Image slot at 0x%lx\n", swsusp_header->image);
+	if (swsusp_header->image != 1) {
+		printf("Invalid swap slot. Aborting hibernation!");
 		goto read_image_error;
 	}
 
@@ -748,6 +786,18 @@ static int check_for_valid_header(void)
 read_image_error:
 	FreePages(swsusp_header, 1);
 	return -1;
+}
+
+static void erase_swap_signature(void)
+{
+	int status;
+	EFI_BLOCK_IO_PROTOCOL *BlockIo = swap_details.BlockIo;
+
+	swsusp_header->sig[0] = ' ';
+	status = BlockIo->WriteBlocks (BlockIo, BlockIo->Media->MediaId, 0,
+			BlockIo->Media->BlockSize, (VOID*)swsusp_header);
+	if (status != EFI_SUCCESS)
+		printf("Failed to erase swap signature\n");
 }
 
 void BootIntoHibernationImage(BootInfo *Info)
@@ -762,7 +812,7 @@ void BootIntoHibernationImage(BootInfo *Info)
 
 	upa->array = AllocateZeroPool(TOTAL_REQUIRED_UNUSED_PFNS * sizeof(unsigned long));
 	if (!upa->array) {
-		printf("Failed to allocate memory for free pfn array\n");
+		printf("Memory alloc failed Line %d\n", __LINE__);
 		return;
 	}
 
