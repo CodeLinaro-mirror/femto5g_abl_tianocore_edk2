@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -742,15 +742,23 @@ STATIC EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
 
     DEBUG ((EFI_D_VERBOSE, "BoardSubtype = %x, DtSubType = %x\n",
             BoardPlatformSubType (), CurDtbInfo->DtPlatformSubtype));
-    if (CurDtbInfo->DtPlatformSubtype == BoardPlatformSubType ()) {
+    if ((CurDtbInfo->DtPlatformSubtype & PLATFORM_SUBTYPE_MASK) ==
+        BoardPlatformSubType ()) {
       CurDtbInfo->DtMatchVal |= BIT (SUBTYPE_EXACT_MATCH);
-    } else if (CurDtbInfo->DtPlatformSubtype == 0) {
+    } else if ((CurDtbInfo->DtPlatformSubtype & PLATFORM_SUBTYPE_MASK) == 0) {
       CurDtbInfo->DtMatchVal |= BIT (SUBTYPE_DEFAULT_MATCH);
     } else {
       DEBUG ((EFI_D_VERBOSE, "subtype-id doesnot match\n"));
       /* If it's neither exact nor default match don't select dtb */
       CurDtbInfo->DtMatchVal = BIT (NONE_MATCH);
       return EFI_NOT_FOUND;
+    }
+
+    if ((CurDtbInfo->DtPlatformSubtype & DDR_MASK) ==
+        (BoardPlatformHlosSubType() & DDR_MASK)) {
+      CurDtbInfo->DtMatchVal |= BIT (DDR_MATCH);
+    } else {
+      DEBUG ((EFI_D_VERBOSE, "ddr size does not match\n"));
     }
   } else {
     DEBUG ((EFI_D_VERBOSE, "qcom,board-id does not exist (or) (%d) "
@@ -902,6 +910,9 @@ cleanup:
       } else if (BestDtbInfo->DtPmicRev[2] < CurDtbInfo->DtPmicRev[2]) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else if (BestDtbInfo->DtPmicRev[3] < CurDtbInfo->DtPmicRev[3]) {
+        gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
+      } else if (BestDtbInfo->DtPlatformSubtype >
+                           CurDtbInfo->DtPlatformSubtype) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else {
         FindBestMatch = FALSE;
