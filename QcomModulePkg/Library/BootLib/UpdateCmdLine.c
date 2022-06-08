@@ -372,12 +372,19 @@ GetSystemPath (CHAR8 **SysPath, BootInfo *Info)
             StrLen ((CONST CHAR16 *)L"system"));
   }
 
+  /* If it support Ubuntu ab ota, there are not system _a and _b slot.
+   * And there is only one system partition.
+   */
+#if UBUNTU_AB_OTA
+  DEBUG ((EFI_D_INFO, "In Ubuntu ab ota platform, we don't use the system_a / _b slot"));
+#else
   /* Append slot info for A/B Variant */
   if (Info->MultiSlotBoot &&
       NAND != CheckRootDeviceType ()) {
      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
             StrLen (CurSlot.Suffix));
   }
+#endif
 
   Index = GetPartitionIndex (PartitionName);
   if (Index == INVALID_PTN || Index >= MAX_NUM_PARTITIONS) {
