@@ -105,7 +105,11 @@ STATIC CHAR8 SystemdSlotEnv[] = " systemd.setenv=\"SLOT_SUFFIX=_a\"";
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
+#if RW_ROOTFS
+STATIC CHAR8 *RootCmdLine = " rootwait rw init=";
+#else
 STATIC CHAR8 *RootCmdLine = " rootwait ro init=";
+#endif
 STATIC CHAR8 *InitCmdline = INIT_BIN;
 STATIC CHAR8 *SkipRamFs = " skip_initramfs";
 
