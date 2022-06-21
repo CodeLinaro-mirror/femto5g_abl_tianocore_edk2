@@ -24,6 +24,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 
 #include "VerifiedBoot.h"
@@ -597,7 +601,11 @@ LoadImageNoAuthWrapper (BootInfo *Info)
 
    if (!IsDynamicPartitionSupport () &&
         !IsRootCmdLineUpdated (Info)) {
-    SystemPathLen = GetSystemPath (&SystemPath, Info);
+    SystemPathLen = GetSystemPath (&SystemPath,
+                                   Info->MultiSlotBoot,
+                                   Info->BootIntoRecovery,
+                                   (CHAR16 *)L"system",
+                                   (CHAR8 *)"root");
     if (SystemPathLen == 0 || SystemPath == NULL) {
       DEBUG ((EFI_D_ERROR, "GetSystemPath failed!\n"));
       return EFI_LOAD_ERROR;
@@ -660,7 +668,11 @@ LoadImageAndAuthVB1 (BootInfo *Info)
   }
 
   if (!IsRootCmdLineUpdated (Info)) {
-    SystemPathLen = GetSystemPath (&SystemPath, Info);
+    SystemPathLen = GetSystemPath (&SystemPath,
+                                   Info->MultiSlotBoot,
+                                   Info->BootIntoRecovery,
+                                   (CHAR16 *)L"system",
+                                   (CHAR8 *)"root");
     if (SystemPathLen == 0 || SystemPath == NULL) {
       DEBUG ((EFI_D_ERROR, "GetSystemPath failed!\n"));
       return EFI_LOAD_ERROR;
@@ -1075,7 +1087,7 @@ IsValidPartition (Slot *Slot, CONST CHAR16 *Name)
 }
 
 STATIC EFI_STATUS
-LoadImageAndAuthVB2 (BootInfo *Info)
+LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,  BOOLEAN SetRotAndBootState)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   AvbSlotVerifyResult Result;
@@ -1411,12 +1423,15 @@ LoadImageAndAuthVB2 (BootInfo *Info)
   }
   Data.SystemVersion = (OSVersion & 0xFFFFF800) >> 11;
 
-  GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
-  ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
-  GUARD_OUT (SetVerifiedBootHash ((CONST CHAR8 *)&Digest, sizeof(Digest)));
-  DEBUG ((EFI_D_INFO, "VB2: Authenticate complete! boot state is: %a\n",
-          VbSn[Info->BootState].name));
+  if (!SetRotAndBootState)
+      GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
 
+  if (!HibernationResume) {
+    ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
+    GUARD_OUT (SetVerifiedBootHash ((CONST CHAR8 *)&Digest, sizeof(Digest)));
+    DEBUG ((EFI_D_INFO, "VB2: Authenticate complete! boot state is: %a\n",
+            VbSn[Info->BootState].name));
+  }
 out:
   if (Status != EFI_SUCCESS) {
     if (SlotData != NULL) {
@@ -1619,7 +1634,11 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
 
 skip_verification:
     if (!IsRootCmdLineUpdated (Info)) {
-        SystemPathLen = GetSystemPath (&SystemPath, Info);
+        SystemPathLen = GetSystemPath (&SystemPath,
+                                       Info->MultiSlotBoot,
+                                       Info->BootIntoRecovery,
+                                       (CHAR16 *)L"system",
+                                       (CHAR8 *)"root");
         if (SystemPathLen == 0 ||
             SystemPath == NULL) {
             return EFI_LOAD_ERROR;
@@ -1630,7 +1649,7 @@ skip_verification:
 }
 
 EFI_STATUS
-LoadImageAndAuth (BootInfo *Info)
+LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume, BOOLEAN SetRotAndBootState)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   BOOLEAN MdtpActive = FALSE;
@@ -1738,7 +1757,7 @@ LoadImageAndAuth (BootInfo *Info)
     Status = LoadImageAndAuthVB1 (Info);
     break;
   case AVB_2:
-    Status = LoadImageAndAuthVB2 (Info);
+    Status = LoadImageAndAuthVB2 (Info, HibernationResume, SetRotAndBootState);
     break;
   case AVB_LE:
     Status = LoadImageAndAuthForLE (Info);

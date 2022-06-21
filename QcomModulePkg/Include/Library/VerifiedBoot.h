@@ -24,6 +24,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear 
 */
 
 #ifndef __VERIFIEDBOOT_H__
@@ -90,10 +94,18 @@ GetAVBVersion ();
  * Also provides Verified Boot command
  * arguments (if any) in Info->VBCmdLine
  *
+ * @param [in] HibernationResume FALSE
+ * for cold boot sequence and TRUE
+ * for Hibernation Resume
+ *
+ * @param [in] SetRotAndBootState FALSE by
+ * default and TRUE incase of ROT and
+ * BootState already set
+ *
  * @return EFI_STATUS
  */
 EFI_STATUS
-LoadImageAndAuth (BootInfo *Info);
+LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume, BOOLEAN SetRotAndBootState);
 
 /**
  *  Free resources/memory allocated by
