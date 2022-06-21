@@ -24,11 +24,43 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
+
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted (subject to the limitations in the
+ *  disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *        contributors may be used to endorse or promote products derived
+ *        from this software without specific prior written permission.
+ *
+ *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include "VerifiedBoot.h"
 #include "BootLinux.h"
@@ -46,6 +78,8 @@ STATIC CONST CHAR8 *KeymasterLoadState = " androidboot.keymaster=1";
 STATIC CONST CHAR8 *DmVerityCmd = " root=/dev/dm-0 dm=\"system none ro,0 1 "
                                     "android-verity";
 STATIC CONST CHAR8 *Space = " ";
+
+STATIC BOOLEAN KeymasterEnabled = TRUE;
 
 #define MAX_NUM_REQ_PARTITION    8
 #define MAX_PROPERTY_SIZE        10
@@ -1555,6 +1589,11 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     CHAR8 *SystemPath = NULL;
     UINT32 SystemPathLen = 0;
     BOOLEAN SecureDevice = FALSE;
+    KMRotAndBootStateForLE Data = {0};
+    secasn1_data_type Modulus = {NULL};
+    secasn1_data_type PublicExp = {NULL};
+    UINT32 PaddingType = 0;
+
     /*Load image*/
     GUARD (VBAllocateCmdLine (Info));
     GUARD (VBCommonInit (Info));
@@ -1563,24 +1602,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     Status = IsSecureDevice (&SecureDevice);
     if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
-        return Status;
-    }
-
-    if (!SecureDevice) {
-        if (!TargetBuildVariantUser () ) {
-            DEBUG ((EFI_D_INFO, "VB: verification skipped for debug builds\n"));
-            goto skip_verification;
-        }
-    }
-
-    /* Initialize Verified Boot*/
-    device_info_vb_t DevInfo_vb;
-    DevInfo_vb.is_unlocked = IsUnlocked ();
-    DevInfo_vb.is_unlock_critical = IsUnlockCritical ();
-    Status = Info->VbIntf->VBDeviceInit (Info->VbIntf,
-                                        (device_info_vb_t *)&DevInfo_vb);
-    if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "VB: Error during VBDeviceInit: %r\n", Status));
         return Status;
     }
 
@@ -1599,6 +1620,24 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "VB: Error during "
                       "ASN1X509VerifyOEMCertificate: %r\n", Status));
+        return Status;
+    }
+
+    if (!SecureDevice) {
+      if (!TargetBuildVariantUser () ) {
+        DEBUG ((EFI_D_INFO, "VB: verification skipped for debug builds\n"));
+        goto set_rot;
+      }
+    }
+
+    /* Initialize Verified Boot*/
+    device_info_vb_t DevInfo_vb;
+    DevInfo_vb.is_unlocked = IsUnlocked ();
+    DevInfo_vb.is_unlock_critical = IsUnlockCritical ();
+    Status = Info->VbIntf->VBDeviceInit (Info->VbIntf,
+                                        (device_info_vb_t *)&DevInfo_vb);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "VB: Error during VBDeviceInit: %r\n", Status));
         return Status;
     }
 
@@ -1631,6 +1670,37 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         return Status;
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
+
+set_rot:
+    Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                  &KeymasterEnabled);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n",
+                                                                  Status));
+      return Status;
+    }
+
+    if (KeymasterEnabled) {
+      /* Set Rot & Boot State*/
+      Data.IsUnlocked = IsUnlocked ();
+
+      Status = LEGetRSAPublicKeyInfoFromCertificate (QcomAsn1X509Protocal,
+                &OemCert, &Modulus, &PublicExp, &PaddingType);
+
+      if (Modulus.data != NULL &&
+            PublicExp.data != NULL) {
+        Data.PublicKeyMod = Modulus.data;
+        Data.PublicKeyModLength = Modulus.Len;
+        Data.PublicKeyExp = PublicExp.data;
+        Data.PublicKeyExpLength = PublicExp.Len;
+
+        Status = KeyMasterSetRotForLE (&Data);
+        if (Status != EFI_SUCCESS) {
+          DEBUG ((EFI_D_ERROR, "KeyMasterSetRotForLE failed %r\n", Status));
+          return Status;
+        }
+      }
+    }
 
 skip_verification:
     if (!IsRootCmdLineUpdated (Info)) {
