@@ -45,10 +45,48 @@ found at
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted (subject to the limitations in the
+ *  disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *        contributors may be used to endorse or promote products derived
+ *        from this software without specific prior written permission.
+ *
+ *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/DebugLib.h>
+#include <Library/Debug.h>
 #include <Library/DeviceInfo.h>
 #include <Library/DevicePathLib.h>
 #include <Library/MemoryAllocationLib.h>
@@ -560,7 +598,7 @@ WriteToDisk (IN EFI_BLOCK_IO_PROTOCOL *BlockIo,
              IN UINT64 Size,
              IN UINT64 offset)
 {
-  return WriteBlockToPartition (BlockIo, Handle, offset, Size, Image);
+  return WriteBlockToPartitionNoFlush (BlockIo, Handle, offset, Size, Image);
 }
 
 STATIC BOOLEAN
@@ -979,10 +1017,13 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
   DEBUG ((EFI_D_INFO, "Wrote %d blocks, expected to write %d blocks\n",
             SparseImgData.TotalBlocks, sparse_header->total_blks));
 
-  if (SparseImgData.TotalBlocks != sparse_header->total_blks ||
-          ((SparseImgData.BlockIo)->FlushBlocks (SparseImgData.BlockIo))) {
+  if (SparseImgData.TotalBlocks != sparse_header->total_blks) {
     DEBUG ((EFI_D_ERROR, "Sparse Image Write Failure\n"));
     Status = EFI_VOLUME_CORRUPTED;
+  } else if (((SparseImgData.BlockIo)->FlushBlocks (SparseImgData.BlockIo))
+               != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Sparse Image Flush Failure\n"));
+    Status = EFI_DEVICE_ERROR;
   }
   return Status;
 }
@@ -1076,8 +1117,7 @@ HandleRawImgFlash (IN CHAR16 *PartitionName,
   }
 
   Status = WriteBlockToPartition (BlockIo, Handle, 0, Size, Image);
-  if (EFI_ERROR (Status) ||
-      (BlockIo->FlushBlocks (BlockIo))) {
+  if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Writing Block to partition Failure\n"));
   }
 
@@ -1085,6 +1125,7 @@ HandleRawImgFlash (IN CHAR16 *PartitionName,
       !(StrnCmp (PartitionName, (CONST CHAR16 *)L"boot",
                  StrLen ((CONST CHAR16 *)L"boot"))))
     FastbootUpdateAttr (SlotSuffix);
+
   return Status;
 }
 

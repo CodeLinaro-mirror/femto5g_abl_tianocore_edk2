@@ -118,6 +118,7 @@ typedef struct {
   AvbSlotVerifyData *SlotData;
 } VB2Data;
 
+#if VERIFIED_BOOT_ENABLED
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
 {
   UINT32 PtnCount;
@@ -138,6 +139,12 @@ BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
   }
   return FALSE;
 }
+#else
+BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
+{
+  return FALSE;
+}
+#endif
 
 UINT32
 GetAVBVersion ()
@@ -1482,7 +1489,7 @@ LoadImageAndAuthVB2 (BootInfo *Info)
   GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
   ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
   GUARD_OUT (SetVerifiedBootHash ((CONST CHAR8 *)&Digest, sizeof(Digest)));
-  DEBUG ((EFI_D_INFO, "VB2: Authenticate complete! boot state is: %a\n",
+  DEBUG ((EFI_D_VERBOSE, "VB2: Authenticate complete! boot state is: %a\n",
           VbSn[Info->BootState].name));
 
 out:
@@ -1576,10 +1583,9 @@ DisplayVerifiedBootScreen (BootInfo *Info)
   }
 
   /* dm-verity warning */
-  if ((GetAVBVersion () != AVB_2) &&
-      !IsEnforcing () &&
-     !Info->BootIntoRecovery) {
-    Status = DisplayVerifiedBootMenu (DISPLAY_MENU_EIO);
+  if ( !IsEnforcing () &&
+       !Info->BootIntoRecovery) {
+      Status = DisplayVerifiedBootMenu (DISPLAY_MENU_EIO);
       if (Status == EFI_SUCCESS) {
         WaitForExitKeysDetection ();
       } else {
@@ -1722,6 +1728,9 @@ LoadImageAndAuth (BootInfo *Info)
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_VERBOSE,
             "Recovery partition doesn't exist; continue normal boot\n"));
+    if (IsTargetAuto ()) {
+      SetRecoveryHasNoKernel ();
+    }
   } else if (((boot_img_hdr *)(RecoveryHdr))->header_version >=
              BOOT_HEADER_VERSION_THREE &&
                !((boot_img_hdr *)(RecoveryHdr))->kernel_size) {

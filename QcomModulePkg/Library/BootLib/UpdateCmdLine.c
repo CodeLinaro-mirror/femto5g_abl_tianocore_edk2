@@ -30,6 +30,38 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **/
+/*
+  * Changes from Qualcomm Innovation Center are provided under the following
+  * license:
+  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted (subject to the limitations in the disclaimer
+  * below) provided that the following conditions are met:
+  *  * Redistributions of source code must retain the above copyright notice,
+  *    this list of conditions and the following disclaimer.
+  *  * Redistributions in binary form must reproduce the above copyright notice,
+  *    this list of conditions and the following disclaimer in the documentation
+  *    and/or other materials provided ?with the distribution.
+  *  * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+  *     contributors may be used to endorse or promote products derived from this
+  *     software without specific prior written permission.
+  *
+  * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED
+  * BY THIS LICENSE.
+  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+  * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+  * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+  * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+  * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+
 
 #include <Library/BaseLib.h>
 #include <Library/BootLinux.h>
@@ -70,6 +102,7 @@ STATIC CONST CHAR8 *LogLevel = " quite";
 STATIC CONST CHAR8 *BatteryChgPause = " androidboot.mode=charger";
 STATIC CONST CHAR8 *MdtpActiveFlag = " mdtp";
 STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
+STATIC CONST CHAR8 *NoPasr = " mem_offline.nopasr=1";
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
@@ -656,6 +689,9 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = MovableNode;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  } else if (Param->NoPasr != NULL) {
+    Src = Param->NoPasr;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   return EFI_SUCCESS;
@@ -1162,29 +1198,38 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Status = GetMemoryLimit (fdt, MemOffAmt);
   /* Don't override "mem" argument if coded into boot image */
   if (Status == EFI_SUCCESS &&
-      !AsciiStrStr (CmdLine, "mem=")) {
-    ParamLen = AsciiStrLen (MemOff);
-    BootConfigFlag = IsAndroidBootParam (MemOff, ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, MemOff, NULL, BootConfigListHead,
+      HaveCmdLine) {
+    if (AsciiStrStr (CmdLine, MemOff)) {
+      ParamLen = AsciiStrLen (NoPasr);
+      BootConfigFlag = IsAndroidBootParam (NoPasr, ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      Param.NoPasr = NoPasr;
+      Param.MemOffAmt = NULL;
+    } else {
+      ParamLen = AsciiStrLen (MemOff);
+      BootConfigFlag = IsAndroidBootParam (MemOff, ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, MemOff, NULL, BootConfigListHead,
                                                              ParamLen, 0);
-    ParamLen = AsciiStrLen (MemOffAmt);
-    BootConfigFlag = IsAndroidBootParam (MemOffAmt, ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, MemOffAmt, NULL,
-               BootConfigListHead, ParamLen, 0);
-    ParamLen = AsciiStrLen (MemHpState);
-    BootConfigFlag = IsAndroidBootParam (MemHpState, ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, MemHpState, NULL,
-               BootConfigListHead, ParamLen, 0);
-    ParamLen = AsciiStrLen (MovableNode);
-    BootConfigFlag = IsAndroidBootParam (MovableNode, ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, MovableNode, NULL,
-               BootConfigListHead, ParamLen, 0);
+      ParamLen = AsciiStrLen (MemOffAmt);
+      BootConfigFlag = IsAndroidBootParam (MemOffAmt, ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, MemOffAmt, NULL,
+                 BootConfigListHead, ParamLen, 0);
+      ParamLen = AsciiStrLen (MemHpState);
+      BootConfigFlag = IsAndroidBootParam (MemHpState, ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, MemHpState, NULL,
+                 BootConfigListHead, ParamLen, 0);
+      ParamLen = AsciiStrLen (MovableNode);
+      BootConfigFlag = IsAndroidBootParam (MovableNode,
+                 ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, MovableNode, NULL,
+                 BootConfigListHead, ParamLen, 0);
 
-    Param.MemOffAmt = MemOffAmt;
+      Param.MemOffAmt = MemOffAmt;
+    }
   } else {
     Param.MemOffAmt = NULL;
   }

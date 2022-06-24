@@ -71,6 +71,7 @@
 #include <Library/ShutdownServices.h>
 #include <Library/VerifiedBootMenu.h>
 #include <Library/HypervisorMvCalls.h>
+#include <Library/Rtic.h>
 #include <Protocol/EFIMdtp.h>
 #include <Protocol/EFIScmModeSwitch.h>
 #include <libufdt_sysdeps.h>
@@ -549,6 +550,58 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
         DEBUG ((EFI_D_ERROR, "Error: Device Tree blob not found\n"));
         return EFI_NOT_FOUND;
       }
+      Dtb = SingleDtHdr;
+    }
+
+    /* If hypervisor boot info is present, append dtbo info passed from hyp */
+    if (IsVmEnabled ()) {
+      if (BootParamlistPtr->HypDtboBaseAddr == NULL) {
+        DEBUG ((EFI_D_ERROR, "Error: HypOverlay DT is NULL\n"));
+        return EFI_NOT_FOUND;
+      }
+
+      for (UINT32 i = 0; i < BootParamlistPtr->NumHypDtbos; i++) {
+        /* Flag the invalid dtbos and overlay the valid ones */
+        if (!BootParamlistPtr->HypDtboBaseAddr[i] ||
+             fdt_check_header ((VOID *)BootParamlistPtr->HypDtboBaseAddr[i])) {
+          DEBUG ((EFI_D_ERROR, "HypInfo: Not overlaying hyp dtbo"
+                  "Dtbo :%d is null or Bad DT header\n", i));
+          continue;
+        }
+
+        /* Allocate buffer temporarily */
+        TempHypBootInfo[i] = AllocateZeroPool (fdt_totalsize
+                                      (BootParamlistPtr->HypDtboBaseAddr[i]));
+
+        if (!TempHypBootInfo[i]) {
+          DEBUG ((EFI_D_ERROR,
+                 "Failed to allocate memory for HypDtbo %d\n", i));
+          return EFI_OUT_OF_RESOURCES;
+        }
+
+        /* Copy content from Hyp provided memory to temp buffer */
+        gBS->CopyMem ((VOID *)TempHypBootInfo[i],
+                      (VOID *)BootParamlistPtr->HypDtboBaseAddr[i],
+                      fdt_totalsize (BootParamlistPtr->HypDtboBaseAddr[i]));
+
+        if (!AppendToDtList (&DtsList,
+                       (fdt64_t)TempHypBootInfo[i],
+                       fdt_totalsize (BootParamlistPtr->HypDtboBaseAddr[i]))) {
+          DEBUG ((EFI_D_ERROR,
+                  "Unable to Allocate buffer for HypOverlay DT num: %d\n", i));
+          FreePool ((VOID *)TempHypBootInfo[i]);
+          DeleteDtList (&DtsList);
+          return EFI_OUT_OF_RESOURCES;
+        }
+      }
+    }
+
+    Status = ApplyOverlay (BootParamlistPtr,
+                           Dtb,
+                           DtsList);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Error: Dtb overlay failed\n"));
+      return Status;
     }
   } else {
     /*It is the case of DTB overlay Get the Soc specific dtb */
@@ -1231,6 +1284,11 @@ BootLinux (BootInfo *Info)
     return Status;
   }
 
+  /* Updating Kernel start Physical address to KP which will be used
+   * by QRKS service later.
+   */
+  GetQrksKernelStartAddress ();
+
   /* Updates the command line from boot image, appends device serial no.,
    * baseband information, etc.
    * Called before ShutdownUefiBootServices as it uses some boot service
@@ -1273,9 +1331,11 @@ BootLinux (BootInfo *Info)
     goto Exit;
   }
 
-  ThreadNum = KernIntf->Thread->GetCurrentThread ();
-  StackBase = KernIntf->Thread->ThreadGetUnsafeSPBase (ThreadNum);
-  StackCurrent = KernIntf->Thread->ThreadGetUnsafeSPCurrent (ThreadNum);
+  if (KernIntf->Version >= EFI_KERNEL_PROTOCOL_VERSION) {
+    ThreadNum = KernIntf->Thread->GetCurrentThread ();
+    StackCurrent = KernIntf->Thread->ThreadGetUnsafeSPCurrent (ThreadNum);
+    StackBase = KernIntf->Thread->ThreadGetUnsafeSPBase (ThreadNum);
+  }
 
   DataSize = sizeof (KernelSizeReserved);
   Status = gRT->GetVariable ((CHAR16 *)L"KernelSize", &gQcomTokenSpaceGuid,
@@ -1887,9 +1947,19 @@ BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 {
   return FALSE;
 }
+
+BOOLEAN IsTargetAuto (VOID)
+{
+  return TRUE;
+}
 #else
 BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 {
   return TRUE;
+}
+
+BOOLEAN IsTargetAuto (VOID)
+{
+  return FALSE;
 }
 #endif

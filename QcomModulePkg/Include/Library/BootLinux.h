@@ -74,6 +74,7 @@
 #include <Library/BaseMemoryLib.h>
 #include <Library/CacheMaintenanceLib.h>
 #include <Library/DebugLib.h>
+#include <Library/Debug.h>
 #include <Library/DevicePathLib.h>
 #include <Library/DrawUI.h>
 #include <Library/IoLib.h>
@@ -281,4 +282,5 @@ BOOLEAN IsDynamicPartitionSupport (VOID);
 UINT64 SetandGetLoadAddr (BootParamlist *BootParamlistPtr, AddrType Type);
 BOOLEAN IsNANDSquashFsSupport (VOID);
 BOOLEAN IsEnableDisplayMenuFlagSupported (VOID);
+BOOLEAN IsTargetAuto (VOID);
 #endif

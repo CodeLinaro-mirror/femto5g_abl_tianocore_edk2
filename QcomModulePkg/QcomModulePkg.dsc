@@ -134,7 +134,7 @@
   !if $(AB_RETRYCOUNT_DISABLE)
       GCC:*_*_*_CC_FLAGS = -DAB_RETRYCOUNT_DISABLE
   !endif
-  !if $(TARGET_BOARD_TYPE_AUTO) == 1
+  !if $(TARGET_BOARD_TYPE_AUTO)
       GCC:*_*_*_CC_FLAGS = -DTARGET_BOARD_TYPE_AUTO
   !endif
   !if $(VERITY_LE)
@@ -159,6 +159,9 @@
   !endif
   !if $(NAND_SQUASHFS_SUPPORT)
       GCC:*_*_*_CC_FLAGS = -DNAND_SQUASHFS_SUPPORT
+  !endif
+  !if $(VERIFIED_BOOT_ENABLED)
+      GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_ENABLED
   !endif
 
 [PcdsFixedAtBuild.common]
