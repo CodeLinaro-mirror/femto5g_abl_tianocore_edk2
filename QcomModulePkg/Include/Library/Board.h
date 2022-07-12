@@ -25,7 +25,12 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following
+ * license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
 */
+/* SPDX-License-Identifier: BSD-3-Clause-Clear */
 
 #ifndef __BOARD_H__
 #define __BOARD_H__
@@ -39,6 +44,7 @@
 #include <Protocol/EFIPlatformInfo.h>
 #include <Protocol/EFIPmicVersion.h>
 #include <Protocol/EFIRamPartition.h>
+#include <Protocol/EFISoftSkuInfo.h>
 
 #define HANDLE_MAX_INFO_LIST 128
 #define CHIP_BASE_BAND_LEN 4
@@ -79,6 +85,7 @@ struct BoardInfo {
   EFIChipInfoVersionType ChipVersion;
   EFIChipInfoFoundryIdType FoundryId;
   UINT32 HlosSubType;
+  UINT32 SoftSkuId;
 };
 
 EFI_STATUS
@@ -119,4 +126,6 @@ VOID GetPageSize (UINT32 *PageSize);
 EFI_STATUS GetDdrSize (UINT64 *DdrSize);
 EFI_STATUS BoardDdrType (UINT32 *Type);
 UINT32 BoardPlatformHlosSubType (VOID);
+VOID BoardSoftSku (EFI_SOFT_SKU_ID *SkuId);
+UINT32 BoardSoftSkuId (VOID);
 #endif
