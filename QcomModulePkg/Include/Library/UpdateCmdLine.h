@@ -124,6 +124,7 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *EarlyEthMacCmdLine;
   CHAR8 *SilentBootModeCmdLine;
   CHAR8 *AudioFrameWork;
+  CHAR8 *ModemPathCmdLine;
 } UpdateCmdLineParamList;
 
 EFI_STATUS
@@ -141,6 +142,13 @@ TargetBatterySocOk (UINT32 *BatteryVoltage);
 UINT32
 GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot,
 BOOLEAN BootIntoRecovery, CHAR16 *ReqPartition, CHAR8 *Key);
+
+UINT32
+GetSystemPathByPname (CHAR8 **SysPath,
+                      BOOLEAN MultiSlotBoot,
+	              BOOLEAN BootIntoRecovery,
+	              CHAR16 *ReqPartition,
+                      CHAR8 *Key);
 
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus);
