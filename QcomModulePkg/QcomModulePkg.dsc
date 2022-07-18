@@ -131,6 +131,9 @@
   !if $(VERIFIED_BOOT_LE)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE
   !endif
+  !if $(EARLY_ETH_ENABLED)
+      GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED
+  !endif
   !if $(AB_RETRYCOUNT_DISABLE)
       GCC:*_*_*_CC_FLAGS = -DAB_RETRYCOUNT_DISABLE
   !endif
@@ -162,6 +165,9 @@
   !endif
   !if $(VERIFIED_BOOT_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_ENABLED
+  !endif
+  !if $(BASE_ADDRESS)
+      GCC:*_*_*_CC_FLAGS = -DBASE_ADDRESS=$(BASE_ADDRESS)
   !endif
 
 [PcdsFixedAtBuild.common]

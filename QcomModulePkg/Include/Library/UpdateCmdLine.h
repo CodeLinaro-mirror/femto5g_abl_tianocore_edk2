@@ -77,6 +77,7 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Uefi.h>
+#include "EarlyEthernet.h"
 
 #define BOOT_BASE_BAND " androidboot.baseband="
 #define BATT_MIN_VOLT 3200
@@ -127,6 +128,9 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *FstabSuffix;
   UINT32 HeaderVersion;
   CHAR8 *MemOffAmt;
+  CHAR8 *EarlyIPv4CmdLine;
+  CHAR8 *EarlyIPv6CmdLine;
+  CHAR8 *EarlyEthMacCmdLine;
 } UpdateCmdLineParamList;
 
 
@@ -140,6 +144,7 @@ EFI_STATUS
 UpdateCmdLine (BootParamlist *BootParamlistPtr,
                CHAR8 *FfbmStr,
                BOOLEAN Recovery,
+               BOOLEAN FlashlessBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
                UINT32 HeaderVersion);
