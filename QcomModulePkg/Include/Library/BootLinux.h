@@ -211,7 +211,6 @@ BOOLEAN TargetBuildVariantUser (VOID);
 BOOLEAN IsLEVariant (VOID);
 BOOLEAN IsBuildAsSystemRootImage (VOID);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
-BOOLEAN EarlyServicesEnabled (VOID);
 EFI_STATUS
 GetImage (CONST BootInfo *Info,
           VOID **ImageBuffer,
