@@ -29,6 +29,40 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following
+ * license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * * Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *   contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **/
 
 #include <Library/BootLinux.h>
@@ -43,7 +77,7 @@
 #include <Protocol/Print2.h>
 
 #include "AutoGen.h"
-#include <DeviceInfo.h>
+#include "DeviceInfo.h"
 #include "UpdateCmdLine.h"
 #include "Recovery.h"
 #include "LECmdLine.h"
@@ -88,6 +122,11 @@ STATIC CHAR8 *ResumeCmdLine = NULL;
 #define MAX_DISPLAY_CMD_LINE 256
 STATIC CHAR8 DisplayCmdLine[MAX_DISPLAY_CMD_LINE];
 STATIC UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
+
+#define MAX_AUDIO_CMD_LENGTH 64
+STATIC CHAR8 AudioFrameWork[MAX_AUDIO_FW_LENGTH];
+STATIC UINT32 AudioFWLen;
+STATIC CHAR8 *AndroidBootAudioFW = " androidboot.audio=";
 
 #define MAX_DTBO_IDX_STR 64
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
@@ -305,6 +344,17 @@ STATIC VOID GetDisplayCmdline (VOID)
   }
 }
 
+STATIC VOID GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
+{
+  EFI_STATUS Status;
+  CHAR8 *Src;
+
+  Status = ReadAudioFrameWork (&Src, Length);
+  if ((Status == EFI_SUCCESS) && *Length) {
+     AsciiStrCatS (FrameWork, MAX_AUDIO_FW_LENGTH, Src);
+  }
+}
+
 /*
  * Returns length = 0 when there is failure.
  */
@@ -513,6 +563,9 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
   Src = Param->DisplayCmdLine;
   AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
+  Src = Param->AudioFrameWork;
+  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+
   if (Param->MdtpActive) {
     Src = Param->MdtpActiveFlag;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
@@ -638,6 +691,7 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   CHAR8 *LEVerityCmdLine = NULL;
   UINT32 LEVerityCmdLineLen = 0;
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
+  CHAR8 AudioFWStr[MAX_AUDIO_CMD_LENGTH] = "\0";
 
   Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
   if (Status != EFI_SUCCESS) {
@@ -759,6 +813,14 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   GetDisplayCmdline ();
   CmdLineLen += AsciiStrLen (DisplayCmdLine);
 
+  GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
+  if (AudioFWLen) {
+    DEBUG((EFI_D_INFO, "Audio FrameWork is %s\n",AudioFrameWork));
+    AsciiSPrint(AudioFWStr, (MAX_AUDIO_CMD_LENGTH-1), "%a", AndroidBootAudioFW);
+    AsciiStrCatS(AudioFWStr, MAX_AUDIO_CMD_LENGTH, AudioFrameWork);
+    CmdLineLen += AudioFWLen + AsciiStrLen (AudioFWStr);
+  }
+
   if (!IsLEVariant ()) {
     DtboIdx = GetDtboIdx ();
     if (DtboIdx != INVALID_PTN) {
@@ -855,6 +917,7 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   Param.LEVerityCmdLine = LEVerityCmdLine;
   Param.HeaderVersion = HeaderVersion;
   Param.SystemdSlotEnv = SystemdSlotEnv;
+  Param.AudioFrameWork = AudioFWStr;
 
   if (EarlyEthEnabled ()) {
     Param.EarlyIPv4CmdLine = IPv4AddrBufCmdLine;
