@@ -88,6 +88,9 @@ static AvbSlotVerifyResult initialize_persistent_digest(
     const uint8_t* initial_digest,
     uint8_t* out_digest);
 
+/* Minimum size of a image that can be loaded and verified in parallel. - 1MB*/
+#define PARALLEL_MIN_SIZE (1 << 20)
+
 /* Helper function to see if we should continue with verification in
  * allow_verification_error=true mode if something goes wrong. See the
  * comments for the avb_slot_verify() function for more information.
@@ -424,15 +427,21 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
       goto out;
    }
 
+/* If we set  BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL,partition load and verification will be
+ * executed in parallel.
+ *
+ * In the parallel mode, the partition will be splited into several chunks to reduce load and verify time.
+ */
 #if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
-  if ((avb_strncmp ("boot", part_name, 4) == 0)) {
-    ret = LoadAndVerifyBootHashPartition (ops,
-                                          hash_desc,
-                                          part_name,
-                                          desc_digest,
-                                          desc_salt,
-                                          image_buf,
-                                          hash_desc.image_size);
+  /*The image is loaded in parallel only if the image size is large enough*/
+  if (image_size >= PARALLEL_MIN_SIZE) {
+    ret = LoadAndVerifyHashPartitionInParallel (ops,
+                                        hash_desc,
+                                        part_name,
+                                        desc_digest,
+                                        desc_salt,
+                                        image_buf,
+                                        image_size);
     goto out;
   }
 #endif

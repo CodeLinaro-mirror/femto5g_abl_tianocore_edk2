@@ -160,6 +160,47 @@ int avb_safe_memcmp(const void* s1, const void* s2, size_t n) {
   return result != 0;
 }
 
+bool avb_safe_mutiply_to(uint64_t* value, uint64_t value_to_multiply) {
+  uint64_t original_value;
+
+  avb_assert(value != NULL);
+
+  original_value = *value;
+
+  *value *= value_to_multiply;
+  if (value_to_multiply != 0 && *value / value_to_multiply != original_value) {
+    avb_error("Overflow when multiplying values.\n");
+    return false;
+  }
+  return true;
+}
+
+bool avb_safe_mutiply(uint64_t* out_result, uint64_t a, uint64_t b) {
+  uint64_t dummy;
+  if(out_result == NULL) {
+    out_result = &dummy;
+  }
+  *out_result = a;
+  return avb_safe_mutiply_to(out_result,b);
+}
+
+uint64_t avb_int_sqrt(uint64_t x) {
+  if(x == 0 || x == 1)
+    return x;
+  uint64_t l = 0, r = x, ans = 0;
+  uint64_t mid;
+  while (l <= r) {
+    mid = l + (r - l) / 2;
+    if (mid <= x / mid) {
+        ans = mid;
+        l = mid + 1;
+    } else {
+        r = mid - 1;
+    }
+  }
+  return ans;
+}
+
 bool avb_safe_add_to(uint64_t* value, uint64_t value_to_add) {
   uint64_t original_value;
 

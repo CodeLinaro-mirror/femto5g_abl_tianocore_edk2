@@ -36,7 +36,7 @@
 
 #include "avb_slot_verify.h"
 
-AvbSlotVerifyResult LoadAndVerifyBootHashPartition (
+AvbSlotVerifyResult LoadAndVerifyHashPartitionInParallel (
     AvbOps* ops,
     AvbHashDescriptor HashDesc,
     char* part_name,

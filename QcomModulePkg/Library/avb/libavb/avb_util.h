@@ -224,6 +224,29 @@ int avb_safe_memcmp(const void* s1,
                     const void* s2,
                     size_t n) AVB_ATTR_WARN_UNUSED_RESULT;
 
+/* Multiply |value_to_multiply| and |value| with overflow protection.
+ * Store the product in |out_result|.
+ * Returns false if the addition overflows, true otherwise. In either
+ * case, |value| is always modified.
+*/
+bool avb_safe_mutiply_to(uint64_t* value,
+                     uint64_t value_to_multiply) AVB_ATTR_WARN_UNUSED_RESULT;
+
+/* Multiply |a| and |b| with overflow protection, returning the product in
+ * |out_result|.
+ * It's permissible to pass NULL for |out_result| if you just want to
+ * check that the addition would not overflow.
+ *
+ * Returns false if the addition overflows, true otherwise.
+ */
+bool avb_safe_mutiply(uint64_t* out_result,
+                  uint64_t a,
+                  uint64_t b) AVB_ATTR_WARN_UNUSED_RESULT;
+
+/* Computes the integer square root of |x|
+*/
+uint64_t avb_int_sqrt(uint64_t x) AVB_ATTR_WARN_UNUSED_RESULT;
+
 /* Adds |value_to_add| to |value| with overflow protection.
  *
  * Returns false if the addition overflows, true otherwise. In either
