@@ -495,16 +495,18 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  Src = BOOT_BASE_BAND;
-  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  #ifndef SUPPORT_MODEM_DISABLE
+    Src = BOOT_BASE_BAND;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
-  gBS->SetMem (Param->ChipBaseBand, CHIP_BASE_BAND_LEN, 0);
-  AsciiStrnCpyS (Param->ChipBaseBand, CHIP_BASE_BAND_LEN,
-                 BoardPlatformChipBaseBand (),
-                 (CHIP_BASE_BAND_LEN - 1));
-  ToLower (Param->ChipBaseBand);
-  Src = Param->ChipBaseBand;
-  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    gBS->SetMem (Param->ChipBaseBand, CHIP_BASE_BAND_LEN, 0);
+    AsciiStrnCpyS (Param->ChipBaseBand, CHIP_BASE_BAND_LEN,
+                  BoardPlatformChipBaseBand (),
+                  (CHIP_BASE_BAND_LEN - 1));
+    ToLower (Param->ChipBaseBand);
+    Src = Param->ChipBaseBand;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  #endif
 
   Src = Param->DisplayCmdLine;
   AsciiStrCatS (Dst, MaxCmdLineLen, Src);
@@ -743,8 +745,10 @@ skip_BoardSerialNum:
     return EFI_NOT_FOUND;
   }
 
-  CmdLineLen += AsciiStrLen (BOOT_BASE_BAND);
-  CmdLineLen += AsciiStrLen (BoardPlatformChipBaseBand ());
+  #ifndef SUPPORT_MODEM_DISABLE
+    CmdLineLen += AsciiStrLen (BOOT_BASE_BAND);
+    CmdLineLen += AsciiStrLen (BoardPlatformChipBaseBand ());
+  #endif
 
   if (MdtpActive)
     CmdLineLen += AsciiStrLen (MdtpActiveFlag);
