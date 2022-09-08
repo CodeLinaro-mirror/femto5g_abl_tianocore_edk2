@@ -110,6 +110,7 @@
   UefiDriverEntryPoint|MdePkg/Library/UefiDriverEntryPoint/UefiDriverEntryPoint.inf
   PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
   AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
+  AesLib|QcomModulePkg/Library/aes/AesLib.inf
 
 [LibraryClasses.ARM]
   ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
@@ -134,6 +135,9 @@
   !endif
   !if $(EARLY_ETH_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED
+  !endif
+  !if $(HIBERNATION_SUPPORT)
+      GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT
   !endif
   !if $(AB_RETRYCOUNT_DISABLE)
       GCC:*_*_*_CC_FLAGS = -DAB_RETRYCOUNT_DISABLE
@@ -169,6 +173,10 @@
   !endif
   !if $(BASE_ADDRESS)
       GCC:*_*_*_CC_FLAGS = -DBASE_ADDRESS=$(BASE_ADDRESS)
+  !endif
+  !if $(LINUX_BOOT_CPU_SELECTION_ENABLED)
+      GCC:*_*_*_CC_FLAGS = -DLINUX_BOOT_CPU_SELECTION_ENABLED
+      GCC:*_*_*_CC_FLAGS = -DTARGET_LINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID)
   !endif
 
 [PcdsFixedAtBuild.common]
@@ -212,5 +220,6 @@
 			StackCanary|QcomModulePkg/Library/StackCanary/StackCanary.inf
 			FastbootLib|QcomModulePkg/Library/FastbootLib/FastbootLib.inf
 			AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
+			AesLib|QcomModulePkg/Library/aes/AesLib.inf
 			UbsanLib|QcomModulePkg/Library/UbsanLib/UbsanLib.inf
 	}

@@ -80,6 +80,8 @@ STATIC CONST CHAR8 *DmVerityCmd = " root=/dev/dm-0 dm=\"system none ro,0 1 "
 STATIC CONST CHAR8 *Space = " ";
 extern UINT64 FlashlessBootImageAddr;
 
+STATIC BOOLEAN KeymasterEnabled = TRUE;
+
 #define MAX_NUM_REQ_PARTITION    8
 #define MAX_PROPERTY_SIZE        10
 
@@ -1684,7 +1686,6 @@ DisplayVerifiedBootScreen (BootInfo *Info)
     } else {
       DEBUG ((EFI_D_INFO, "Your device has loaded a different operating system."
                           "\nWait for 5 seconds before proceeding\n"));
-      MicroSecondDelay (5000000);
     }
     break;
   case ORANGE:
@@ -1697,7 +1698,6 @@ DisplayVerifiedBootScreen (BootInfo *Info)
       } else {
         DEBUG (
             (EFI_D_INFO, "Device is unlocked, Skipping boot verification\n"));
-        MicroSecondDelay (5000000);
       }
     }
     break;
@@ -1714,7 +1714,6 @@ DisplayVerifiedBootScreen (BootInfo *Info)
       } else {
         DEBUG ((EFI_D_INFO, "The dm-verity is not started in restart mode." \
               "\nWait for 30 seconds before proceeding\n"));
-        MicroSecondDelay (30000000);
       }
   }
 
@@ -1738,6 +1737,11 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     UINT32 SystemPathLen = 0;
     BOOLEAN SecureDevice = FALSE;
     UINT32 PageSize = 0;
+    KMRotAndBootStateForLE Data = {0};
+    secasn1_data_type Modulus = {NULL};
+    secasn1_data_type PublicExp = {NULL};
+    UINT32 PaddingType = 0;
+
     /*Load image*/
     GUARD (VBAllocateCmdLine (Info));
     GUARD (VBCommonInit (Info));
@@ -1759,24 +1763,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         return Status;
     }
 
-    if (!SecureDevice) {
-        if (!TargetBuildVariantUser () ) {
-            DEBUG ((EFI_D_INFO, "VB: verification skipped for debug builds\n"));
-            goto skip_verification;
-        }
-    }
-
-    /* Initialize Verified Boot*/
-    device_info_vb_t DevInfo_vb;
-    DevInfo_vb.is_unlocked = IsUnlocked ();
-    DevInfo_vb.is_unlock_critical = IsUnlockCritical ();
-    Status = Info->VbIntf->VBDeviceInit (Info->VbIntf,
-                                        (device_info_vb_t *)&DevInfo_vb);
-    if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "VB: Error during VBDeviceInit: %r\n", Status));
-        return Status;
-    }
-
     /* Locate QcomAsn1x509Protocol*/
     Status = gBS->LocateProtocol (&gEfiQcomASN1X509ProtocolGuid, NULL,
                                  (VOID **)&QcomAsn1X509Protocal);
@@ -1792,6 +1778,24 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "VB: Error during "
                       "ASN1X509VerifyOEMCertificate: %r\n", Status));
+        return Status;
+    }
+
+    if (!SecureDevice) {
+      if (!TargetBuildVariantUser () ) {
+        DEBUG ((EFI_D_INFO, "VB: verification skipped for debug builds\n"));
+        goto set_rot;
+      }
+    }
+
+    /* Initialize Verified Boot*/
+    device_info_vb_t DevInfo_vb;
+    DevInfo_vb.is_unlocked = IsUnlocked ();
+    DevInfo_vb.is_unlock_critical = IsUnlockCritical ();
+    Status = Info->VbIntf->VBDeviceInit (Info->VbIntf,
+                                        (device_info_vb_t *)&DevInfo_vb);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "VB: Error during VBDeviceInit: %r\n", Status));
         return Status;
     }
 
@@ -1825,14 +1829,45 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
 
+set_rot:
+    Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                  &KeymasterEnabled);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n",
+                                                                  Status));
+      return Status;
+    }
+
+    if (KeymasterEnabled) {
+      /* Set Rot & Boot State*/
+      Data.IsUnlocked = IsUnlocked ();
+
+      Status = LEGetRSAPublicKeyInfoFromCertificate (QcomAsn1X509Protocal,
+                &OemCert, &Modulus, &PublicExp, &PaddingType);
+
+      if (Modulus.data != NULL &&
+            PublicExp.data != NULL) {
+        Data.PublicKeyMod = Modulus.data;
+        Data.PublicKeyModLength = Modulus.Len;
+        Data.PublicKeyExp = PublicExp.data;
+        Data.PublicKeyExpLength = PublicExp.Len;
+
+        Status = KeyMasterSetRotForLE (&Data);
+        if (Status != EFI_SUCCESS) {
+          DEBUG ((EFI_D_ERROR, "KeyMasterSetRotForLE failed %r\n", Status));
+          return Status;
+        }
+      }
+    }
+
 skip_verification:
     if (!IsRootCmdLineUpdated (Info)) {
-        SystemPathLen = GetSystemPath (&SystemPath, Info);
-        if (SystemPathLen == 0 ||
-            SystemPath == NULL) {
-            return EFI_LOAD_ERROR;
-        }
-        GUARD (AppendVBCmdLine (Info, SystemPath));
+      SystemPathLen = GetSystemPath (&SystemPath, Info);
+      if (SystemPathLen == 0 ||
+          SystemPath == NULL) {
+          return EFI_LOAD_ERROR;
+      }
+      GUARD (AppendVBCmdLine (Info, SystemPath));
     }
     return Status;
 }
