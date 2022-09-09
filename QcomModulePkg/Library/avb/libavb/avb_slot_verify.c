@@ -77,6 +77,9 @@
 /* Maximum size of a vbmeta image - 64 KiB. */
 #define VBMETA_MAX_SIZE (64 * 1024)
 
+/* Minimum size of a image that can be loaded and verified in parallel. - 1MB*/
+#define PARALLEL_MIN_SIZE (1 << 20)
+
 /* Helper function to see if we should continue with verification in
  * allow_verification_error=true mode if something goes wrong. See the
  * comments for the avb_slot_verify() function for more information.
@@ -123,7 +126,6 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
   const char* found;
   uint64_t image_size;
   bool kpi_flag = 0;
-
   if (!avb_hash_descriptor_validate_and_byteswap(
           (const AvbHashDescriptor*)descriptor, &hash_desc)) {
     ret = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_METADATA;
@@ -184,22 +186,27 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     }
     avb_debugv (part_name, ": Loading entire partition.\n", NULL);
   }
-
   image_buf = avb_malloc(image_size);
   if (image_buf == NULL) {
     ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
     goto out;
   }
 
+/* If we set  BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL,partition load and verification will be
+ * executed in parallel.
+ *
+ * In the parallel mode, the partition will be splited into several chunks to reduce load and verify time.
+ */
 #if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
-  if ((Avb_StrnCmp ("boot", part_name, 4) == 0)) {
-    ret = LoadAndVerifyBootHashPartition (ops,
-                                          hash_desc,
-                                          part_name,
-                                          desc_digest,
-                                          desc_salt,
-                                          image_buf,
-                                          hash_desc.image_size);
+  /*The image is loaded in parallel only if the image size is large enough*/
+  if (image_size >= PARALLEL_MIN_SIZE) {
+    ret = LoadAndVerifyHashPartitionInParallel (ops,
+                                        hash_desc,
+                                        part_name,
+                                        desc_digest,
+                                        desc_salt,
+                                        image_buf,
+                                        image_size);
     goto out;
   }
 #else
@@ -208,7 +215,6 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     kpi_flag = 1;
   }
 #endif
-
   io_ret = ops->read_from_partition(
       ops, part_name, 0 /* offset */, image_size, image_buf, &part_num_read);
   if (io_ret == AVB_IO_RESULT_ERROR_OOM) {
@@ -353,7 +359,7 @@ static AvbSlotVerifyResult load_requested_partitions(
       ret = AVB_SLOT_VERIFY_RESULT_ERROR_IO;
       goto out;
     }
- 
+
     /* Move to slot_data. */
     if (slot_data->num_loaded_partitions == MAX_NUMBER_OF_LOADED_PARTITIONS) {
       avb_errorv(part_name, ": Too many loaded partitions.\n", NULL);
@@ -1301,7 +1307,7 @@ static AvbSlotVerifyResult append_options(
       avb_assert_not_reached();
       break;
   }
- 
+
   /* Set androidboot.veritymode and androidboot.vbmeta.invalidate_on_error */
   if (toplevel_vbmeta->flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED) {
     verity_mode = "disabled";
