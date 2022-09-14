@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -25,7 +25,7 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-#if HIBERNATION_SUPPORT
+#if HIBERNATION_SUPPORT_INSECURE
 
 #include <Library/DeviceInfo.h>
 #include <Library/DrawUI.h>
@@ -37,6 +37,11 @@
 #include "BootStats.h"
 #include <Library/DxeServicesTableLib.h>
 #include <VerifiedBoot.h>
+#if HIBERNATION_32BIT_MODE_SWITCH
+#include <Protocol/EFIScmModeSwitch.h>
+#endif
+#include <Library/aes/aes_public.h>
+#include <Protocol/EFIQseecom.h>
 
 #define BUG(fmt, ...) {\
 		printf("Fatal error " fmt, ##__VA_ARGS__);\
@@ -53,6 +58,11 @@ struct free_ranges {
 	UINT64 end;
 };
 
+#if HIBERNATION_SUPPORT_SECURE
+static struct decrypt_param dp;
+static char *authtags;
+#endif
+
 /* Holds free memory ranges read from UEFI memory map */
 static struct free_ranges free_range_buf[100];
 static int free_range_count;
@@ -61,6 +71,10 @@ struct mapped_range {
         UINT64 start, end;
         struct mapped_range * next;
 };
+
+#if HIBERNATION_32BIT_MODE_SWITCH
+EFI_HLOS_BOOT_ARGS HlosBootArgs;
+#endif
 
 /* number of data pages to be copied from swap */
 static unsigned int nr_copy_pages;
@@ -137,6 +151,14 @@ struct bounce_table_iterator {
 	/* next available free table entry */
 	int cur_index;
 };
+
+#if HIBERNATION_SUPPORT_SECURE
+struct secs2d_ta_handle {
+        QCOM_QSEECOM_PROTOCOL *QseeComProtocol;
+        UINT32 AppId;
+};
+#endif
+
 struct bounce_table_iterator table_iterator;
 
 unsigned long relocateAddress;
@@ -148,7 +170,7 @@ unsigned long relocateAddress;
 #define SWAP_INFO_OFFSET        (swsusp_header->image + 1)
 #define FIRST_PFN_INDEX_OFFSET	(SWAP_INFO_OFFSET + 1)
 
-#define SWAP_PARTITION_NAME	L"swap_a"
+#define SWAP_PARTITION_NAME	L"swap"
 
 /*
  * target_addr  : address where page allocation is needed
@@ -507,6 +529,57 @@ static int check_swap_map_page(unsigned long offset)
 	return (offset % PFN_INDEXES_PER_PAGE) == 0;
 }
 
+#if HIBERNATION_SUPPORT_SECURE
+static int decrypt_page(void *encrypt_data)
+{
+	SW_CipherEncryptDir dir = SW_CIPHER_DECRYPT;
+	SW_CipherModeType mode = SW_CIPHER_MODE_GCM;
+	IovecListType   ioVecIn;
+	IovecListType   ioVecOut;
+	IovecType       IovecIn;
+	IovecType       IovecOut;
+
+	ioVecIn.size = 1;
+	ioVecIn.iov = &IovecIn;
+	ioVecIn.iov[0].dwLen = PAGE_SIZE;
+	ioVecIn.iov[0].pvBase = encrypt_data;
+	ioVecOut.size = 1;
+	ioVecOut.iov = &IovecOut;
+	ioVecOut.iov[0].dwLen = PAGE_SIZE;
+	ioVecOut.iov[0].pvBase = dp.out;
+
+	if (SW_Cipher_Init(SW_CIPHER_ALG_AES256))
+		return -1;
+	if (SW_Cipher_SetParam(SW_CIPHER_PARAM_DIRECTION, &dir, sizeof(SW_CipherEncryptDir)))
+		return -1;
+	if (SW_Cipher_SetParam(SW_CIPHER_PARAM_MODE, &mode, sizeof(mode)))
+		return -1;
+	if (SW_Cipher_SetParam(SW_CIPHER_PARAM_KEY, dp.unwrapped_key, sizeof(dp.unwrapped_key)))
+		return -1;
+	if (SW_Cipher_SetParam(SW_CIPHER_PARAM_IV, dp.iv, sizeof(dp.iv)))
+		return -1;
+	if (SW_Cipher_SetParam(SW_CIPHER_PARAM_AAD, (void *)dp.aad, sizeof(dp.aad)))
+		return -1;
+	if (SW_CipherData(ioVecIn, &ioVecOut))
+		return -1;
+	if (SW_Cipher_GetParam(SW_CIPHER_PARAM_TAG, (void*)(dp.auth_cur), dp.authsize))
+		return -1;
+
+	/* Compare tag output here */
+
+	gBS->CopyMem ((void *)(encrypt_data), (void *)(dp.out), PAGE_SIZE);
+	SW_Cipher_DeInit();
+	authtags = authtags + dp.authsize;
+        return 0;
+}
+#else
+
+static int decrypt_page(void *encrypt_data)
+{
+	return 0;
+}
+#endif
+
 static int read_swap_info_struct(void)
 {
 	struct swsusp_info *info;
@@ -518,13 +591,15 @@ static int read_swap_info_struct(void)
 		printf("Memory alloc failed Line %d\n",__LINE__);
 		return -1;
 	}
-
 	if (read_image(SWAP_INFO_OFFSET, info, 1)) {
 		printf("Failed to read Line %d\n", __LINE__);
 		FreePages(info, 1);
 		return -1;
 	}
-
+	if (decrypt_page(info)) {
+		printf("Decryption of swsusp_info failed\n");
+		return -1;
+	}
 	resume_hdr = (struct arch_hibernate_hdr *)info;
 	nr_meta_pages = info->pages - info->image_pages - 1;
 	nr_copy_pages = info->image_pages;
@@ -606,6 +681,7 @@ static unsigned long* read_kernel_image_pfn_indexes(unsigned long *offset)
 	unsigned long pending_pages = nr_meta_pages;
 	unsigned long pages_to_read, pages_read = 0;
 	unsigned long disk_offset;
+	void *pfn_array_start;
 	int loop = 0, ret;
 
 	pfn_array = AllocatePages(nr_meta_pages);
@@ -614,6 +690,7 @@ static unsigned long* read_kernel_image_pfn_indexes(unsigned long *offset)
 		return NULL;
 	}
 
+	pfn_array_start = pfn_array;
 	disk_offset = FIRST_PFN_INDEX_OFFSET;
 	/*
 	 * First swap_map page has one less pfn_index page
@@ -647,6 +724,15 @@ static unsigned long* read_kernel_image_pfn_indexes(unsigned long *offset)
 	} while (1);
 
 	*offset = disk_offset + pages_to_read;
+	while (pending_pages != nr_meta_pages) {
+		if(decrypt_page(pfn_array_start)) {
+			printf("Decryption failed for pfn array\n");
+			return NULL;
+		}
+		pfn_array_start = (char *)pfn_array_start + PAGE_SIZE;
+		pending_pages++;
+	}
+
 	return pfn_array;
 err:
 	FreePages(pfn_array, nr_meta_pages);
@@ -682,6 +768,10 @@ static int read_data_pages(unsigned long *kernel_pfn_indexes,
 				dst_pfn = kernel_pfn_indexes[pfn_index++];
 				pending_pages--;
 				temp = GetTimerCountms();
+				if (decrypt_page((void *)(src_pfn << PAGE_SHIFT))) {
+					printf("Decryption failed for Data pages\n");
+					return -1;
+				}
 				copy_page_to_dst(src_pfn, dst_pfn);
 				copy_page_ms += (GetTimerCountms() - temp);
 			}
@@ -993,6 +1083,22 @@ static void copy_bounce_and_boot_kernel()
 	struct bounce_table_iterator *bti = &table_iterator;
 	unsigned long cpu_resume = (unsigned long )resume_hdr->phys_reenter_kernel;
 	unsigned long ttbr0;
+	unsigned long stackPointer;
+
+	/*
+	 * After copying the bounce pages, there is a chance of corrupting old stack
+	 * which might be kernel memory.
+	 * To avoid kernel memory corruption, Use a free page for the stack.
+	 */
+	stackPointer = get_unused_pfn() << PAGE_SHIFT;
+	stackPointer = stackPointer + PAGE_SIZE - 16;
+
+#if HIBERNATION_32BIT_MODE_SWITCH
+	SetMem ((VOID *)&HlosBootArgs, sizeof (HlosBootArgs), 0);
+	/* Write 0 into el1_x4 to switch to 32bit mode */
+	HlosBootArgs.el1_x4 = 0;
+	HlosBootArgs.el1_elr = cpu_resume;
+#endif
 
 	/*
 	 * The restore routine "JumpToKernel" copies the bounced pages after iterating
@@ -1038,14 +1144,24 @@ static void copy_bounce_and_boot_kernel()
 		"mov x18, %[table_base]\n"
 		"mov x19, %[count]\n"
 		"mov x21, %[resume]\n"
+		"mov sp, %[sp]\n"
 		"mov x22, %[relocate_code]\n"
+#if HIBERNATION_32BIT_MODE_SWITCH
+		"mov x23, %[hlos_bootargs]\n"
+#endif
 		"br x22"
 		:
 		:[table_base] "r" (bti->first_table),
 		[count] "r" (bounced_pages),
 		[resume] "r" (cpu_resume),
+		[sp] "r" (stackPointer),
 		[relocate_code] "r" (relocateAddress)
+#if HIBERNATION_32BIT_MODE_SWITCH
+		,[hlos_bootargs] "r" (&HlosBootArgs)
+		:"x18", "x19", "x21", "x22", "x23", "memory");
+#else
 		:"x18", "x19", "x21", "x22", "memory");
+#endif
 }
 
 static int check_for_valid_header(void)
@@ -1097,22 +1213,124 @@ static void erase_swap_signature(void)
 		printf("Failed to erase swap signature\n");
 }
 
-void BootIntoHibernationImage(BootInfo *Info)
+#if HIBERNATION_SUPPORT_SECURE
+static int init_ta_and_get_key(struct secs2d_ta_handle *ta_handle)
+{
+	int status;
+	struct cmd_req req = {0};
+	struct cmd_rsp rsp = {0};
+
+	status = gBS->LocateProtocol (&gQcomQseecomProtocolGuid, NULL,
+	                                (VOID **)&(ta_handle->QseeComProtocol));
+	if (status) {
+		printf("Error in locating Qseecom protocol Guid\n");
+		return -1;
+	}
+	status = ta_handle->QseeComProtocol->QseecomStartApp (
+	      ta_handle->QseeComProtocol, "secs2d_a", &(ta_handle->AppId));
+	if (status) {
+		printf("Error in secs2d app loading\n");
+		return -1;
+	}
+
+	req.cmd = UNWRAP_KEY_CMD;
+	req.unwrapkey_req.wrapped_key_size = WRAPPED_KEY_SIZE;
+	gBS->CopyMem ((void *)req.unwrapkey_req.wrapped_key_buffer,(void *)dp.key_blob, sizeof(dp.key_blob));
+	req.unwrapkey_req.curr_time.hour = 4;
+	status = ta_handle->QseeComProtocol->QseecomSendCmd (
+			ta_handle->QseeComProtocol, ta_handle->AppId, (UINT8 *)&req, sizeof (req),
+			(UINT8 *)&rsp, sizeof (rsp));
+	if (status) {
+		printf("Error in conversion wrappeded key to unwrapped key\n");
+		return -1;
+	}
+	gBS->CopyMem ((void *)dp.unwrapped_key, (void *)rsp.unwrapkey_rsp.key_buffer, 32);
+	return 0;
+}
+
+
+static void *memset(void *Destination, int Value, int Count)
+{
+  CHAR8 *Ptr = Destination;
+  while (Count--)
+          *Ptr++ = Value;
+
+  return Destination;
+}
+
+static int init_aes_decrypt(void)
+{
+	int authslot_start;
+	int authslot_count;
+	struct secs2d_ta_handle ta_handle = {0};
+
+	printf("Secure Hibernation restore -----------\n");
+	memset(&dp, 0, sizeof(dp));
+	authslot_start = swsusp_header->authslot_start;
+	authslot_count = swsusp_header->authslot_count;
+
+	authtags = AllocatePages(authslot_count);
+	if (!authtags)
+		return -1;
+	if (read_image(authslot_start, authtags, authslot_count))
+		return -1;
+
+	dp.authsize = swsusp_header->authsize;
+	gBS->CopyMem ((void *)(&dp.key_blob), (void *)(swsusp_header->key_blob), sizeof(swsusp_header->key_blob));
+	gBS->CopyMem ((void *)(&dp.iv), (void *)(swsusp_header->iv), sizeof(swsusp_header->iv));
+	gBS->CopyMem ((void *)(&dp.aad), (void *)(swsusp_header->aad), sizeof(swsusp_header->aad));
+
+	dp.out = AllocatePages(1);
+	if (!dp.out)
+		return -1;
+	dp.auth_cur = AllocateZeroPool(dp.authsize);
+	if (!dp.auth_cur)
+		return -1;
+	if (init_ta_and_get_key(&ta_handle))
+		return -1;
+        return 0;
+}
+#else
+
+static int init_aes_decrypt(void)
+{
+	printf("Insecure Hibernation restore -----------\n");
+	return 0;
+}
+#endif
+
+void BootIntoHibernationImage(BootInfo *Info, BOOLEAN *SetRotAndBootState)
 {
 	int ret;
 	EFI_STATUS Status = EFI_SUCCESS;
-
 	printf("===============================\n");
 	printf("Entrying Hibernation restore\n");
 
 	if (check_for_valid_header() < 0)
-		goto err;
+		return;
 
-	Status = LoadImageAndAuth (Info, TRUE);
+	if (init_aes_decrypt()) {
+		printf("AES initialization failed\n");
+		return;
+	}
+
+	if (!SetRotAndBootState) {
+		printf("SetRotAndBootState cannot be NULL.\n");
+		goto err;
+	}
+
+	Status = LoadImageAndAuth (Info, TRUE, FALSE);
 	if (Status != EFI_SUCCESS) {
 		DEBUG ((EFI_D_ERROR, "Failed to set ROT and Bootstate : %r\n", Status));
 		goto err;
 	}
+
+	/* ROT and BootState are set only once per boot.
+	 * set variable to TRUE to Avoid setting second
+	 * time incase hbernation resume fails at restore
+         * snapshot stage..
+	 */
+	*SetRotAndBootState = TRUE;
 
 	ret = restore_snapshot_image();
 	if (ret) {

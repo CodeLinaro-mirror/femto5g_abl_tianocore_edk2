@@ -3,7 +3,7 @@
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2009-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,14 +34,13 @@
 #include <Library/BootLinux.h>
 #include <Library/PartitionTableUpdate.h>
 #include <Library/PrintLib.h>
+#include <Library/ShutdownServices.h>
 #include <LinuxLoaderLib.h>
 #include <Protocol/EFICardInfo.h>
 #include <Protocol/EFIChargerEx.h>
 #include <Protocol/EFIChipInfoTypes.h>
 #include <Protocol/EFIPmicPon.h>
 #include <Protocol/Print2.h>
-#include <Library/HypervisorMvCalls.h>
-#include <Library/EarlyUsbInit.h>
 
 #include "AutoGen.h"
 #include <DeviceInfo.h>
@@ -60,6 +59,18 @@ STATIC CONST CHAR8 *LogLevel = " quite";
 STATIC CONST CHAR8 *BatteryChgPause = " androidboot.mode=charger";
 STATIC CONST CHAR8 *MdtpActiveFlag = " mdtp";
 STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
+STATIC CHAR8 SystemdSlotEnv[] = " systemd.setenv=\"SLOT_SUFFIX=_a\"";
+/*Silent Boot Mode */
+STATIC CHAR8 *SilentBootEnbCmdLine =
+                           " androidboot.silent_boot_mode=silent";
+STATIC CHAR8 *SilentBootDisCmdLine =
+                           " androidboot.silent_boot_mode=nonsilent";
+STATIC CHAR8 *SilentBootForCmdLine =
+                           " androidboot.silent_boot_mode=forcedsilent";
+STATIC CHAR8 *SilentBootNForCmdLine =
+                           " androidboot.silent_boot_mode=forcednonsilent";
+
+
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
@@ -67,11 +78,11 @@ STATIC CHAR8 *RootCmdLine = " rootwait ro init=";
 STATIC CHAR8 *InitCmdline = INIT_BIN;
 STATIC CHAR8 *SkipRamFs = " skip_initramfs";
 
-STATIC CHAR8 *ResumeCmdLine = NULL;
+STATIC CHAR8 IPv4AddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 IPv6AddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 MacEthAddrBufCmdLine[MAX_IP_ADDR_BUF];
 
-CHAR8 IPv4AddrBufCmdLine[MAX_IP_ADDR_BUF];
-CHAR8 IPv6AddrBufCmdLine[MAX_IP_ADDR_BUF];
-CHAR8 MacEthAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 *ResumeCmdLine = NULL;
 
 /* Display command line related structures */
 #define MAX_DISPLAY_CMD_LINE 256
@@ -82,7 +93,14 @@ STATIC UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
 STATIC CHAR8 *AndroidBootDtbIdx = " androidboot.dtb_idx=";
 
-STATIC EFI_STATUS
+STATIC CONST CHAR8 *AndroidBootForceNormalBoot =
+                                      " androidboot.force_normal_boot=1";
+STATIC CONST CHAR8 *AndroidBootFstabSuffix =
+                                      " androidboot.fstab_suffix=";
+STATIC CHAR8 *FstabSuffixEmmc = "emmc";
+STATIC CHAR8 *FstabSuffixDefault = "default";
+
+EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
 {
   EFI_STATUS Status = EFI_SUCCESS;
@@ -291,13 +309,13 @@ STATIC VOID GetDisplayCmdline (VOID)
  * Returns length = 0 when there is failure.
  */
 UINT32
-GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN FlashlessBoot,
-               BOOLEAN BootIntoRecovery, CHAR16 *ReqPartition, CHAR8 *Key)
+GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
+		CHAR16 *ReqPartition, CHAR8 *Key)
 {
   INT32 Index;
   UINT32 Lun;
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
-  Slot CurSlot;
+  Slot CurSlot = GetCurrentSlotSuffix ();
   CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
 
@@ -307,53 +325,42 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN FlashlessBoot,
     return 0;
   }
 
-  if (FlashlessBoot) {
-     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " rootfstype=squashfs root=/dev/ram0");
-     return AsciiStrLen (*SysPath);
-  }
-
   if (ReqPartition == NULL ||
       Key == NULL) {
     DEBUG ((EFI_D_ERROR, "Invalid parameters: NULL\n"));
-    FreePool(*SysPath);
-    *SysPath = NULL;
     return 0;
   }
 
   if (IsLEVariant () &&
       BootIntoRecovery) {
     StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, (CONST CHAR16 *)L"recoveryfs",
-              StrLen ((CONST CHAR16 *)L"recoveryfs"));
+            StrLen ((CONST CHAR16 *)L"recoveryfs"));
   } else {
     StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, ReqPartition,
-              StrLen (ReqPartition));
+            StrLen (ReqPartition));
   }
 
   /* Append slot info for A/B Variant */
-  if (MultiSlotBoot) {
-     CurSlot = GetCurrentSlotSuffix ();
+  if (MultiSlotBoot &&
+      NAND != CheckRootDeviceType ()) {
      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
             StrLen (CurSlot.Suffix));
   }
 
   Index = GetPartitionIndex (PartitionName);
   if (Index == INVALID_PTN || Index >= MAX_NUM_PARTITIONS) {
-    DEBUG ((EFI_D_ERROR, "%s partition does not exist\n", PartitionName));
-    FreePool (*SysPath);
-    *SysPath = NULL;
+    DEBUG ((EFI_D_ERROR, "System partition does not exist\n"));
     return 0;
   }
 
   Lun = GetPartitionLunFromIndex (Index);
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrCmp ("Unknown", RootDevStr)) {
-    FreePool (*SysPath);
-    *SysPath = NULL;
     return 0;
   }
 
   if (!AsciiStrCmp ("EMMC", RootDevStr)) {
-    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/mmcblk0p%d", Key, Index);
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %s=/dev/mmcblk0p%d", Key, Index);
   } else if (!AsciiStrCmp ("NAND", RootDevStr)) {
     /* NAND is being treated as GPT partition, hence reduce the index by 1 as
      * PartitionIndex (0) should be ignored for correct mapping of partition.
@@ -362,33 +369,29 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN FlashlessBoot,
       // The gluebi device that is to be passed to "root=" will be the first one
       // after all "regular" mtd devices have been populated.
       UINT32 PartitionCount = 0;
+      UINT32 MtdBlkIndex = 0;
       GetPartitionCount (&PartitionCount);
+      if (MultiSlotBoot &&
+         (StrnCmp ((CONST CHAR16 *)L"_b", CurSlot.Suffix,
+          StrLen (CurSlot.Suffix)) == 0))
+         MtdBlkIndex = PartitionCount;
+      else
+         MtdBlkIndex = PartitionCount - 1;
       AsciiSPrint (*SysPath, MAX_PATH_SIZE,
                    " rootfstype=squashfs root=/dev/mtdblock%d ubi.mtd=%d",
-                   (PartitionCount - 1), (Index - 1));
-    } else if (IsDefinedMTDUbiBebLimit ()) {
-      /* Attach MTD device (Index - 1) using default VID header offset and
-       * reserve MTD_UBI_BEB_LIMIT_PER1024*nand_size_in_blocks/1024 erase blocks
-       * for bad block handling.
-       */
-        AsciiSPrint (*SysPath, MAX_PATH_SIZE,
-            " rootfstype=ubifs rootflags=bulk_read root=ubi0:rootfs ubi.mtd=%d,0,%d",
-            (Index - 1), MTD_UBI_BEB_LIMIT_PER1024);
+                   MtdBlkIndex, (Index - 1));
     } else {
       AsciiSPrint (*SysPath, MAX_PATH_SIZE,
           " rootfstype=ubifs rootflags=bulk_read root=ubi0:rootfs ubi.mtd=%d",
           (Index - 1));
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
-    AsciiSPrint (*SysPath, MAX_PATH_SIZE,
-                 " %a=/dev/sd%c%d",
-                 Key,
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/sd%c%d",
+		 Key,
                  LunCharMapping[Lun],
                  GetPartitionIdxInLun (PartitionName, Lun));
   } else {
     DEBUG ((EFI_D_ERROR, "Unknown Device type\n"));
-    FreePool (*SysPath);
-    *SysPath = NULL;
     return 0;
   }
   DEBUG ((EFI_D_VERBOSE, "System Path - %a \n", *SysPath));
@@ -402,8 +405,8 @@ GetResumeCmdLine(CHAR8 **ResumeCmdLine, CHAR16 *ReqPartition)
   BOOLEAN MultiSlotBoot;
   UINT32 len = 0;
 
-  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"swap_a");
-  len = GetSystemPath (ResumeCmdLine, MultiSlotBoot, FALSE, FALSE, (CHAR16 *)L"swap_a", (CHAR8 *)"resume");
+  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"swap");
+  len = GetSystemPath (ResumeCmdLine, MultiSlotBoot, FALSE, (CHAR16 *)L"swap", (CHAR8 *)"resume");
   if (len == 0) {
      DEBUG ((EFI_D_ERROR, "GetSystemPath failed\n"));
      return 0;
@@ -444,6 +447,12 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
     Src = Param->BootDevBuf;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+
+    Src = Param->AndroidBootFstabSuffix;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+
+    Src = Param->FstabSuffix;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
     /* Dynamic partition append boot_devices for super partition */
@@ -504,13 +513,20 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
   if (Param->MultiSlotBoot &&
      !IsBootDevImage ()) {
      /* Slot suffix */
-    Src = Param->AndroidSlotSuffix;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-
     UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
                           Param->SlotSuffixAscii);
-    Src = Param->SlotSuffixAscii;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    if (IsSystemdBootslotEnabled ()) {
+      INT32 StrLen = 0;
+      StrLen = AsciiStrLen (SystemdSlotEnv);
+      SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
+      Src = Param->SystemdSlotEnv;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    } else {
+      Src = Param->AndroidSlotSuffix;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      Src = Param->SlotSuffixAscii;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    }
   }
 
   if ((IsBuildAsSystemRootImage () &&
@@ -544,26 +560,21 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
+  if ((IsBuildUseRecoveryAsBoot () &&
+      IsDynamicPartitionSupport () &&
+      !Param->Recovery) ||
+      (!Param->MultiSlotBoot &&
+       !IsBuildUseRecoveryAsBoot ()&&
+       (Param->HeaderVersion >= BOOT_HEADER_VERSION_THREE))) {
+    Src = AndroidBootForceNormalBoot;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
   if (Param->LEVerityCmdLine != NULL) {
     Src = Param->LEVerityCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     FreePool (Param->LEVerityCmdLine);
     Param->LEVerityCmdLine = NULL;
-  }
-
-  /* Update commandline for VM System partition */
-  if (Param->CvmSystemPtnCmdLine) {
-    Src = Param->CvmSystemPtnCmdLine;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-  }
-
-  if (Param->EarlyServicesCmdLine) {
-    Src = Param->EarlyServicesCmdLine;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-  }
-  if (Param->ModemPathCmdLine) {
-    Src = Param->ModemPathCmdLine;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (EarlyEthEnabled ()) {
@@ -575,14 +586,16 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if (EarlyUsbInitEnabled()) {
-    Src = Param->UsbCompCmdLine;
+  if (Param->SilentBootModeCmdLine !=NULL) {
+    Src = Param->SilentBootModeCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (IsHibernationEnabled()) {
     Src = Param->ResumeCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    FreePool (Param->ResumeCmdLine);
+    Param->ResumeCmdLine = NULL;
   }
 
   return EFI_SUCCESS;
@@ -594,10 +607,11 @@ EFI_STATUS
 UpdateCmdLine (CONST CHAR8 *CmdLine,
                CHAR8 *FfbmStr,
                BOOLEAN Recovery,
-	       BOOLEAN FlashlessBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
-               CHAR8 **FinalCmdLine)
+               CHAR8 **FinalCmdLine,
+               UINT32 HeaderVersion,
+               CHAR8 SilentMode)
 {
   EFI_STATUS Status;
   UINT32 CmdLineLen = 0;
@@ -610,7 +624,6 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   BOOLEAN BatteryStatus;
   CHAR8 StrSerialNum[SERIAL_NUM_SIZE];
   BOOLEAN MdtpActive = FALSE;
-  CHAR8 *CvmSystemPtnCmdLine = NULL;
   UpdateCmdLineParamList Param = {0};
   CHAR8 DtboIdxStr[MAX_DTBO_IDX_STR] = "\0";
   CHAR8 DtbIdxStr[MAX_DTBO_IDX_STR] = "\0";
@@ -618,12 +631,7 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   INT32 DtbIdx = INVALID_PTN;
   CHAR8 *LEVerityCmdLine = NULL;
   UINT32 LEVerityCmdLineLen = 0;
-  CHAR8 *EarlyServicesStr = NULL;
-  CHAR8 *ModemPathStr = NULL;
-  CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
-
-  if (FlashlessBoot)
-    goto skip_BoardSerialNum;
+  CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
 
   Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
   if (Status != EFI_SUCCESS) {
@@ -631,7 +639,6 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
     return Status;
   }
 
-skip_BoardSerialNum:
   if (CmdLine && CmdLine[0]) {
     CmdLineLen = AsciiStrLen (CmdLine);
     HaveCmdLine = 1;
@@ -723,8 +730,12 @@ skip_BoardSerialNum:
   MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
   if (MultiSlotBoot &&
      !IsBootDevImage ()) {
+    if (IsSystemdBootslotEnabled ()) {
+      CmdLineLen += AsciiStrLen (SystemdSlotEnv);
+    } else {
     /* Add additional length for slot suffix */
-    CmdLineLen += AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
+      CmdLineLen += AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
+    }
   }
 
   if ((IsBuildAsSystemRootImage () &&
@@ -741,20 +752,7 @@ skip_BoardSerialNum:
 
   GetDisplayCmdline ();
   CmdLineLen += AsciiStrLen (DisplayCmdLine);
-  if (EarlyServicesEnabled ()) {
-    CmdLineLen += GetSystemPath (&EarlyServicesStr,
-	                          MultiSlotBoot,
-				  FlashlessBoot,
-                                  Recovery,
-                                  (CHAR16 *)L"early_services",
-                                  (CHAR8 *)"early_userspace");
-    CmdLineLen += GetSystemPath (&ModemPathStr,
-	                          MultiSlotBoot,
-							  FlashlessBoot,
-                                  Recovery,
-                                  (CHAR16 *)L"modem",
-                                  (CHAR8 *)"modem");
-  }
+
   if (!IsLEVariant ()) {
     DtboIdx = GetDtboIdx ();
     if (DtboIdx != INVALID_PTN) {
@@ -770,17 +768,42 @@ skip_BoardSerialNum:
       CmdLineLen += AsciiStrLen (DtbIdxStr);
     }
   }
+
+  if ((IsBuildUseRecoveryAsBoot () &&
+      IsDynamicPartitionSupport () &&
+      !Recovery) ||
+      (!MultiSlotBoot &&
+       !IsBuildUseRecoveryAsBoot () &&
+       (HeaderVersion >= BOOT_HEADER_VERSION_THREE))) {
+    CmdLineLen += AsciiStrLen (AndroidBootForceNormalBoot);
+  }
+
+  CmdLineLen += AsciiStrLen (AndroidBootFstabSuffix);
+  GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
+  if (!AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) {
+    Param.FstabSuffix = FstabSuffixEmmc;
+  } else {
+    Param.FstabSuffix = FstabSuffixDefault;
+  }
+  CmdLineLen += AsciiStrLen (Param.FstabSuffix);
+  Param.AndroidBootFstabSuffix = AndroidBootFstabSuffix;
+
+  if (SilentMode == SILENT_MODE) {
+    CmdLineLen += AsciiStrLen (SilentBootEnbCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootEnbCmdLine;
+  } else if (SilentMode == NON_SILENT_MODE) {
+    CmdLineLen += AsciiStrLen (SilentBootDisCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootDisCmdLine;
+  } else if (SilentMode == FORCED_SILENT) {
+    CmdLineLen += AsciiStrLen (SilentBootForCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootForCmdLine;
+  } else if (SilentMode == FORCED_NON_SILENT) {
+    CmdLineLen += AsciiStrLen (SilentBootNForCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootNForCmdLine;
+  }
+
   /* 1 extra byte for NULL */
   CmdLineLen += 1;
-
-  if (IsVmEnabled ()) {
-    CmdLineLen += GetSystemPath (&CvmSystemPtnCmdLine,
-                                 MultiSlotBoot,
-				 FlashlessBoot,
-                                 Recovery,
-                                 (CHAR16 *)L"vm-system",
-                                 (CHAR8 *)"vm_system");
-  }
 
   if (EarlyEthEnabled ()) {
     GetEarlyEthInfoFromPartition (IPv4AddrBufCmdLine,
@@ -791,13 +814,8 @@ skip_BoardSerialNum:
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
   }
 
-  if (EarlyUsbInitEnabled()) {
-    GetEarlyUsbCmdlineParam(UsbCompositionCmdline);
-    CmdLineLen += AsciiStrLen (UsbCompositionCmdline);
-  }
-
   if (IsHibernationEnabled()) {
-    CmdLineLen += GetResumeCmdLine(&ResumeCmdLine, (CHAR16 *)L"swap_a");
+    CmdLineLen += GetResumeCmdLine(&ResumeCmdLine, (CHAR16 *)L"swap");
   }
 
   Param.Recovery = Recovery;
@@ -829,18 +847,13 @@ skip_BoardSerialNum:
   Param.DtboIdxStr = DtboIdxStr;
   Param.DtbIdxStr = DtbIdxStr;
   Param.LEVerityCmdLine = LEVerityCmdLine;
-  Param.CvmSystemPtnCmdLine = CvmSystemPtnCmdLine;
-  Param.EarlyServicesCmdLine = EarlyServicesStr;
-  Param.ModemPathCmdLine = ModemPathStr;
+  Param.HeaderVersion = HeaderVersion;
+  Param.SystemdSlotEnv = SystemdSlotEnv;
 
   if (EarlyEthEnabled ()) {
     Param.EarlyIPv4CmdLine = IPv4AddrBufCmdLine;
     Param.EarlyIPv6CmdLine = IPv6AddrBufCmdLine;
     Param.EarlyEthMacCmdLine = MacEthAddrBufCmdLine;
-  }
-
-  if (EarlyUsbInitEnabled()) {
-    Param.UsbCompCmdLine = UsbCompositionCmdline;
   }
 
   if (IsHibernationEnabled()) {

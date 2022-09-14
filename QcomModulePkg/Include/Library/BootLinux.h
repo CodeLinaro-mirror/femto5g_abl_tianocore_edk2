@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -117,7 +117,7 @@ typedef enum {
         IMG_DTBO,
         IMG_VBMETA,
         IMG_RECOVERY,
-        IMG_VMLINUX,
+        IMG_VENDOR_BOOT,
         IMG_MAX
 } img_type;
 
@@ -129,9 +129,9 @@ typedef struct {
 
 typedef struct BootInfo {
   BOOLEAN MultiSlotBoot;
-  BOOLEAN FlashlessBoot;
   BOOLEAN BootIntoRecovery;
   BOOLEAN BootReasonAlarm;
+  CHAR8 SilentBootMode;
   CHAR16 Pname[MAX_GPT_NAME_SIZE];
   CHAR16 BootableSlot[MAX_GPT_NAME_SIZE];
   ImageData Images[MAX_NUMBER_OF_LOADED_IMAGES];
@@ -153,14 +153,19 @@ typedef struct BootLinuxParamlist {
   UINT64 ImageSize;
   VOID *DtboImgBuffer;
 
+  // Valid only for boot image header version greater than 2
+  VOID *VendorImageBuffer;
+  UINT64 VendorImageSize;
+
   /* Load addresses for kernel, ramdisk, dt
    * These addresses are either predefined or get from UEFI core */
   UINT64 KernelLoadAddr;
   UINT64 KernelEndAddr;
   UINT64 RamdiskLoadAddr;
   UINT64 DeviceTreeLoadAddr;
-  UINT64 HypDtboAddr;
-  UINT64 MemorySize;
+  UINT64 *HypDtboBaseAddr;
+  UINT32 NumHypDtbos;
+
  //Get the below fields info from the bootimage header
   UINT32 PageSize;
   UINT32 KernelSize;
@@ -170,12 +175,15 @@ typedef struct BootLinuxParamlist {
   UINT32 PatchedKernelHdrSize;
   UINT32 DtbOffset;
 
+  // Get the below fields info from the vendor_boot image header
+  // Valid only for boot image header version greater than 2
+  UINT32 VendorRamdiskSize;
+
   //Kernel size rounded off based on the page size
   UINT32 KernelSizeActual;
 
   CHAR8 *FinalCmdLine;
   CHAR8 *CmdLine;
-  CHAR8 *ExtraCmdLine;
   BOOLEAN BootingWith32BitKernel;
   BOOLEAN BootingWithPatchedKernel;
   BOOLEAN BootingWithGzipPkgKernel;
@@ -186,18 +194,22 @@ BootLinux (BootInfo *Info);
 EFI_STATUS
 CheckImageHeader (VOID *ImageHdrBuffer,
                   UINT32 ImageHdrSize,
+                  VOID *VendorImageHdrBuffer,
+                  UINT32 VendorImageHdrSize,
                   UINT32 *ImageSizeActual,
                   UINT32 *PageSize,
                   BOOLEAN BootIntoRecovery);
 EFI_STATUS
-LoadImage (BOOLEAN BootIntoRecovery, CHAR16 *Pname,
-           VOID **ImageBuffer, UINT32 *ImageSizeActual);
+LoadImageHeader (CHAR16 *Pname, VOID **ImageHdrBuffer, UINT32 *ImageHdrSize);
+EFI_STATUS
+LoadImage (CHAR16 *Pname, VOID **ImageBuffer,
+           UINT32 ImageSizeActual, UINT32 PageSize);
 EFI_STATUS
 LaunchApp (IN UINT32 Argc, IN CHAR8 **Argv);
 BOOLEAN TargetBuildVariantUser (VOID);
 BOOLEAN IsLEVariant (VOID);
 BOOLEAN IsBuildAsSystemRootImage (VOID);
-BOOLEAN EarlyServicesEnabled (VOID);
+BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
 EFI_STATUS
 GetImage (CONST BootInfo *Info,
           VOID **ImageBuffer,
@@ -211,8 +223,10 @@ VOID ResetBootDevImage (VOID);
 BOOLEAN IsBootDevImage (VOID);
 BOOLEAN IsABRetryCountDisabled (VOID);
 BOOLEAN IsDynamicPartitionSupport (VOID);
+BOOLEAN IsVirtualAbOtaSupported (VOID);
 UINT64 SetandGetLoadAddr (BootParamlist *BootParamlistPtr, AddrType Type);
 BOOLEAN IsNANDSquashFsSupport (VOID);
-BOOLEAN IsDefinedMTDUbiBebLimit (VOID);
+BOOLEAN IsEnableDisplayMenuFlagSupported (VOID);
+BOOLEAN IsSystemdBootslotEnabled (VOID);
 BOOLEAN IsHibernationEnabled (VOID);
 #endif

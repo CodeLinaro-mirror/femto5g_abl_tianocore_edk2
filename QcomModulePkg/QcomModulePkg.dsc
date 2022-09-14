@@ -1,5 +1,5 @@
 #/*
-# * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+# * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
 # *
 # * Redistribution and use in source and binary forms, with or without
 # * modification, are permitted provided that the following conditions are
@@ -26,6 +26,39 @@
 # * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #*/
+#/* Changes from Qualcomm Innovation Center are provided under the following license:
+
+#Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+
+#Redistribution and use in source and binary forms, with or without
+#modification, are permitted (subject to the limitations in the
+#disclaimer below) provided that the following conditions are met:
+
+#    * Redistributions of source code must retain the above copyright
+#      notice, this list of conditions and the following disclaimer.
+
+#    * Redistributions in binary form must reproduce the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer in the documentation and/or other materials provided
+#      with the distribution.
+
+#    * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+#      contributors may be used to endorse or promote products derived
+#      from this software without specific prior written permission.
+
+#NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+#GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+#HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+#WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+#IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+#ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+#DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+#GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+#IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+#OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+#IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
 #/** @file QcomModulePkg.dsc
 # QcomModule package.
@@ -45,12 +78,6 @@
   BUILD_TARGETS                  = DEBUG|RELEASE
   SKUID_IDENTIFIER               = DEFAULT
   FLASH_DEFINITION               = QcomModulePkg/QcomModulePkg.fdf
-
-!if $(TARGET_BOARD_TYPE_AUTO) == 1
-	DEFINE ENABLE_DISPLAY_MENU = FALSE
-!else
-	DEFINE ENABLE_DISPLAY_MENU = TRUE
-!endif
 
 [LibraryClasses.common]
   DebugLib|MdePkg/Library/UefiDebugLibConOut/UefiDebugLibConOut.inf
@@ -82,8 +109,8 @@
   DebugPrintErrorLevelLib|MdeModulePkg/Library/DxeDebugPrintErrorLevelLib/DxeDebugPrintErrorLevelLib.inf
   UefiDriverEntryPoint|MdePkg/Library/UefiDriverEntryPoint/UefiDriverEntryPoint.inf
   PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
-  UefiHiiServicesLib|MdeModulePkg/Library/UefiHiiServicesLib/UefiHiiServicesLib.inf
   AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
+  AesLib|QcomModulePkg/Library/aes/AesLib.inf
 
 [LibraryClasses.ARM]
   ArmLib|ArmPkg/Library/ArmLib/ArmV7/ArmV7Lib.inf
@@ -98,11 +125,10 @@
   ExtractGuidedSectionLib|MdePkg/Library/DxeExtractGuidedSectionLib/DxeExtractGuidedSectionLib.inf
 
 [BuildOptions.common]
-  GCC:*_*_*_ARCHCC_FLAGS  = -Wno-shift-negative-value -fstack-protector-all -Wno-varargs -fno-common
+  GCC:*_*_*_ARCHCC_FLAGS  = -Wno-shift-negative-value -fstack-protector-all -Wno-varargs -fno-common -Wno-misleading-indentation -Wno-unknown-warning-option
   GCC:*_*_*_DLINK_FLAGS = -Ttext=0x0
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO
   GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\"
-  GCC:*_*_*_CC_FLAGS = -DANDROID_PLATFORM_VERSION=$(ANDROID_PLATFORM_VERSION)
 
   !if $(VERIFIED_BOOT)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT
@@ -116,14 +142,23 @@
   !if $(EARLY_ETH_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED
   !endif
-  !if $(EARLY_ETH_ENABLED_LA)
-      GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED_LA
+  !if $(HIBERNATION_SUPPORT_INSECURE)
+      GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_INSECURE
   !endif
-  !if $(HIBERNATION_SUPPORT)
-      GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT
+  !if $(HIBERNATION_SUPPORT_INSECURE)
+      GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT_INSECURE
   !endif
-  !if $(HIBERNATION_SUPPORT)
-      GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT
+  !if $(HIBERNATION_32BIT_MODE_SWITCH)
+      GCC:*_*_*_CC_FLAGS = -DHIBERNATION_32BIT_MODE_SWITCH
+  !endif
+  !if $(HIBERNATION_32BIT_MODE_SWITCH)
+      GCC:*_*_*_PP_FLAGS = -DHIBERNATION_32BIT_MODE_SWITCH
+  !endif
+  !if $(HIBERNATION_SUPPORT_SECURE)
+      GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_SECURE
+  !endif
+  !if $(HIBERNATION_SUPPORT_SECURE)
+      GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT_SECURE
   !endif
   !if $(AB_RETRYCOUNT_DISABLE)
       GCC:*_*_*_CC_FLAGS = -DAB_RETRYCOUNT_DISABLE
@@ -142,6 +177,9 @@
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
   !endif
+  !if $(WEAR_OS)
+      GCC:*_*_*_CC_FLAGS = -DWEAR_OS
+  !endif
   !if $(BUILD_SYSTEM_ROOT_IMAGE)
       GCC:*_*_*_CC_FLAGS = -DBUILD_SYSTEM_ROOT_IMAGE
   !endif
@@ -151,34 +189,28 @@
   !if $(DYNAMIC_PARTITION_SUPPORT)
       GCC:*_*_*_CC_FLAGS = -DDYNAMIC_PARTITION_SUPPORT
   !endif
+  !if $(VIRTUAL_AB_OTA)
+      GCC:*_*_*_CC_FLAGS = -DVIRTUAL_AB_OTA
+  !endif
+  !if $(BUILD_USES_RECOVERY_AS_BOOT)
+      GCC:*_*_*_CC_FLAGS = -DBUILD_USES_RECOVERY_AS_BOOT
+  !endif
   !ifdef $(INIT_BIN)
       GCC:*_*_*_CC_FLAGS = -DINIT_BIN='$(INIT_BIN)'
-  !endif
-  !if $(TARGET_ARCH_ARM64)
-      GCC:*_*_*_CC_FLAGS = -DTARGET_ARCH_ARM64
   !endif
   !if $(NAND_SQUASHFS_SUPPORT)
       GCC:*_*_*_CC_FLAGS = -DNAND_SQUASHFS_SUPPORT
   !endif
-  !ifdef $(MTD_UBI_BEB_LIMIT_PER1024)
-      GCC:*_*_*_CC_FLAGS = -DMTD_UBI_BEB_LIMIT_PER1024=$(MTD_UBI_BEB_LIMIT_PER1024)
-  !endif
-  !if $(TARGET_SUPPORTS_EARLY_INIT)
-      GCC:*_*_*_CC_FLAGS = -DENABLE_EARLY_SERVICES
-  !endif
-  !if $(TARGET_SUPPORTS_EARLY_USB_INIT)
-      GCC:*_*_*_CC_FLAGS = -DTARGET_SUPPORTS_EARLY_USB_INIT
-  !endif
-  !if $(TARGET_SUPPORTS_EARLY_USB_INIT)
-      GCC:*_*_*_PP_FLAGS = -DTARGET_SUPPORTS_EARLY_USB_INIT
+  !if $(ENABLE_SYSTEMD_BOOTSLOT)
+      GCC:*_*_*_CC_FLAGS = -DENABLE_SYSTEMD_BOOTSLOT
   !endif
   !if $(LINUX_BOOT_CPU_SELECTION_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DLINUX_BOOT_CPU_SELECTION_ENABLED
-      GCC:*_*_*_CC_FLAGS = -DLINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID)
+      GCC:*_*_*_CC_FLAGS = -DTARGET_LINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID)
   !endif
   !if $(LINUX_BOOT_CPU_SELECTION_ENABLED)
       GCC:*_*_*_PP_FLAGS = -DLINUX_BOOT_CPU_SELECTION_ENABLED
-      GCC:*_*_*_PP_FLAGS = -DLINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID)
+      GCC:*_*_*_PP_FLAGS = -DTARGET_LINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID)
   !endif
 
 [PcdsFixedAtBuild.common]
@@ -189,14 +221,10 @@
 # CLEAR_MEMORY_ENABLED       0x08
 # ASSERT_BREAKPOINT_ENABLED  0x10
 # ASSERT_DEADLOOP_ENABLED    0x20
-  !if $(USER_BUILD_VARIANT) == 1
-	gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0
-  !elseif $(USER_BUILD_VARIANT) == 0
-	gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x2f
-  !endif
+
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x2f
   gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x80000042
   gEfiMdePkgTokenSpaceGuid.PcdReportStatusCodePropertyMask|0x06
-  gQcomTokenSpaceGuid.EnableDisplayMenu|$(ENABLE_DISPLAY_MENU)
 
 ################################################################################
 #
@@ -214,5 +242,6 @@
 			StackCanary|QcomModulePkg/Library/StackCanary/StackCanary.inf
 			FastbootLib|QcomModulePkg/Library/FastbootLib/FastbootLib.inf
 			AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
+			AesLib|QcomModulePkg/Library/aes/AesLib.inf
 			UbsanLib|QcomModulePkg/Library/UbsanLib/UbsanLib.inf
 	}

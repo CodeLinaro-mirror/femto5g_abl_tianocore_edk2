@@ -2,7 +2,7 @@
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2009-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -50,18 +50,17 @@
 
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
-STATIC BOOLEAN IsVmComputed = FALSE;
 
 STATIC VOID
 SetLinuxBootCpu (UINT32 BootCpu)
 {
   EFI_STATUS Status;
   Status = gRT->SetVariable (L"DestinationCore",
-		&gQcomTokenSpaceGuid,
-		(EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_NON_VOLATILE |
-		EFI_VARIABLE_RUNTIME_ACCESS),
-		sizeof(UINT32),
-		(void*)(UINT32*)&BootCpu);
+      &gQcomTokenSpaceGuid,
+      (EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_NON_VOLATILE |
+       EFI_VARIABLE_RUNTIME_ACCESS),
+       sizeof(UINT32),
+       (void*)(UINT32*)&BootCpu);
 
   if (Status != EFI_SUCCESS) {
        DEBUG ((EFI_D_ERROR, "Error: Failed to set Linux boot cpu:%d\n", BootCpu));
@@ -73,7 +72,7 @@ SetLinuxBootCpu (UINT32 BootCpu)
 }
 
 #ifdef LINUX_BOOT_CPU_SELECTION_ENABLED
-#define BootCpuId	LINUX_BOOT_CPU_ID
+#define BootCpuId	TARGET_LINUX_BOOT_CPU_ID
 STATIC BOOLEAN
 BootCpuSelectionEnabled (VOID)
 {
@@ -136,7 +135,7 @@ QueryBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
 }
 
 STATIC EFI_STATUS
-UpdateBootParams (BootParamlist *BootParamlistPtr, BOOLEAN FlashlessBoot)
+UpdateBootParams (BootParamlist *BootParamlistPtr)
 {
   UINT64 KernelSizeReserved;
   UINT64 KernelLoadAddr;
@@ -188,22 +187,15 @@ UpdateBootParams (BootParamlist *BootParamlistPtr, BOOLEAN FlashlessBoot)
      and DT maximum supported size. This allows best possible utilization
      of buffer for kernel relocation and take care of dynamic change in size
      of ramdisk. Add pagesize as a buffer space */
-
-  if (FlashlessBoot) {
-    BootParamlistPtr->RamdiskLoadAddr = (UINT64)(BootParamlistPtr->ImageBuffer +
-                                        BootParamlistPtr->RamdiskOffset);
-    BootParamlistPtr->DeviceTreeLoadAddr = (BootParamlistPtr->KernelEndAddr -
-					    (DT_SIZE_2MB +
-					    BootParamlistPtr->PageSize));
-  } else {
-    BootParamlistPtr->RamdiskLoadAddr = (BootParamlistPtr->KernelEndAddr -
-                            (LOCAL_ROUND_TO_PAGE (BootParamlistPtr->RamdiskSize,
+  BootParamlistPtr->RamdiskLoadAddr = (BootParamlistPtr->KernelEndAddr -
+                            (LOCAL_ROUND_TO_PAGE (
+                                          BootParamlistPtr->RamdiskSize +
+                                          BootParamlistPtr->VendorRamdiskSize,
                              BootParamlistPtr->PageSize) +
                              BootParamlistPtr->PageSize));
-    BootParamlistPtr->DeviceTreeLoadAddr = (BootParamlistPtr->RamdiskLoadAddr -
+  BootParamlistPtr->DeviceTreeLoadAddr = (BootParamlistPtr->RamdiskLoadAddr -
                                           (DT_SIZE_2MB +
                                           BootParamlistPtr->PageSize));
-  }
 
   if (BootParamlistPtr->DeviceTreeLoadAddr <=
                       BootParamlistPtr->KernelLoadAddr) {
@@ -360,6 +352,7 @@ ApplyOverlay (BootParamlist *BootParamlistPtr,
 {
   VOID *FinalDtbHdr = AppendedDtHdr;
   VOID *TmpDtbHdr = NULL;
+  UINT64 ApplyDTStartTime = GetTimerCountms ();
 
   if (BootParamlistPtr == NULL ||
       AppendedDtHdr == NULL) {
@@ -408,6 +401,8 @@ out:
                 FinalDtbHdr,
                 fdt_totalsize (FinalDtbHdr));
   post_overlay_free ();
+  DEBUG ((EFI_D_INFO, "Apply Overlay total time: %lu ms \n",
+        GetTimerCountms () - ApplyDTStartTime));
   return EFI_SUCCESS;
 }
 
@@ -433,13 +428,15 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   UINT32 HeaderVersion = 0;
   struct boot_img_hdr_v1 *BootImgHdrV1;
   struct boot_img_hdr_v2 *BootImgHdrV2;
+  vendor_boot_img_hdr_v3 *VendorBootImgHdrV3;
   UINT32 NumHeaderPages;
   UINT32 NumKernelPages;
   UINT32 NumSecondPages;
   UINT32 NumRamdiskPages;
+  UINT32 NumVendorRamdiskPages;
   UINT32 NumRecoveryDtboPages;
   VOID* ImageBuffer = NULL;
-  UINT32 DtbSize = 0;
+  UINT32 ImageSize = 0;
 
   if (Info == NULL ||
       BootParamlistPtr == NULL) {
@@ -450,7 +447,7 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   ImageBuffer = BootParamlistPtr->ImageBuffer +
                         BootParamlistPtr->PageSize +
                         BootParamlistPtr->PatchedKernelHdrSize;
-  DtbSize = BootParamlistPtr->KernelSize;
+  ImageSize = BootParamlistPtr->KernelSize;
   HeaderVersion = Info->HeaderVersion;
 
   if (HeaderVersion > BOOT_HEADER_VERSION_ONE) {
@@ -472,26 +469,40 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
         NumSecondPages =
                 GetNumberOfPages (BootParamlistPtr->SecondSize,
                         BootParamlistPtr->PageSize);
-        NumRecoveryDtboPages =
-                GetNumberOfPages (BootImgHdrV1->recovery_dtbo_size,
-                        BootParamlistPtr->PageSize);
-        BootParamlistPtr->DtbOffset =
-                BootParamlistPtr->PageSize *
-                        (NumHeaderPages + NumKernelPages + NumRamdiskPages
-                                + NumSecondPages + NumRecoveryDtboPages);
-        DtbSize = BootImgHdrV2->dtb_size + BootParamlistPtr->DtbOffset;
-        ImageBuffer = BootParamlistPtr->ImageBuffer;
-  }
 
+       if (HeaderVersion  == BOOT_HEADER_VERSION_TWO) {
+          NumRecoveryDtboPages =
+                           GetNumberOfPages (BootImgHdrV1->recovery_dtbo_size,
+                           BootParamlistPtr->PageSize);
+          BootParamlistPtr->DtbOffset = BootParamlistPtr->PageSize *
+                           (NumHeaderPages + NumKernelPages + NumRamdiskPages +
+                            NumSecondPages + NumRecoveryDtboPages);
+          ImageSize = BootImgHdrV2->dtb_size + BootParamlistPtr->DtbOffset;
+          ImageBuffer = BootParamlistPtr->ImageBuffer;
+        } else {
+          VendorBootImgHdrV3 = BootParamlistPtr->VendorImageBuffer;
+
+          NumVendorRamdiskPages = GetNumberOfPages (
+                                           BootParamlistPtr->VendorRamdiskSize,
+                                           BootParamlistPtr->PageSize);
+          BootParamlistPtr->DtbOffset = BootParamlistPtr->PageSize *
+                           (NumHeaderPages + NumVendorRamdiskPages);
+          ImageSize = VendorBootImgHdrV3->dtb_size +
+                      BootParamlistPtr->DtbOffset;
+
+          // DTB is a part of vendor_boot image
+          ImageBuffer = BootParamlistPtr->VendorImageBuffer;
+        }
+  }
   DtboImgInvalid = LoadAndValidateDtboImg (Info, BootParamlistPtr);
   if (!DtboImgInvalid) {
     // appended device tree
     Dtb = DeviceTreeAppended (ImageBuffer,
-                             DtbSize,
+                             ImageSize,
                              BootParamlistPtr->DtbOffset,
                              (VOID *)BootParamlistPtr->DeviceTreeLoadAddr);
     if (!Dtb) {
-      if (BootParamlistPtr->DtbOffset >= DtbSize) {
+      if (BootParamlistPtr->DtbOffset >= ImageSize) {
         DEBUG ((EFI_D_ERROR, "Dtb offset goes beyond the image size\n"));
         return EFI_BAD_BUFFER_SIZE;
       }
@@ -500,7 +511,7 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
                      BootParamlistPtr->DtbOffset);
 
       if (!fdt_check_header (SingleDtHdr)) {
-        if ((DtbSize - BootParamlistPtr->DtbOffset) <
+        if ((ImageSize - BootParamlistPtr->DtbOffset) <
             fdt_totalsize (SingleDtHdr)) {
           DEBUG ((EFI_D_ERROR, "Dtb offset goes beyond the image size\n"));
           return EFI_BAD_BUFFER_SIZE;
@@ -531,7 +542,7 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   } else {
     /*It is the case of DTB overlay Get the Soc specific dtb */
     SocDtb = GetSocDtb (ImageBuffer,
-         DtbSize,
+         ImageSize,
          BootParamlistPtr->DtbOffset,
          (VOID *)BootParamlistPtr->DeviceTreeLoadAddr);
 
@@ -560,19 +571,30 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
       }
     }
 
+    /* If hypervisor boot info is present, append dtbo info passed from hyp */
     if (IsVmEnabled ()) {
-      if ((VOID *)BootParamlistPtr->HypDtboAddr == NULL) {
+      if (BootParamlistPtr->HypDtboBaseAddr == NULL) {
         DEBUG ((EFI_D_ERROR, "Error: HypOverlay DT is NULL\n"));
         return EFI_NOT_FOUND;
       }
 
-      if (!AppendToDtList (&DtsList,
-                           (fdt64_t)BootParamlistPtr->HypDtboAddr,
-                           fdt_totalsize (BootParamlistPtr->HypDtboAddr))) {
-        DEBUG ((EFI_D_ERROR,
-                "Unable to Allocate buffer for HypOverlay DT\n"));
-        DeleteDtList (&DtsList);
-        return EFI_OUT_OF_RESOURCES;
+      for (UINT32 i = 0; i < BootParamlistPtr->NumHypDtbos; i++) {
+        /* Flag the invalid dtbos and overlay the valid ones */
+        if (!BootParamlistPtr->HypDtboBaseAddr[i] ||
+             fdt_check_header ((VOID *)BootParamlistPtr->HypDtboBaseAddr[i])) {
+          DEBUG ((EFI_D_ERROR, "HypInfo: Not overlaying hyp dtbo"
+                  "Dtbo :%d is null or Bad DT header\n", i));
+          continue;
+        }
+
+        if (!AppendToDtList (&DtsList,
+                       (fdt64_t)BootParamlistPtr->HypDtboBaseAddr[i],
+                       fdt_totalsize (BootParamlistPtr->HypDtboBaseAddr[i]))) {
+          DEBUG ((EFI_D_ERROR,
+                  "Unable to Allocate buffer for HypOverlay DT num: %d\n", i));
+          DeleteDtList (&DtsList);
+          return EFI_OUT_OF_RESOURCES;
+        }
       }
     }
 
@@ -608,6 +630,7 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr)
   UINT32 OutLen = 0;
   UINT64 OutAvaiLen = 0;
   struct kernel64_hdr *Kptr = NULL;
+  UINT64 DecompressStartTime;
 
   if (BootParamlistPtr == NULL) {
 
@@ -626,8 +649,7 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr)
       return EFI_BAD_BUFFER_SIZE;
     }
 
-    DEBUG ((EFI_D_INFO, "Decompressing kernel image start: %lu ms\n",
-                         GetTimerCountms ()));
+    DecompressStartTime = GetTimerCountms ();
     if (decompress (
         (UINT8 *)(BootParamlistPtr->ImageBuffer +
         BootParamlistPtr->PageSize),               // Read blob using BlockIo
@@ -645,8 +667,8 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr)
       return RETURN_OUT_OF_RESOURCES;
     }
     Kptr = (Kernel64Hdr *) BootParamlistPtr->KernelLoadAddr;
-    DEBUG ((EFI_D_INFO, "Decompressing kernel image done: %lu ms\n",
-                         GetTimerCountms ()));
+    DEBUG ((EFI_D_INFO, "Decompressing kernel image total time: %lu ms\n",
+                         GetTimerCountms () - DecompressStartTime));
   } else {
     Kptr = (struct kernel64_hdr *)(BootParamlistPtr->ImageBuffer
                          + BootParamlistPtr->PageSize);
@@ -665,8 +687,6 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr)
       BootParamlistPtr->PatchedKernelHdrSize = PATCHED_KERNEL_HEADER_SIZE;
       Kptr = (struct kernel64_hdr *)((VOID *)Kptr +
                  BootParamlistPtr->PatchedKernelHdrSize);
-      gBS->CopyMem ((VOID *)BootParamlistPtr->KernelLoadAddr, (VOID *)Kptr,
-                 BootParamlistPtr->KernelSize);
     }
 
     if (Kptr->magic_64 != KERNEL64_HDR_MAGIC) {
@@ -699,21 +719,24 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr)
 }
 
 STATIC EFI_STATUS
-LoadAddrAndDTUpdate (BootParamlist *BootParamlistPtr, BOOLEAN FlashlessBoot)
+LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
 {
   EFI_STATUS Status;
+  UINT64 RamdiskLoadAddr;
   UINT64 RamdiskEndAddr = 0;
+  UINT32 TotalRamdiskSize;
 
   if (BootParamlistPtr == NULL) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
     return EFI_INVALID_PARAMETER;
   }
-  if (FlashlessBoot)
-  goto skip_ramdisk_copy;
 
-  RamdiskEndAddr = BootParamlistPtr->KernelEndAddr;
-  if (RamdiskEndAddr - BootParamlistPtr->RamdiskLoadAddr <
-                       BootParamlistPtr->RamdiskSize) {
+  RamdiskLoadAddr = BootParamlistPtr->RamdiskLoadAddr;
+
+  TotalRamdiskSize = BootParamlistPtr->RamdiskSize +
+                            BootParamlistPtr->VendorRamdiskSize;
+
+  if (RamdiskEndAddr - RamdiskLoadAddr < TotalRamdiskSize) {
     DEBUG ((EFI_D_ERROR, "Error: Ramdisk size is over the limit\n"));
     return EFI_BAD_BUFFER_SIZE;
   }
@@ -727,21 +750,32 @@ LoadAddrAndDTUpdate (BootParamlist *BootParamlistPtr, BOOLEAN FlashlessBoot)
     return EFI_BAD_BUFFER_SIZE;
   }
 
-  gBS->CopyMem ((CHAR8 *)BootParamlistPtr->RamdiskLoadAddr,
-                BootParamlistPtr->ImageBuffer +
-                BootParamlistPtr->RamdiskOffset,
-                BootParamlistPtr->RamdiskSize);
-
-skip_ramdisk_copy:
   Status = UpdateDeviceTree ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
                              BootParamlistPtr->FinalCmdLine,
-                             (VOID *)BootParamlistPtr->RamdiskLoadAddr,
-                             BootParamlistPtr->RamdiskSize,
+                             (VOID *)RamdiskLoadAddr, TotalRamdiskSize,
                              BootParamlistPtr->BootingWith32BitKernel);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
     return Status;
   }
+
+  /* If the boot-image version is greater than 2, place the vendor-ramdisk
+   * first in the memory, and then place ramdisk.
+   * This concatination would result in an overlay for .gzip and .cpio formats.
+   */
+  if (Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
+    gBS->CopyMem ((VOID *)RamdiskLoadAddr,
+                  BootParamlistPtr->VendorImageBuffer +
+                  BootParamlistPtr->PageSize,
+                  BootParamlistPtr->VendorRamdiskSize);
+
+    RamdiskLoadAddr += BootParamlistPtr->VendorRamdiskSize;
+  }
+
+  gBS->CopyMem ((CHAR8 *)RamdiskLoadAddr,
+                BootParamlistPtr->ImageBuffer +
+                BootParamlistPtr->RamdiskOffset,
+                BootParamlistPtr->RamdiskSize);
 
   if (BootParamlistPtr->BootingWith32BitKernel) {
     if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
@@ -764,258 +798,84 @@ skip_ramdisk_copy:
   return EFI_SUCCESS;
 }
 
-STATIC
-VOID *GetMlvmAppendedDtb (BootParamlist *CvmBootParamList)
+STATIC EFI_STATUS
+CatCmdLine (BootParamlist *BootParamlistPtr,
+            boot_img_hdr_v3 *BootImgHdrV3,
+            vendor_boot_img_hdr_v3 *VendorBootImgHdrV3)
 {
-  UINTN KernelEnd = (UINTN)(CvmBootParamList->ImageBuffer +
-                                     CvmBootParamList->PageSize) +
-                                     CvmBootParamList->KernelSize;
-  VOID *Dtb = CvmBootParamList->ImageBuffer +
-                 CvmBootParamList->PageSize +
-                 CvmBootParamList->DtbOffset;
-  INT32 RootOffset;
-  INT32 Len;
-  CONST VOID *Prop;
+  UINTN MaxCmdLineLen = BOOT_ARGS_SIZE +
+                        BOOT_EXTRA_ARGS_SIZE + VENDOR_BOOT_ARGS_SIZE;
 
-  /* Pick the DTB if the value of "compatible" property in node "/"
-     is "linux,dummy-virt"
+  BootParamlistPtr->CmdLine = AllocateZeroPool (MaxCmdLineLen);
+  if (!BootParamlistPtr->CmdLine) {
+    DEBUG ((EFI_D_ERROR,
+            "CatCmdLine: Failed to allocate memory for cmdline\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  /* Place the vendor_boot image cmdline first so that the cmdline
+   * from boot image takes precedence in case of duplicates.
    */
-  while (((UINTN)Dtb + sizeof (struct fdt_header)) <
-         (UINTN)KernelEnd) {
-    if (fdt_check_header (Dtb) != 0 ||
-        fdt_check_header_ext (Dtb) != 0 ||
-        ((UINTN)Dtb + (UINTN)fdt_totalsize (Dtb) < (UINTN)Dtb) ||
-        ((UINTN)Dtb + (UINTN)fdt_totalsize (Dtb) > (UINTN)KernelEnd)) {
-      DEBUG ((EFI_D_VERBOSE, "MLVM DT Sanity check failed\n"));
-      return NULL;
-    }
-    RootOffset = fdt_path_offset (Dtb, "/");
-    if (RootOffset < 0) {
-      DEBUG ((EFI_D_VERBOSE, "Root Node is not found\n"));
-      return NULL;
-    }
-    Prop = fdt_getprop (Dtb, RootOffset, "compatible", &Len);
-    if (Prop &&
-        (Len > 0)) {
-      if (!AsciiStrnCmp (Prop, "linux,dummy-virt", Len)) {
-        return Dtb;
-      }
-    }
-    Dtb += fdt_totalsize (Dtb);
-  }
-  return NULL;
-}
-
-STATIC
-EFI_STATUS
-UpdateMemRegions (BootParamlist *BootParamlistPtr,
-                  BootParamlist *CvmBootParamList,
-                  HypBootInfo *HypInfo)
-{
-  if (HypInfo->hyp_bootinfo_magic != HYP_BOOTINFO_MAGIC) {
-    DEBUG ((EFI_D_ERROR, "Invalid HYP MAGIC\n"));
-    return EFI_UNSUPPORTED;
-  }
-
-  if ((HypInfo->num_vms > MAX_SUPPORTED_VMS) ||
-      (HypInfo->num_vms < MIN_SUPPORTED_VMS)) {
-    DEBUG ((EFI_D_ERROR, "Invalid No. of VMs:%d,Supported VMs range:(%d-%d)\n",
-            HypInfo->num_vms, MIN_SUPPORTED_VMS, MAX_SUPPORTED_VMS));
-    return EFI_UNSUPPORTED;
-  }
-
-  /* HLOS: get ddr regions from HypInfo */
-  BootParamlistPtr->BaseMemory =
-         HypInfo->vm[HypInfo->hlos_vm].ddr_region[KERNEL_ADDR_IDX].base;
-  DEBUG ((EFI_D_INFO, "Memory Base Address: 0x%x\n",
-                       BootParamlistPtr->BaseMemory));
-  BootParamlistPtr->MemorySize =
-         HypInfo->vm[HypInfo->hlos_vm].ddr_region[KERNEL_ADDR_IDX].size;
-  BootParamlistPtr->KernelLoadAddr =
-        (EFI_PHYSICAL_ADDRESS)
-        (BootParamlistPtr->BaseMemory | PcdGet32 (KernelLoadAddress));
-  BootParamlistPtr->RamdiskLoadAddr =
-        (EFI_PHYSICAL_ADDRESS)
-        (BootParamlistPtr->BaseMemory | PcdGet32 (RamdiskLoadAddress));
-  BootParamlistPtr->DeviceTreeLoadAddr =
-        (EFI_PHYSICAL_ADDRESS)
-        (BootParamlistPtr->BaseMemory | PcdGet32 (TagsAddress));
-  BootParamlistPtr->HypDtboAddr =
-        HypInfo->vm[HypInfo->hlos_vm].info.linux_arm.dtbo_base;
-
-  /* If Hyp is enabled & HLOS DTBO is invalid,
-     no need to continue further */
-  if (!BootParamlistPtr->HypDtboAddr ||
-      fdt_check_header ((VOID *)BootParamlistPtr->HypDtboAddr)) {
-    DEBUG ((EFI_D_ERROR, "HLOS overlay DT Addr is NULL or Bad DT Header\n"));
-    return EFI_UNSUPPORTED;
-  }
-
-  /*
-   * Right now only one vm is supported
-   * Support for more than one vm can be extended later.
-   */
-
-  /* MLVM: get ddr regions from HypInfo */
-  for (UINT32 Count = 0; Count < HypInfo->num_vms; Count++) {
-    if (Count == HypInfo->hlos_vm) {
-      continue;
-    }
-    if (HypInfo->vm[Count].vm_type == HYP_VM_TYPE_LINUX_AARCH64) {
-      CvmBootParamList->BaseMemory =
-            HypInfo->vm[Count].ddr_region[KERNEL_ADDR_IDX].base;
-      CvmBootParamList->MemorySize =
-            HypInfo->vm[Count].ddr_region[KERNEL_ADDR_IDX].size;
-      CvmBootParamList->KernelLoadAddr =
-           (EFI_PHYSICAL_ADDRESS)
-           (CvmBootParamList->BaseMemory | PcdGet32 (KernelLoadAddress));
-      CvmBootParamList->RamdiskLoadAddr =
-           (EFI_PHYSICAL_ADDRESS)
-           (CvmBootParamList->BaseMemory | PcdGet32 (RamdiskLoadAddress));
-      CvmBootParamList->DeviceTreeLoadAddr =
-           (EFI_PHYSICAL_ADDRESS)
-           (CvmBootParamList->BaseMemory | PcdGet32 (TagsAddress));
-      CvmBootParamList->HypDtboAddr =
-           HypInfo->vm[Count].info.linux_arm.dtbo_base;
-      break;
-    }
-  }
+  AsciiStrCpyS (BootParamlistPtr->CmdLine, MaxCmdLineLen,
+               (CONST CHAR8 *)VendorBootImgHdrV3->cmdline);
+  AsciiStrCatS (BootParamlistPtr->CmdLine, MaxCmdLineLen, " ");
+  AsciiStrCatS (BootParamlistPtr->CmdLine, MaxCmdLineLen,
+               (CONST CHAR8 *)BootImgHdrV3->cmdline);
 
   return EFI_SUCCESS;
 }
 
-STATIC
-EFI_STATUS
-CheckAndLoadComputeVM (BootInfo *Info,
-                       BootParamlist *CvmBootParamList)
+STATIC EFI_STATUS
+UpdateBootParamsSizeAndCmdLine (BootInfo *Info, BootParamlist *BootParamlistPtr)
 {
-  EFI_STATUS Status;
-  UINTN CvmImageSize;
-  VOID *SingleDtHdr = NULL;
-  VOID *MlVmDtHdr = (VOID *)CvmBootParamList->HypDtboAddr;
-  struct fdt_entry_node *DtsList = NULL;
-  IsVmComputed = FALSE;
-  CHAR16 VmPartName[MAX_GPT_NAME_SIZE];
-  CHAR8 VmPartNameAscii[MAX_GPT_NAME_SIZE] = {0};
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINTN VendorBootImgSize;
+  boot_img_hdr_v3 *BootImgHdrV3;
+  vendor_boot_img_hdr_v3 *VendorBootImgHdrV3;
 
-  Status = StrnCpyS (VmPartName, (UINTN)MAX_GPT_NAME_SIZE,
-                    (CONST CHAR16 *)L"vm-linux", (UINTN)StrLen (L"vm-linux"));
-  if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "Failed to update VM Partition Name\n"));
-    return Status;
+  if (Info->HeaderVersion < BOOT_HEADER_VERSION_THREE) {
+    BootParamlistPtr->KernelSize =
+               ((boot_img_hdr *)(BootParamlistPtr->ImageBuffer))->kernel_size;
+    BootParamlistPtr->RamdiskSize =
+               ((boot_img_hdr *)(BootParamlistPtr->ImageBuffer))->ramdisk_size;
+    BootParamlistPtr->SecondSize =
+               ((boot_img_hdr *)(BootParamlistPtr->ImageBuffer))->second_size;
+    BootParamlistPtr->PageSize =
+               ((boot_img_hdr *)(BootParamlistPtr->ImageBuffer))->page_size;
+    BootParamlistPtr->CmdLine = (CHAR8 *)&(((boot_img_hdr *)
+                             (BootParamlistPtr->ImageBuffer))->cmdline[0]);
+    BootParamlistPtr->CmdLine[BOOT_ARGS_SIZE - 1] = '\0';
+
+    return EFI_SUCCESS;
   }
 
-  UnicodeStrToAsciiStr (VmPartName, VmPartNameAscii);
+  BootImgHdrV3 = BootParamlistPtr->ImageBuffer;
 
-  /* Call GetImage here.*/
-  Status = GetImage (Info,
-                     &CvmBootParamList->ImageBuffer,
-                     &CvmImageSize,
-                     VmPartNameAscii);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "Couldnt load ComputeVM\n"));
-    return Status;
-  }
-
-  CvmBootParamList->KernelSize =
-                ((boot_img_hdr *)(CvmBootParamList->ImageBuffer))->kernel_size;
-  CvmBootParamList->RamdiskSize =
-               ((boot_img_hdr *)(CvmBootParamList->ImageBuffer))->ramdisk_size;
-  CvmBootParamList->SecondSize =
-                ((boot_img_hdr *)(CvmBootParamList->ImageBuffer))->second_size;
-  CvmBootParamList->PageSize =
-                ((boot_img_hdr *)(CvmBootParamList->ImageBuffer))->page_size;
-  CvmBootParamList->CmdLine =
-    (CHAR8 *)&(((boot_img_hdr *) (CvmBootParamList->ImageBuffer))->cmdline[0]);
-
-  Status = UpdateKernelModeAndPkg (CvmBootParamList);
+  Status = GetImage (Info, (VOID **)&VendorBootImgHdrV3,
+                     &VendorBootImgSize, "vendor_boot");
   if (Status != EFI_SUCCESS) {
-    return Status;
-  }
-
-  Status = GZipPkgCheck (CvmBootParamList);
-  if (Status != EFI_SUCCESS) {
-    return Status;
-  }
-
-  CvmBootParamList->KernelSizeActual = LOCAL_ROUND_TO_PAGE (
-                                        CvmBootParamList->KernelSize,
-                                        CvmBootParamList->PageSize);
-
-  DEBUG ((EFI_D_VERBOSE, "Compute Kernel Load Address: 0x%x\n",
-                                        CvmBootParamList->KernelLoadAddr));
-  DEBUG ((EFI_D_VERBOSE, "Compute Kernel Size Actual: 0x%x\n",
-                                      CvmBootParamList->KernelSizeActual));
-  DEBUG ((EFI_D_VERBOSE, "Compute Device Tree Load Address: 0x%x\n",
-                             CvmBootParamList->DeviceTreeLoadAddr));
-  DEBUG ((EFI_D_VERBOSE, "Compute Device Tree Offset: 0x%x\n",
-                                       CvmBootParamList->DtbOffset));
-  DEBUG ((EFI_D_VERBOSE, "Compute Ramdisk Load Address: 0x%x\n",
-                                       CvmBootParamList->RamdiskLoadAddr));
-  DEBUG ((EFI_D_VERBOSE, "Compute Ramdisk Offset: 0x%x\n",
-                                       CvmBootParamList->RamdiskOffset));
-
-  /*No Ram disk loading and command line update support for Compute VM*/
-  if (CvmBootParamList->DtbOffset >= CvmBootParamList->KernelSize) {
-    DEBUG ((EFI_D_ERROR, "Dtb offset goes beyond the kernel size\n"));
-    return EFI_BAD_BUFFER_SIZE;
-  }
-
-  SingleDtHdr = GetMlvmAppendedDtb (CvmBootParamList);
-  if (!SingleDtHdr) {
     DEBUG ((EFI_D_ERROR,
-            "Error: Appended Mlvm Device Tree blob not found\n"));
-    return EFI_NOT_FOUND;
+    "UpdateBootParamsSizeAndCmdLine: Failed to find vendor_boot image\n"));
+    return Status;
   }
 
-  if (!fdt_check_header (SingleDtHdr)) {
-    DEBUG ((EFI_D_VERBOSE, "Dtb header found.\n"));
+  BootParamlistPtr->VendorImageBuffer = VendorBootImgHdrV3;
+  BootParamlistPtr->VendorImageSize = VendorBootImgSize;
+  BootParamlistPtr->KernelSize = BootImgHdrV3->kernel_size;
+  BootParamlistPtr->RamdiskSize = BootImgHdrV3->ramdisk_size;
+  BootParamlistPtr->VendorRamdiskSize =
+                    VendorBootImgHdrV3->vendor_ramdisk_size;
+  BootParamlistPtr->PageSize = VendorBootImgHdrV3->page_size;
+  BootParamlistPtr->SecondSize = 0;
 
-    if ((CvmBootParamList->KernelSize - CvmBootParamList->DtbOffset) <
-                  fdt_totalsize (SingleDtHdr)) {
-      DEBUG ((EFI_D_ERROR, "Dtb Size overflow.\n"));
-      return EFI_BAD_BUFFER_SIZE;
-    }
-
-    if (CHECK_ADD64 (CvmBootParamList->DeviceTreeLoadAddr,
-                     fdt_totalsize (SingleDtHdr))) {
-      DEBUG ((EFI_D_ERROR,
-              "Integer Overflow: in single dtb header addition\n"));
-      return EFI_BAD_BUFFER_SIZE;
-    }
-
-    DEBUG ((EFI_D_VERBOSE, "Loading Compute VM DT - Start\n"));
-    if (!MlVmDtHdr ||
-        fdt_check_header (MlVmDtHdr)) {
-      DEBUG ((EFI_D_VERBOSE, "VM overlay DT Addr is NULL or Bad DT Header"
-                             "\nContinue with appended DTB\n"));
-      MlVmDtHdr = NULL;
-    }
-
-    if (MlVmDtHdr != NULL) {
-      if (!AppendToDtList (&DtsList,
-                           (fdt64_t)MlVmDtHdr,
-                           fdt_totalsize (MlVmDtHdr))) {
-        DEBUG ((EFI_D_ERROR,
-                "Unable to Allocate buffer for HypOverlay DT\n"));
-        DeleteDtList (&DtsList);
-        return EFI_OUT_OF_RESOURCES;
-      }
-    }
-    Status = ApplyOverlay (CvmBootParamList,
-                           SingleDtHdr,
-                           DtsList);
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "VM DT Overlay Failed: %r\n", Status));
-      return Status;
-    }
-    DEBUG ((EFI_D_VERBOSE, "Loading Compute VM DT- Complete\n"));
-  } else {
-    DEBUG ((EFI_D_ERROR, "Compute DT is not appended/found\n"));
-    return EFI_NOT_FOUND;
+  Status = CatCmdLine (BootParamlistPtr, BootImgHdrV3, VendorBootImgHdrV3);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR,
+           "UpdateBootParamsSizeAndCmdLine: Failed to cat cmdline\n"));
+    return Status;
   }
-  IsVmComputed = TRUE;
-  return Status;
+
+  return EFI_SUCCESS;
 }
 
 EFI_STATUS
@@ -1026,7 +886,7 @@ BootLinux (BootInfo *Info)
   CHAR16 *PartitionName = NULL;
   BOOLEAN Recovery = FALSE;
   BOOLEAN AlarmBoot = FALSE;
-  BOOLEAN FlashlessBoot ;
+  CHAR8 SilentBootMode;
 
   LINUX_KERNEL LinuxKernel;
   LINUX_KERNEL32 LinuxKernel32;
@@ -1038,53 +898,53 @@ BootLinux (BootInfo *Info)
   BOOLEAN IsModeSwitch = FALSE;
 
   BootParamlist BootParamlistPtr = {0};
-  BootParamlist CvmBootParamList = {0};
-  HypMsg Msg = {0};
-  UINT32 RetVal;
-
-  HypBootInfo *HypInfo = GetVmData ();
-  if (IsVmEnabled () &&
-      HypInfo == NULL) {
-    DEBUG ((EFI_D_ERROR, "HypInfo is NULL\n"));
-    return EFI_UNSUPPORTED;
-  }
 
   if (Info == NULL) {
     DEBUG ((EFI_D_ERROR, "BootLinux: invalid parameter Info\n"));
     return EFI_INVALID_PARAMETER;
   }
 
+  if (IsVmEnabled ()) {
+    Status = CheckAndSetVmData (&BootParamlistPtr);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Failed to update HypData!! Status:%r\n", Status));
+      return Status;
+    }
+  }
+
   PartitionName = Info->Pname;
   Recovery = Info->BootIntoRecovery;
   AlarmBoot = Info->BootReasonAlarm;
-  FlashlessBoot = Info->FlashlessBoot;
+  SilentBootMode = Info->SilentBootMode;
 
-  FfbmStr[0] = '\0';
-  if (FlashlessBoot)
-    goto skip_FfbmStr;
+  if (SilentBootMode) {
+   DEBUG ((EFI_D_INFO, "Silent Mode value: %d\n", SilentBootMode));
+  }
 
-  if(!StrnCmp (PartitionName, (CONST CHAR16 *)L"boot",
-          StrLen ((CONST CHAR16 *)L"boot"))) {
+  if (!StrnCmp (PartitionName, (CONST CHAR16 *)L"boot",
+                StrLen ((CONST CHAR16 *)L"boot"))) {
     Status = GetFfbmCommand (FfbmStr, FFBM_MODE_BUF_SIZE);
     if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_INFO, "No Ffbm cookie found, ignore: %r\n", Status));
+      DEBUG ((EFI_D_VERBOSE, "No Ffbm cookie found, ignore: %r\n", Status));
       FfbmStr[0] = '\0';
     }
   }
 
-skip_FfbmStr:
   Status = GetImage (Info,
                      &BootParamlistPtr.ImageBuffer,
                      (UINTN *)&BootParamlistPtr.ImageSize,
                      ((!Info->MultiSlotBoot ||
                         IsDynamicPartitionSupport ()) &&
-                        Recovery)? "recovery" : "boot");
+                        (Recovery &&
+                        !IsBuildUseRecoveryAsBoot ()))?
+                        "recovery" : "boot");
   if (Status != EFI_SUCCESS ||
       BootParamlistPtr.ImageBuffer == NULL ||
       BootParamlistPtr.ImageSize <= 0) {
     DEBUG ((EFI_D_ERROR, "BootLinux: Get%aImage failed!\n",
             (!Info->MultiSlotBoot &&
-             Recovery)? "Recovery" : "Boot"));
+             (Recovery &&
+             !IsBuildUseRecoveryAsBoot ()))? "Recovery" : "Boot"));
     return EFI_NOT_STARTED;
   }
   /* Find if MDTP is enabled and Active */
@@ -1094,38 +954,32 @@ skip_FfbmStr:
     return Status;
   }
 
-  BootParamlistPtr.KernelSize =
-               ((boot_img_hdr *)(BootParamlistPtr.ImageBuffer))->kernel_size;
-  BootParamlistPtr.RamdiskSize =
-               ((boot_img_hdr *)(BootParamlistPtr.ImageBuffer))->ramdisk_size;
-  BootParamlistPtr.SecondSize =
-               ((boot_img_hdr *)(BootParamlistPtr.ImageBuffer))->second_size;
-  BootParamlistPtr.PageSize =
-               ((boot_img_hdr *)(BootParamlistPtr.ImageBuffer))->page_size;
-  BootParamlistPtr.CmdLine = (CHAR8 *)&(((boot_img_hdr *)
-                             (BootParamlistPtr.ImageBuffer))->cmdline[0]);
-  BootParamlistPtr.ExtraCmdLine = (CHAR8 *)&(((boot_img_hdr *)
-                            (BootParamlistPtr.ImageBuffer))->extra_cmdline[0]);
+  Info->HeaderVersion = ((boot_img_hdr *)
+                         (BootParamlistPtr.ImageBuffer))->header_version;
 
-  if (IsVmEnabled ()) {
-    Status = UpdateMemRegions (&BootParamlistPtr,
-                               &CvmBootParamList,
-                               HypInfo);
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "Failed to update HLOS Mem regions !!! "
-                           "Status:%r\n", Status));
-      return Status;
-    }
-  } else {
-    // Retrive Base Memory Address from Ram Partition Table
-    Status = BaseMem (&BootParamlistPtr.BaseMemory);
-    if (Status != EFI_SUCCESS) {
+  Status = UpdateBootParamsSizeAndCmdLine (Info, &BootParamlistPtr);
+  if (Status != EFI_SUCCESS) {
+    return Status;
+  }
+
+  // Retrive Base Memory Address from Ram Partition Table
+  Status = BaseMem (&BootParamlistPtr.BaseMemory);
+  if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Base memory not found!!! Status:%r\n", Status));
       return Status;
-    }
   }
 
   Status = UpdateKernelModeAndPkg (&BootParamlistPtr);
+  if (Status != EFI_SUCCESS) {
+    return Status;
+  }
+
+  Status = UpdateBootParams (&BootParamlistPtr);
+  if (Status != EFI_SUCCESS) {
+    return Status;
+  }
+  SetandGetLoadAddr (&BootParamlistPtr, LOAD_ADDR_NONE);
+  Status = GZipPkgCheck (&BootParamlistPtr);
   if (Status != EFI_SUCCESS) {
     return Status;
   }
@@ -1153,16 +1007,6 @@ skip_FfbmStr:
     return EFI_BAD_BUFFER_SIZE;
   }
 
-  Status = UpdateBootParams (&BootParamlistPtr, FlashlessBoot);
-  if (Status != EFI_SUCCESS) {
-    return Status;
-  }
-  SetandGetLoadAddr (&BootParamlistPtr, LOAD_ADDR_NONE);
-  Status = GZipPkgCheck (&BootParamlistPtr);
-  if (Status != EFI_SUCCESS) {
-    return Status;
-  }
-
   DEBUG ((EFI_D_VERBOSE, "Kernel Load Address: 0x%x\n",
                                         BootParamlistPtr.KernelLoadAddr));
   DEBUG ((EFI_D_VERBOSE, "Kernel Size Actual: 0x%x\n",
@@ -1177,65 +1021,31 @@ skip_FfbmStr:
       (EFI_D_VERBOSE, "Device Tree Load Address: 0x%x\n",
                              BootParamlistPtr.DeviceTreeLoadAddr));
 
-  /*Updates the command line from boot image, appends device serial no.,
-   *baseband information, etc
-   *Called before ShutdownUefiBootServices as it uses some boot service
-   *functions*/
-  if (BootParamlistPtr.ExtraCmdLine[0]) {
-    UINT32 FullCmdLen = BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE;
-    CHAR8* FullCmdLine = AllocateZeroPool (FullCmdLen);
-
-    if (!FullCmdLine)
-	return EFI_OUT_OF_RESOURCES;
-    AsciiStrCpyS (FullCmdLine, FullCmdLen, BootParamlistPtr.CmdLine);
-    AsciiStrCatS (FullCmdLine, FullCmdLen, BootParamlistPtr.ExtraCmdLine);
-    BootParamlistPtr.CmdLine = FullCmdLine;
-    BootParamlistPtr.CmdLine[FullCmdLen - 1] = '\0';
-  }
-  else {
-    BootParamlistPtr.CmdLine[BOOT_ARGS_SIZE - 1] = '\0';
-  }
-
   if (AsciiStrStr (BootParamlistPtr.CmdLine, "root=")) {
     BootDevImage = TRUE;
   }
 
-  Info->HeaderVersion = ((boot_img_hdr *)
-                         (BootParamlistPtr.ImageBuffer))->header_version;
   Status = DTBImgCheckAndAppendDT (Info, &BootParamlistPtr);
   if (Status != EFI_SUCCESS) {
     return Status;
   }
 
+  /* Updates the command line from boot image, appends device serial no.,
+   * baseband information, etc.
+   * Called before ShutdownUefiBootServices as it uses some boot service
+   * functions
+   */
   Status = UpdateCmdLine (BootParamlistPtr.CmdLine, FfbmStr, Recovery,
-                   FlashlessBoot, AlarmBoot, Info->VBCmdLine,
-		   &BootParamlistPtr.FinalCmdLine);
+                   AlarmBoot, Info->VBCmdLine, &BootParamlistPtr.FinalCmdLine,
+                   Info->HeaderVersion, SilentBootMode);
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
     return Status;
   }
 
-  Status = LoadAddrAndDTUpdate (&BootParamlistPtr, FlashlessBoot);
+  Status = LoadAddrAndDTUpdate (Info, &BootParamlistPtr);
   if (Status != EFI_SUCCESS) {
        return Status;
-  }
-
-  if ((!Recovery) &&
-      (IsVmEnabled ())) {
-    Status = CheckAndLoadComputeVM (Info, &CvmBootParamList);
-    if (EFI_ERROR (Status)) {
-      DEBUG ((EFI_D_ERROR, "Compute VM Not Loaded - %r\n", Status));
-    }
-
-    /* Un-map MLVM memory from HLOS S2 */
-    if (IsVmComputed) {
-      Status = HypUnmapMemory (CvmBootParamList.BaseMemory,
-                               CvmBootParamList.MemorySize);
-      if (EFI_ERROR (Status)) {
-        DEBUG ((EFI_D_ERROR, "Error: ML-VM unmap falied: %r\n", Status));
-        return Status;
-      }
-    }
   }
 
   FreeVerifiedBootResource (Info);
@@ -1250,7 +1060,7 @@ skip_FfbmStr:
   }
 
   if(BootCpuSelectionEnabled())
-		  SetLinuxBootCpu(BootCpuId);
+    SetLinuxBootCpu(BootCpuId);
 
   DEBUG ((EFI_D_INFO, "\nShutting Down UEFI Boot Services: %lu ms\n",
           GetTimerCountms ()));
@@ -1269,46 +1079,7 @@ skip_FfbmStr:
   BootStatsSetTimeStamp (BS_KERNEL_ENTRY);
 
   if (IsVmEnabled ()) {
-    /* Call into Hypervisor if MLVM needs to loaded */
-    UINT32 PipeId = GET_PIPE_ID_SEND (HypInfo->pipe_id);
-    RetVal = HvcSysPipeControl (PipeId, CONTROL_STATE);
-    if (RetVal) {
-      DEBUG ((EFI_D_ERROR, "Error: Hyp Pipe Ctrl failed: %d\n", RetVal));
-      goto Exit;
-    }
-
-    if (!Recovery &&
-       IsVmComputed) {
-      Msg.MsgId = BOOT_MGR_START_CLIENT;
-      Msg.HypBootMgr.StartParams.EntryAddr = CvmBootParamList.KernelLoadAddr;
-      Msg.HypBootMgr.StartParams.DtbAddr =
-        CvmBootParamList.DeviceTreeLoadAddr;
-      Msg.HypBootMgr.StartParams.Is64BitMode =
-        (!CvmBootParamList.BootingWith32BitKernel);
-
-      RetVal = HvcSysPipeSend (PipeId,
-                              (UINT32) sizeof (struct HypMsg),
-                              (UINTN *)(&Msg));
-      if (RetVal) {
-        DEBUG ((EFI_D_ERROR, "Error: PipeSend failed for ML-VM: %d\n", RetVal));
-        goto Exit;
-      }
-    }
-
-    Msg.MsgId = BOOT_MGR_START_SELF;
-    Msg.HypBootMgr.StartParams.EntryAddr = BootParamlistPtr.KernelLoadAddr;
-    Msg.HypBootMgr.StartParams.DtbAddr = BootParamlistPtr.DeviceTreeLoadAddr;
-    Msg.HypBootMgr.StartParams.Is64BitMode =
-                                    (!BootParamlistPtr.BootingWith32BitKernel);
-
-    do {
-      RetVal = HvcSysPipeSend (PipeId,
-                             (UINT32)sizeof (struct HypMsg),
-                             (UINTN *)(&Msg));
-    } while (RetVal != 0);
-
-    DEBUG ((EFI_D_ERROR, "After Life support not available\n"));
-    goto Exit;
+    DisableHypUartUsageForLogging ();
   }
 
   //
@@ -1352,6 +1123,10 @@ Exit:
 header buffer.
   @param[in]  ImageHdrSize    Supplies the address where a pointer to the image
 header size.
+  @param[in]  VendorImageHdrBuffer  Supplies the address where a pointer to
+the image header buffer.
+  @param[in]  VendorImageHdrSize    Supplies the address where a pointer to
+the image header size.
   @param[out] ImageSizeActual The Pointer for image actual size.
   @param[out] PageSize        The Pointer for page size..
   @retval     EFI_SUCCESS     Check image header successfully.
@@ -1360,33 +1135,76 @@ header size.
 EFI_STATUS
 CheckImageHeader (VOID *ImageHdrBuffer,
                   UINT32 ImageHdrSize,
+                  VOID *VendorImageHdrBuffer,
+                  UINT32 VendorImageHdrSize,
                   UINT32 *ImageSizeActual,
                   UINT32 *PageSize,
                   BOOLEAN BootIntoRecovery)
 {
   EFI_STATUS Status = EFI_SUCCESS;
+
+  struct boot_img_hdr_v2 *BootImgHdrV2;
+  boot_img_hdr_v3 *BootImgHdrV3;
+  vendor_boot_img_hdr_v3 *VendorBootImgHdrV3;
+
   UINT32 KernelSizeActual = 0;
   UINT32 DtSizeActual = 0;
   UINT32 RamdiskSizeActual = 0;
+  UINT32 VendorRamdiskSizeActual = 0;
 
   // Boot Image header information variables
   UINT32 HeaderVersion = 0;
   UINT32 KernelSize = 0;
   UINT32 RamdiskSize = 0;
+  UINT32 VendorRamdiskSize = 0;
   UINT32 SecondSize = 0;
+  UINT32 DtSize = 0;
   UINT32 tempImgSize = 0;
 
-  if (CompareMem ((void *)((boot_img_hdr *)(ImageHdrBuffer))->magic, BOOT_MAGIC,
+  if (CompareMem ((VOID *)((boot_img_hdr *)(ImageHdrBuffer))->magic, BOOT_MAGIC,
                   BOOT_MAGIC_SIZE)) {
     DEBUG ((EFI_D_ERROR, "Invalid boot image header\n"));
     return EFI_NO_MEDIA;
   }
 
   HeaderVersion = ((boot_img_hdr *)(ImageHdrBuffer))->header_version;
-  KernelSize = ((boot_img_hdr *)(ImageHdrBuffer))->kernel_size;
-  RamdiskSize = ((boot_img_hdr *)(ImageHdrBuffer))->ramdisk_size;
-  SecondSize = ((boot_img_hdr *)(ImageHdrBuffer))->second_size;
-  *PageSize = ((boot_img_hdr *)(ImageHdrBuffer))->page_size;
+  if (HeaderVersion < BOOT_HEADER_VERSION_THREE) {
+    KernelSize = ((boot_img_hdr *)(ImageHdrBuffer))->kernel_size;
+    RamdiskSize = ((boot_img_hdr *)(ImageHdrBuffer))->ramdisk_size;
+    SecondSize = ((boot_img_hdr *)(ImageHdrBuffer))->second_size;
+    *PageSize = ((boot_img_hdr *)(ImageHdrBuffer))->page_size;
+  } else {
+    if (CompareMem ((VOID *)((vendor_boot_img_hdr_v3 *)
+                     (VendorImageHdrBuffer))->magic,
+                     VENDOR_BOOT_MAGIC, VENDOR_BOOT_MAGIC_SIZE)) {
+      DEBUG ((EFI_D_ERROR, "Invalid vendor_boot image header\n"));
+      return EFI_NO_MEDIA;
+    }
+
+    BootImgHdrV3 = ImageHdrBuffer;
+    VendorBootImgHdrV3 = VendorImageHdrBuffer;
+
+    KernelSize = BootImgHdrV3->kernel_size;
+    RamdiskSize = BootImgHdrV3->ramdisk_size;
+    VendorRamdiskSize = VendorBootImgHdrV3->vendor_ramdisk_size;
+    *PageSize = VendorBootImgHdrV3->page_size;
+    DtSize = VendorBootImgHdrV3->dtb_size;
+
+    if (*PageSize > BOOT_IMG_MAX_PAGE_SIZE) {
+      DEBUG ((EFI_D_ERROR, "Invalid vendor-img pagesize. "
+                           "MAX: %u. PageSize: %u and VendorImageHdrSize: %u\n",
+                        BOOT_IMG_MAX_PAGE_SIZE, *PageSize, VendorImageHdrSize));
+      return EFI_BAD_BUFFER_SIZE;
+    }
+
+    VendorRamdiskSizeActual = ROUND_TO_PAGE (VendorRamdiskSize, *PageSize - 1);
+    if (VendorRamdiskSize &&
+        !VendorRamdiskSizeActual) {
+      DEBUG ((EFI_D_ERROR, "Integer Overflow: Vendor Ramdisk Size = %u\n",
+              RamdiskSize));
+      return EFI_BAD_BUFFER_SIZE;
+    }
+  }
 
   if (!KernelSize || !*PageSize) {
     DEBUG ((EFI_D_ERROR, "Invalid image Sizes\n"));
@@ -1414,6 +1232,25 @@ CheckImageHeader (VOID *ImageHdrBuffer,
     return EFI_BAD_BUFFER_SIZE;
   }
 
+  if (HeaderVersion == BOOT_HEADER_VERSION_TWO) {
+    BootImgHdrV2 = (struct boot_img_hdr_v2 *)
+        ((UINT64) ImageHdrBuffer +
+        BOOT_IMAGE_HEADER_V1_RECOVERY_DTBO_SIZE_OFFSET +
+        BOOT_IMAGE_HEADER_V2_OFFSET);
+
+     DtSize = BootImgHdrV2->dtb_size;
+  }
+
+  // DT size doesn't apply to header versions 0 and 1
+  if (HeaderVersion >= BOOT_HEADER_VERSION_TWO) {
+     DtSizeActual = ROUND_TO_PAGE (DtSize, *PageSize - 1);
+      if (DtSize &&
+          !DtSizeActual) {
+        DEBUG ((EFI_D_ERROR, "Integer Overflow: dt Size = %u\n", DtSize));
+        return EFI_BAD_BUFFER_SIZE;
+     }
+  }
+
   *ImageSizeActual = ADD_OF (*PageSize, KernelSizeActual);
   if (!*ImageSizeActual) {
     DEBUG ((EFI_D_ERROR, "Integer Overflow: Actual Kernel size = %u\n",
@@ -1431,15 +1268,23 @@ CheckImageHeader (VOID *ImageHdrBuffer,
   }
 
   tempImgSize = *ImageSizeActual;
-  *ImageSizeActual = ADD_OF (*ImageSizeActual, DtSizeActual);
-  if (!*ImageSizeActual) {
-    DEBUG ((EFI_D_ERROR, "Integer Overflow: ImgSizeActual=%u,"
-           " DtSizeActual=%u\n", tempImgSize, DtSizeActual));
-    return EFI_BAD_BUFFER_SIZE;
+
+  /*
+   * As the DTB is not not a part of boot-images with header versions greater
+   * than two, ignore considering its size for calculating the total image size
+   */
+  if (HeaderVersion < BOOT_HEADER_VERSION_THREE) {
+    *ImageSizeActual = ADD_OF (*ImageSizeActual, DtSizeActual);
+    if (!*ImageSizeActual) {
+      DEBUG ((EFI_D_ERROR, "Integer Overflow: ImgSizeActual=%u,"
+             " DtSizeActual=%u\n", tempImgSize, DtSizeActual));
+      return EFI_BAD_BUFFER_SIZE;
+    }
   }
 
   if (BootIntoRecovery &&
-      HeaderVersion > BOOT_HEADER_VERSION_ZERO) {
+      HeaderVersion > BOOT_HEADER_VERSION_ZERO &&
+      HeaderVersion < BOOT_HEADER_VERSION_THREE) {
 
     struct boot_img_hdr_v1 *Hdr1 =
       (struct boot_img_hdr_v1 *) (ImageHdrBuffer + sizeof (boot_img_hdr));
@@ -1507,71 +1352,80 @@ CheckImageHeader (VOID *ImageHdrBuffer,
     }
   }
   DEBUG ((EFI_D_VERBOSE, "Boot Image Header Info...\n"));
+  DEBUG ((EFI_D_VERBOSE, "Image Header version     : 0x%x\n", HeaderVersion));
   DEBUG ((EFI_D_VERBOSE, "Kernel Size 1            : 0x%x\n", KernelSize));
   DEBUG ((EFI_D_VERBOSE, "Kernel Size 2            : 0x%x\n", SecondSize));
   DEBUG ((EFI_D_VERBOSE, "Ramdisk Size             : 0x%x\n", RamdiskSize));
-  DEBUG ((EFI_D_VERBOSE, "Image Header version     : 0x%x\n", HeaderVersion));
+  DEBUG ((EFI_D_VERBOSE, "DTB Size                 : 0x%x\n", DtSize));
+
+  if (HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
+    DEBUG ((EFI_D_VERBOSE, "Vendor Ramdisk Size      : 0x%x\n",
+            VendorRamdiskSize));
+  }
 
   return Status;
 }
 
 /**
-  Load image from partition
+  Load image header from partition
   @param[in]  Pname           Partition name.
-  @param[out] ImageBuffer     Supplies the address where a pointer to the image
+  @param[out] ImageHdrBuffer  Supplies the address where a pointer to the image
 buffer.
-  @param[out] ImageSizeActual The Pointer for image actual size.
+  @param[out] ImageHdrSize    The Pointer for image actual size.
   @retval     EFI_SUCCESS     Load image from partition successfully.
   @retval     other           Failed to Load image from partition.
 **/
 EFI_STATUS
-LoadImage (BOOLEAN BootIntoRecovery, CHAR16 *Pname,
-           VOID **ImageBuffer, UINT32 *ImageSizeActual)
+LoadImageHeader (CHAR16 *Pname, VOID **ImageHdrBuffer, UINT32 *ImageHdrSize)
 {
-  EFI_STATUS Status = EFI_SUCCESS;
-  VOID *ImageHdrBuffer;
-  UINT32 ImageHdrSize = BOOT_IMG_MAX_PAGE_SIZE;
-  UINT32 ImageSize = 0;
-  UINT32 PageSize = 0;
-  UINT32 tempImgSize = 0;
-
-  // Check for invalid ImageBuffer
-  if (ImageBuffer == NULL)
+  if (ImageHdrBuffer == NULL) {
     return EFI_INVALID_PARAMETER;
-  else
-    *ImageBuffer = NULL;
+  }
 
-  if (!ADD_OF (ImageHdrSize, ALIGNMENT_MASK_4KB - 1)) {
+  if (!ADD_OF (BOOT_IMG_MAX_PAGE_SIZE, ALIGNMENT_MASK_4KB - 1)) {
     DEBUG ((EFI_D_ERROR, "Integer Overflow: in ALIGNMENT_MASK_4KB addition\n"));
     return EFI_BAD_BUFFER_SIZE;
   }
 
-  ImageHdrBuffer =
-      AllocatePages (ALIGN_PAGES (ImageHdrSize, ALIGNMENT_MASK_4KB));
-  if (!ImageHdrBuffer) {
+  *ImageHdrBuffer =
+      AllocatePages (ALIGN_PAGES (BOOT_IMG_MAX_PAGE_SIZE, ALIGNMENT_MASK_4KB));
+  if (!*ImageHdrBuffer) {
     DEBUG ((EFI_D_ERROR, "Failed to allocate for Boot image Hdr\n"));
     return EFI_BAD_BUFFER_SIZE;
   }
 
-  Status = LoadImageFromPartition (ImageHdrBuffer, &ImageHdrSize, Pname);
-  if (Status != EFI_SUCCESS) {
-    return Status;
+  *ImageHdrSize = BOOT_IMG_MAX_PAGE_SIZE;
+  return LoadImageFromPartition (*ImageHdrBuffer, ImageHdrSize, Pname);
+}
+
+/**
+  Load image from partition
+  @param[in]  Pname           Partition name.
+  @param[in] ImageBuffer      Supplies the address where a pointer to the image
+buffer.
+  @param[in] ImageSizeActual  Actual size of the Image.
+  @param[in] PageSize         The page size
+  @retval     EFI_SUCCESS     Load image from partition successfully.
+  @retval     other           Failed to Load image from partition.
+**/
+EFI_STATUS
+LoadImage (CHAR16 *Pname, VOID **ImageBuffer,
+           UINT32 ImageSizeActual, UINT32 PageSize)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 ImageSize = 0;
+
+  // Check for invalid ImageBuffer
+  if (ImageBuffer == NULL) {
+    return EFI_INVALID_PARAMETER;
+  } else {
+    *ImageBuffer = NULL;
   }
 
-  // Add check for boot image header and kernel page size
-  // ensure kernel command line is terminated
-  Status = CheckImageHeader (ImageHdrBuffer, ImageHdrSize, ImageSizeActual,
-                             &PageSize, BootIntoRecovery);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Invalid boot image header:%r\n", Status));
-    return Status;
-  }
-
-  tempImgSize = *ImageSizeActual;
   ImageSize =
-      ADD_OF (ROUND_TO_PAGE (*ImageSizeActual, (PageSize - 1)), PageSize);
+      ADD_OF (ROUND_TO_PAGE (ImageSizeActual, (PageSize - 1)), PageSize);
   if (!ImageSize) {
-    DEBUG ((EFI_D_ERROR, "Integer Overflow: ImgSize=%u\n", tempImgSize));
+    DEBUG ((EFI_D_ERROR, "Integer Overflow: ImgSize=%u\n", ImageSizeActual));
     return EFI_BAD_BUFFER_SIZE;
   }
 
@@ -1647,18 +1501,6 @@ BOOLEAN IsLEVariant (VOID)
 }
 #endif
 
-#ifdef ENABLE_EARLY_SERVICES
-BOOLEAN EarlyServicesEnabled (VOID)
-{
-  return TRUE;
-}
-#else
-BOOLEAN EarlyServicesEnabled (VOID)
-{
-  return FALSE;
-}
-#endif
-
 #ifdef BUILD_SYSTEM_ROOT_IMAGE
 BOOLEAN IsBuildAsSystemRootImage (VOID)
 {
@@ -1666,6 +1508,18 @@ BOOLEAN IsBuildAsSystemRootImage (VOID)
 }
 #else
 BOOLEAN IsBuildAsSystemRootImage (VOID)
+{
+  return FALSE;
+}
+#endif
+
+#ifdef BUILD_USES_RECOVERY_AS_BOOT
+BOOLEAN IsBuildUseRecoveryAsBoot (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsBuildUseRecoveryAsBoot (VOID)
 {
   return FALSE;
 }
@@ -1712,6 +1566,18 @@ BOOLEAN IsDynamicPartitionSupport (VOID)
 }
 #endif
 
+#if VIRTUAL_AB_OTA
+BOOLEAN IsVirtualAbOtaSupported (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsVirtualAbOtaSupported (VOID)
+{
+  return FALSE;
+}
+#endif
+
 #if NAND_SQUASHFS_SUPPORT
 BOOLEAN IsNANDSquashFsSupport (VOID)
 {
@@ -1724,19 +1590,31 @@ BOOLEAN IsNANDSquashFsSupport (VOID)
 }
 #endif
 
-#if MTD_UBI_BEB_LIMIT_PER1024
-BOOLEAN IsDefinedMTDUbiBebLimit (VOID)
+#if TARGET_BOARD_TYPE_AUTO
+BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
+{
+  return FALSE;
+}
+#else
+BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
+{
+  return TRUE;
+}
+#endif
+
+#ifdef ENABLE_SYSTEMD_BOOTSLOT
+BOOLEAN IsSystemdBootslotEnabled (VOID)
 {
   return TRUE;
 }
 #else
-BOOLEAN IsDefinedMTDUbiBebLimit (VOID)
+BOOLEAN IsSystemdBootslotEnabled (VOID)
 {
   return FALSE;
 }
 #endif
 
-#if HIBERNATION_SUPPORT
+#if HIBERNATION_SUPPORT_INSECURE
 BOOLEAN IsHibernationEnabled (VOID)
 {
   return TRUE;

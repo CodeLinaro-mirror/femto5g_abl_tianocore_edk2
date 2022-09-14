@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,7 +26,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef HIBERNATION_SUPPORT
+#ifdef HIBERNATION_SUPPORT_INSECURE
 
 /*
  * size of single entry in table
@@ -45,7 +45,8 @@
 /*
  * x18 = bounce_pfn_entry_table
  * x19 = bounce_count
- * x21 = cpu_resume
+ * x21 = cpu_resume (kernel entry point)
+ * x22 = hlos_boot_args
  */
 JumpToKernel:
 	mov	x4, #ENTRIES_PER_TABLE
@@ -60,7 +61,23 @@ JumpToKernel:
 	ldr	x18, [x0]			// load address of next table
 	cbnz	x19, JumpToKernel      		// loop until bounce_count equals 0
 	bl	_PreparePlatformHardware	// call PreparePlatformHardware
+#if HIBERNATION_32BIT_MODE_SWITCH
+	bl	SwitchMode			//swich to arm mode
+#endif
 	br	x21				// jump to kernel
+
+#if HIBERNATION_32BIT_MODE_SWITCH
+SwitchMode:
+	mov     x0,#0x10F
+	movk    x0,#0x200,lsl #0x10
+	mov	x1,#0x12
+	mov	x2, x23
+	mov	x3, #0x50
+scmloop:	smc	0x0
+	cmp	x0,0x0
+	b.gt	scmloop
+	ret
+#endif
 
 /*
  * copy pages
@@ -68,14 +85,14 @@ JumpToKernel:
  * x1 - number of entries
  */
 copy_pages:
-	mov	x9, x30				// save return address
+	str     x30, [sp,#-16]!		// save return address
 loop:	cbz	x1, 1f				// check if done and return
 	ldp     x4, x5, [x0], #16		// x4 = dst_pfn, x5 = src_pfn, post increment x0
 	bl	copy_page
 	sub	x1, x1, #1			// decrement page count
 	b	loop				// loop until page count equals 0
 1:
-	mov	x30, x9				// restore return address
+	ldr     x30, [sp],#16			// restore return address
 	ret
 
 /*

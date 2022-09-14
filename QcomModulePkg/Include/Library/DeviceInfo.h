@@ -32,7 +32,6 @@
 #define _DEVINFO_H_
 
 #include <Protocol/EFIVerifiedBoot.h>
-#include <Library/EarlyUsbInit.h>
 #define DEVICE_MAGIC "ANDROID-BOOT!"
 #define DEVICE_MAGIC_SIZE 13
 #define MAX_VERSION_LEN 64
@@ -55,7 +54,6 @@ typedef struct device_info {
   UINT32 user_public_key_length;
   CHAR8 user_public_key[MAX_USER_KEY_SIZE];
   UINT64 rollback_index[MAX_VB_PARTITIONS];
-  struct usb_composition usb_comp;
   UINTN golden_snapshot;
 } DeviceInfo;
 

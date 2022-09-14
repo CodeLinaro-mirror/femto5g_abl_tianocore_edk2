@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,8 +31,94 @@
 #include <Library/LinuxLoaderLib.h>
 #include <Library/BootLinux.h>
 
+STATIC MiscVirtualABMessage *VirtualAbMsg = NULL;
+
 STATIC EFI_STATUS
-ReadFromPartition (EFI_GUID *Ptype, VOID **Msg, UINT32 Size)
+WriteVirtualABMessage (UINT8 MergeStatus)
+{
+  EFI_STATUS Status;
+  EFI_BLOCK_IO_PROTOCOL *BlkIo = NULL;
+  PartiSelectFilter HandleFilter;
+  HandleInfo HandleInfoList[1];
+  UINT32 MaxHandles;
+  UINT32 BlkIOAttrib = 0;
+  EFI_HANDLE *Handle = NULL;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  MemCardType CardType = UNKNOWN;
+  UINT32 PageSize;
+  UINT32 Offset;
+
+  CardType = CheckRootDeviceType ();
+  if (CardType == NAND) {
+    return EFI_UNSUPPORTED;
+  }
+
+  GetPageSize (&PageSize);
+
+  BlkIOAttrib = BLK_IO_SEL_PARTITIONED_GPT;
+  BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_NON_REMOVABLE;
+  BlkIOAttrib |= BLK_IO_SEL_MATCH_PARTITION_TYPE_GUID;
+
+  HandleFilter.RootDeviceType = NULL;
+  HandleFilter.PartitionType = &Ptype;
+  HandleFilter.VolumeName = NULL;
+
+  MaxHandles = ARRAY_SIZE (HandleInfoList);
+  Status =
+      GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
+
+  if (Status == EFI_SUCCESS) {
+    if (MaxHandles == 0) {
+      return EFI_NO_MEDIA;
+    }
+
+    if (MaxHandles != 1) {
+      // Unable to deterministically load from single partition
+      DEBUG ((EFI_D_INFO, "%s: multiple partitions found.\r\n", __func__));
+      return EFI_LOAD_ERROR;
+    }
+  } else {
+    DEBUG ((EFI_D_ERROR,
+            "%s: GetBlkIOHandles failed: %r\n", __func__, Status));
+    return Status;
+  }
+
+  BlkIo = HandleInfoList[0].BlkIo;
+  Handle = HandleInfoList[0].Handle;
+  Offset = MISC_VIRTUALAB_OFFSET / BlkIo->Media->BlockSize;
+  Status = WriteBlockToPartition (BlkIo, Handle,
+                                  Offset, PageSize, VirtualAbMsg);
+
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR,
+          "Write the VirtualAbMsg failed :%r\n", Status));
+  }
+
+  return Status;
+}
+
+EFI_STATUS SetSnapshotMergeStatus (VirtualAbMergeStatus MergeStatus)
+{
+  EFI_STATUS Status;
+  VirtualAbMergeStatus OldMergeStatus;
+
+  if (VirtualAbMsg == NULL) {
+    return EFI_NOT_FOUND;
+  }
+
+  OldMergeStatus = VirtualAbMsg->MergeStatus;
+  VirtualAbMsg->MergeStatus = MergeStatus;
+
+  Status = WriteVirtualABMessage (MergeStatus);
+  if (Status != EFI_SUCCESS) {
+    VirtualAbMsg->MergeStatus = OldMergeStatus;
+  }
+  return Status;
+}
+
+STATIC EFI_STATUS
+ReadFromPartitionOffset (EFI_GUID *Ptype, VOID **Msg,
+                         UINT32 Size, UINT32 Offset)
 {
   EFI_STATUS Status;
   EFI_BLOCK_IO_PROTOCOL *BlkIo = NULL;
@@ -73,8 +159,9 @@ ReadFromPartition (EFI_GUID *Ptype, VOID **Msg, UINT32 Size)
 
   BlkIo = HandleInfoList[0].BlkIo;
   MsgSize = ROUND_TO_PAGE (Size, BlkIo->Media->BlockSize - 1);
-  PartitionSize = (BlkIo->Media->LastBlock + 1) * BlkIo->Media->BlockSize;
-  if (MsgSize > PartitionSize) {
+  PartitionSize = GetPartitionSize (BlkIo);
+  if (MsgSize > PartitionSize ||
+    !PartitionSize) {
     return EFI_OUT_OF_RESOURCES;
   }
 
@@ -85,7 +172,15 @@ ReadFromPartition (EFI_GUID *Ptype, VOID **Msg, UINT32 Size)
     return EFI_OUT_OF_RESOURCES;
   }
 
-  Status = BlkIo->ReadBlocks (BlkIo, BlkIo->Media->MediaId, 0, MsgSize, *Msg);
+  if (Offset % BlkIo->Media->BlockSize) {
+    DEBUG (
+        (EFI_D_ERROR, "Error offset:%u passed is not multiple of blocksz:%u\n",
+        Offset, BlkIo->Media->BlockSize));
+    return EFI_INVALID_PARAMETER;
+  }
+  Status = BlkIo->ReadBlocks (BlkIo, BlkIo->Media->MediaId,
+                               (Offset / BlkIo->Media->BlockSize),
+                               MsgSize, *Msg);
   if (Status != EFI_SUCCESS) {
     FreePool (*Msg);
     *Msg = NULL;
@@ -93,6 +188,58 @@ ReadFromPartition (EFI_GUID *Ptype, VOID **Msg, UINT32 Size)
   }
 
   return Status;
+}
+
+VirtualAbMergeStatus
+GetSnapshotMergeStatus (VOID)
+{
+  VirtualAbMergeStatus MergeStatus = NONE_MERGE_STATUS;
+  EFI_STATUS Status;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  MemCardType CardType = UNKNOWN;
+  UINT32 PageSize;
+
+  if (VirtualAbMsg == NULL) {
+
+    CardType = CheckRootDeviceType ();
+    if (CardType == NAND) {
+      return MergeStatus;
+    }
+
+    GetPageSize (&PageSize);
+
+    Status = ReadFromPartitionOffset (&Ptype, (VOID **)&VirtualAbMsg, PageSize,
+                                         MISC_VIRTUALAB_OFFSET);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR,
+              "Error reading virtualab msg from misc partition: %r\n", Status));
+      return MergeStatus;
+    }
+
+    if (VirtualAbMsg->Magic != MISC_VIRTUAL_AB_MAGIC_HEADER ||
+        VirtualAbMsg->Version != MISC_VIRTUAL_AB_MESSAGE_VERSION) {
+      DEBUG ((EFI_D_ERROR,
+                 "Error read virtualab msg version:%u magic:%u not valid\n",
+                  VirtualAbMsg->Version, VirtualAbMsg->Magic));
+      FreePool (VirtualAbMsg);
+      VirtualAbMsg = NULL;
+    } else {
+      DEBUG ((EFI_D_VERBOSE, "read virtualab MergeStatus:%x\n",
+                              VirtualAbMsg->MergeStatus));
+    }
+  }
+
+  if (VirtualAbMsg) {
+    MergeStatus = VirtualAbMsg->MergeStatus;
+  }
+
+  return MergeStatus;
+}
+
+EFI_STATUS
+ReadFromPartition (EFI_GUID *Ptype, VOID **Msg, UINT32 Size)
+{
+  return (ReadFromPartitionOffset (Ptype, Msg, Size, 0));
 }
 
 EFI_STATUS
@@ -190,7 +337,7 @@ RecoveryInit (BOOLEAN *BootIntoRecovery)
   // Ensure NULL termination
   Msg->command[sizeof (Msg->command) - 1] = '\0';
   if (Msg->command[0] != 0 && Msg->command[0] != 255)
-    DEBUG ((EFI_D_INFO, "Recovery command: %d %a\n", sizeof (Msg->command),
+    DEBUG ((EFI_D_VERBOSE, "Recovery command: %d %a\n", sizeof (Msg->command),
             Msg->command));
 
   if (!AsciiStrnCmp (Msg->command, RECOVERY_BOOT_RECOVERY,
@@ -216,6 +363,8 @@ EFI_STATUS
 GetFfbmCommand (CHAR8 *FfbmString, UINT32 Sz)
 {
   CONST CHAR8 *FfbmCmd = "ffbm-";
+  CONST CHAR8 *QmmiCmd = "qmmi";
+  CONST CHAR8 *Ffbm02Cmd = "ffbm-02";
   CHAR8 *FfbmData = NULL;
   EFI_STATUS Status;
   EFI_GUID Ptype = gEfiMiscPartitionGuid;
@@ -236,10 +385,16 @@ GetFfbmCommand (CHAR8 *FfbmString, UINT32 Sz)
   }
 
   FfbmData[Sz - 1] = '\0';
-  if (!AsciiStrnCmp (FfbmData, FfbmCmd, AsciiStrLen (FfbmCmd)))
+  if (!AsciiStrnCmp (FfbmData, QmmiCmd, AsciiStrLen (QmmiCmd))||
+    !AsciiStrnCmp (FfbmData, Ffbm02Cmd, AsciiStrLen (Ffbm02Cmd))) {
+    /* if ffbm-02 or qmmi string is in misc partition,
+       then write qmmi to kernel cmd line*/
+    AsciiStrnCpy (FfbmString, QmmiCmd, AsciiStrLen (QmmiCmd));
+  } else if (!AsciiStrnCmp (FfbmData, FfbmCmd, AsciiStrLen (FfbmCmd))) {
     AsciiStrnCpy (FfbmString, FfbmData, Sz);
-  else
+  } else {
     Status = EFI_NOT_FOUND;
+  }
 
   FreePool (FfbmData);
   FfbmData = NULL;

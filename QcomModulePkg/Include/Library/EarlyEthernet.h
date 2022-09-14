@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019, 2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -30,9 +30,9 @@
 #define __EARLY_ETHERNET__
 
 #define MAX_IP_ADDR_BUF      64
-#define EARLY_ETH_PNAME      L"emac"
 #define EARLY_ADDR_TERMINATOR   '#'
 #define IP_ADDR_STR_OFFSET   0
+#define MAC_ADDR_LEN   17
 
 /**
  *  Reads partition and try to extract IP addresses
@@ -45,6 +45,4 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf);
 
 BOOLEAN
 EarlyEthEnabled ();
-BOOLEAN
-EarlyEthEnabled_LA ();
 #endif

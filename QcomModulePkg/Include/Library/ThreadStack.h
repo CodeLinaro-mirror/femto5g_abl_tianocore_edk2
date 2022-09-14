@@ -1,4 +1,5 @@
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,34 +27,31 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef __EARLY_USB_INIT__
-#define __EARLY_USB_INIT__
+#ifndef __THREADSTACK_H__
+#define __THREADSTACK_H__
 
-#define USB_COMPOSITION_PARTITION_NAME	L"usb_qti"
+#include "list.h"
+#include <Protocol/EFIKernelInterface.h>
 
-#define USB_PID_SZ		5
-#define BOARD_PRODUCT_ID_SZ	32
+/* Stack address will change frequently, we need record the top adderss and
+ * free it at suitable place.
+ */
+typedef struct _THREAD_STACK_ENTRY {
+  Thread                      *Thread;
+  VOID                        *StackBottom;
+  VOID                        *StackTop;
+}THREAD_STACK_ENTRY;
 
-#define USB_COMP_MAGIC		"USB_COMP!"
-#define USB_COMP_MAGIC_SIZE	10
+typedef struct _THREAD_LIST_TABLE {
+  struct list_node Node;
+  struct _THREAD_STACK_ENTRY   *ThreadStackEntry;
+}THREAD_STACK_NODE;
 
-/* Maximum USB Composition command line parameter length */
-#define COMPOSITION_CMDLINE_LEN 96
-
-/* Maximum USB Composition partition Info */
-#define USB_COMPOSITION_INFO_MAX 128
-
-struct usb_composition {
-	CHAR8 magic[USB_COMP_MAGIC_SIZE];
-	CHAR8 pid[USB_PID_SZ];
-	CHAR8 product_id[BOARD_PRODUCT_ID_SZ];
-};
-
-BOOLEAN EarlyUsbInitEnabled (VOID);
-BOOLEAN IsUsbQtiPartitionPresent(VOID);
-EFI_STATUS ClearDevInfoUsbCompositionPid (VOID);
-EFI_STATUS SetDevInfoUsbComposition(CHAR8 *Pid, UINTN PidSize);
-CHAR8 *GetDevInfoUsbPid (VOID);
-struct usb_composition *GetDevInfoUsbComp(VOID);
-VOID GetEarlyUsbCmdlineParam(CHAR8 *UsbCompositionCmdlinePtr);
+EFI_STATUS __attribute__ ( (no_sanitize ("safe-stack")))
+AllocateUnSafeStackPtr (Thread* CurrentThread);
+VOID** __attribute__ ( (no_sanitize ("safe-stack")))
+__safestack_pointer_address (VOID);
+VOID ThreadStackNodeRemove (Thread* CurrentThread);
+VOID ThreadStackReleaseCb (VOID * Arg);
+EFI_STATUS InitThreadUnsafeStack (VOID);
 #endif

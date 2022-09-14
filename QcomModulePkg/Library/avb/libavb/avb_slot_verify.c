@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -374,6 +374,7 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
     AvbOps* ops,
     const char* const* requested_partitions,
     const char* ab_suffix,
+    AvbSlotVerifyFlags flags,
     bool allow_verification_error,
     AvbVBMetaImageFlags toplevel_vbmeta_flags,
     int rollback_index_location,
@@ -399,7 +400,7 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
   size_t num_descriptors;
   size_t n;
   bool is_main_vbmeta;
-  bool is_vbmeta_partition;
+  bool look_for_vbmeta_footer;
   AvbVBMetaData* vbmeta_image_data = NULL;
 
   ret = AVB_SLOT_VERIFY_RESULT_OK;
@@ -413,8 +414,20 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
    * rollback_index_location to determine whether we're the main
    * vbmeta struct.
    */
-  is_main_vbmeta = (rollback_index_location == 0);
-  is_vbmeta_partition = (avb_strcmp(partition_name, "vbmeta") == 0);
+  is_main_vbmeta = false;
+  if (rollback_index_location == 0) {
+    if ((flags & AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION) == 0) {
+      is_main_vbmeta = true;
+    }
+  }
+
+  /* Don't use footers for vbmeta partitions ('vbmeta' or
+   * 'vbmeta_<partition_name>').
+   */
+  look_for_vbmeta_footer = true;
+  if (Avb_StrnCmp(partition_name, "vbmeta", avb_strlen("vbmeta")) == 0) {
+    look_for_vbmeta_footer = false;
+  }
 
   if (!avb_validate_utf8((const uint8_t*)partition_name, partition_name_len)) {
     avb_error("Partition name is not valid UTF-8.\n");
@@ -442,7 +455,7 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
    */
   vbmeta_offset = 0;
   vbmeta_size = VBMETA_MAX_SIZE;
-  if (!is_vbmeta_partition) {
+  if (look_for_vbmeta_footer) {
     uint8_t footer_buf[AVB_FOOTER_SIZE];
     size_t footer_num_read;
     AvbFooter footer;
@@ -510,13 +523,14 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
      * go try to get it from the boot partition instead.
      */
     if (is_main_vbmeta && io_ret == AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION &&
-        is_vbmeta_partition) {
+        !look_for_vbmeta_footer) {
       avb_debugv(full_partition_name,
                  ": No such partition. Trying 'boot' instead.\n",
                  NULL);
       ret = load_and_verify_vbmeta(ops,
                                    requested_partitions,
                                    ab_suffix,
+                                   flags,
                                    allow_verification_error,
                                    0 /* toplevel_vbmeta_flags */,
                                    0 /* rollback_index_location */,
@@ -593,6 +607,8 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
     }
   }
 
+  uint32_t rollback_index_location_to_use = rollback_index_location;
+
   /* Check if key used to make signature matches what is expected. */
   if (pk_data != NULL) {
     if (expected_public_key != NULL) {
@@ -620,9 +636,27 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
         pk_metadata_len = vbmeta_header.public_key_metadata_size;
       }
 
-      avb_assert(is_main_vbmeta);
-      io_ret = ops->validate_vbmeta_public_key(
-          ops, pk_data, pk_len, pk_metadata, pk_metadata_len, &key_is_trusted);
+      // If we're not using a vbmeta partition, need to use another AvbOps...
+      if (flags & AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION) {
+        io_ret = ops->validate_public_key_for_partition(
+            ops,
+            full_partition_name,
+            pk_data,
+            pk_len,
+            pk_metadata,
+            pk_metadata_len,
+            &key_is_trusted,
+            &rollback_index_location_to_use);
+      } else {
+        avb_assert(is_main_vbmeta);
+        io_ret = ops->validate_vbmeta_public_key(ops,
+                                                 pk_data,
+                                                 pk_len,
+                                                 pk_metadata,
+                                                 pk_metadata_len,
+                                                 &key_is_trusted);
+      }
+
       if (io_ret == AVB_IO_RESULT_ERROR_OOM) {
         ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
         goto out;
@@ -647,7 +681,7 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
 
   /* Check rollback index. */
   io_ret = ops->read_rollback_index(
-      ops, rollback_index_location, &stored_rollback_index);
+      ops, rollback_index_location_to_use, &stored_rollback_index);
   if (io_ret == AVB_IO_RESULT_ERROR_OOM) {
     ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
     goto out;
@@ -672,7 +706,7 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
   if (!allow_verification_error) {
     if (stored_rollback_index < vbmeta_header.rollback_index) {
       io_ret = ops->write_rollback_index (
-          ops, rollback_index_location, vbmeta_header.rollback_index);
+          ops, rollback_index_location_to_use, vbmeta_header.rollback_index);
       if (io_ret != AVB_IO_RESULT_OK) {
         avb_errorv (full_partition_name,
                    ": Error storing rollback index for location.\n",
@@ -687,7 +721,9 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
   if (is_main_vbmeta) {
     avb_assert(slot_data->num_vbmeta_images == 0);
   } else {
-    avb_assert(slot_data->num_vbmeta_images > 0);
+    if (!(flags & AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION)) {
+      avb_assert(slot_data->num_vbmeta_images > 0);
+    }
   }
   if (slot_data->num_vbmeta_images == MAX_NUMBER_OF_VBMETA_IMAGES) {
     avb_errorv(full_partition_name, ": Too many vbmeta images.\n", NULL);
@@ -812,6 +848,7 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
         sub_ret = load_and_verify_vbmeta(ops,
                                          requested_partitions,
                                          ab_suffix,
+                                         flags,
                                          allow_verification_error,
                                          toplevel_vbmeta_flags,
                                          chain_desc.rollback_index_location,
@@ -914,14 +951,15 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
     }
   }
 
-  if (rollback_index_location >= AVB_MAX_NUMBER_OF_ROLLBACK_INDEX_LOCATIONS) {
+  if (rollback_index_location_to_use >=
+          AVB_MAX_NUMBER_OF_ROLLBACK_INDEX_LOCATIONS) {
     avb_errorv(
         full_partition_name, ": Invalid rollback_index_location.\n", NULL);
     ret = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_METADATA;
     goto out;
   }
 
-  slot_data->rollback_indexes[rollback_index_location] =
+  slot_data->rollback_indexes[rollback_index_location_to_use] =
       vbmeta_header.rollback_index;
 
   if (out_algorithm_type != NULL) {
@@ -1006,6 +1044,16 @@ static char* sub_cmdline(AvbOps* ops,
       avb_free(ret);
       ret = new_ret;
     }
+    if (ret == NULL) {
+      goto fail;
+    }
+  }
+
+  /* It's possible there is no _PARTUUID for replacement above.
+   * Duplicate cmdline to ret for additional substitutions below.
+   */
+  if (ret == NULL) {
+    ret = avb_strdup(cmdline);
     if (ret == NULL) {
       goto fail;
     }
@@ -1135,6 +1183,7 @@ static int cmdline_append_hex(AvbSlotVerifyData* slot_data,
 
 static AvbSlotVerifyResult append_options(
     AvbOps* ops,
+    AvbSlotVerifyFlags flags,
     AvbSlotVerifyData* slot_data,
     AvbVBMetaImageHeader* toplevel_vbmeta,
     AvbAlgorithmType algorithm_type,
@@ -1144,12 +1193,16 @@ static AvbSlotVerifyResult append_options(
   bool is_device_unlocked;
   AvbIOResult io_ret;
 
-  /* Add androidboot.vbmeta.device option. */
-  if (!cmdline_append_option(slot_data,
-                             "androidboot.vbmeta.device",
-                             "PARTUUID=$(ANDROID_VBMETA_PARTUUID)")) {
-    ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
-    goto out;
+  /* Add androidboot.vbmeta.device option... except if not using a vbmeta
+   * partition since it doesn't make sense in that case.
+   */
+  if (!(flags & AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION)) {
+    if (!cmdline_append_option(slot_data,
+                               "androidboot.vbmeta.device",
+                               "PARTUUID=$(ANDROID_VBMETA_PARTUUID)")) {
+      ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
+      goto out;
+    }
   }
 
   /* Add androidboot.vbmeta.avb_version option. */
@@ -1342,10 +1395,9 @@ AvbSlotVerifyResult avb_slot_verify(AvbOps* ops,
   avb_assert(ops->read_is_device_unlocked != NULL);
   avb_assert(ops->read_from_partition != NULL);
   avb_assert(ops->get_size_of_partition != NULL);
-  avb_assert(ops->validate_vbmeta_public_key != NULL);
   avb_assert(ops->read_rollback_index != NULL);
   avb_assert(ops->get_unique_guid_for_partition != NULL);
-  /* avb_assert(ops->get_size_of_partition != NULL); */
+  avb_assert(ops->validate_public_key_for_partition != NULL);
 
   if (out_data != NULL) {
     *out_data = NULL;
@@ -1359,6 +1411,21 @@ AvbSlotVerifyResult avb_slot_verify(AvbOps* ops,
       !allow_verification_error) {
     ret = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
     goto fail;
+  }
+
+  /* Make sure passed-in AvbOps support verifying public keys and getting
+   * rollback index location if not using a vbmeta partition.
+   */
+  if (flags & AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION) {
+    if (ops->validate_public_key_for_partition == NULL) {
+      avb_error(
+          "AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION was passed but the "
+          "validate_public_key_for_partition() operation isn't implemented.\n");
+      ret = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
+      goto fail;
+    }
+  } else {
+    avb_assert(ops->validate_vbmeta_public_key != NULL);
   }
 
   slot_data = avb_calloc(sizeof(AvbSlotVerifyData));
@@ -1379,30 +1446,67 @@ AvbSlotVerifyResult avb_slot_verify(AvbOps* ops,
     goto fail;
   }
 
-  ret = load_and_verify_vbmeta(ops,
-                               requested_partitions,
-                               ab_suffix,
-                               allow_verification_error,
-                               0 /* toplevel_vbmeta_flags */,
-                               0 /* rollback_index_location */,
-                               "vbmeta",
-                               avb_strlen("vbmeta"),
-                               NULL /* expected_public_key */,
-                               0 /* expected_public_key_length */,
-                               slot_data,
-                               &algorithm_type);
-  if ((!allow_verification_error && ret != AVB_SLOT_VERIFY_RESULT_OK) ||
-      !result_should_continue(ret)) {
+  if (flags & AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION) {
+    if (requested_partitions == NULL || requested_partitions[0] == NULL) {
+      avb_fatal(
+          "Requested partitions cannot be empty when using "
+          "AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION");
+      ret = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
+      goto fail;
+    }
+
+    /* No vbmeta partition, go through each of the requested partitions... */
+    for (size_t n = 0; requested_partitions[n] != NULL; n++) {
+      ret = load_and_verify_vbmeta(ops,
+                                   requested_partitions,
+                                   ab_suffix,
+                                   flags,
+                                   allow_verification_error,
+                                   0 /* toplevel_vbmeta_flags */,
+                                   0 /* rollback_index_location */,
+                                   requested_partitions[n],
+                                   avb_strlen(requested_partitions[n]),
+                                   NULL /* expected_public_key */,
+                                   0 /* expected_public_key_length */,
+                                   slot_data,
+                                   &algorithm_type);
+      if (!allow_verification_error && ret != AVB_SLOT_VERIFY_RESULT_OK) {
+        goto fail;
+      }
+    }
+
+  } else {
+    /* Usual path, load "vbmeta"... */
+    ret = load_and_verify_vbmeta(ops,
+                                 requested_partitions,
+                                 ab_suffix,
+                                 flags,
+                                 allow_verification_error,
+                                 0 /* toplevel_vbmeta_flags */,
+                                 0 /* rollback_index_location */,
+                                 "vbmeta",
+                                 avb_strlen("vbmeta"),
+                                 NULL /* expected_public_key */,
+                                 0 /* expected_public_key_length */,
+                                 slot_data,
+                                 &algorithm_type);
+    if (!allow_verification_error && ret != AVB_SLOT_VERIFY_RESULT_OK) {
+      goto fail;
+    }
+  }
+
+  if (!result_should_continue(ret)) {
     goto fail;
   }
 
   /* If things check out, mangle the kernel command-line as needed. */
-  if (result_should_continue(ret)) {
+  if (!(flags & AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION)) {
     if (avb_strcmp(slot_data->vbmeta_images[0].partition_name, "vbmeta") != 0) {
       avb_assert(
           avb_strcmp(slot_data->vbmeta_images[0].partition_name, "boot") == 0);
       using_boot_for_vbmeta = true;
     }
+  }
 
     /* Byteswap top-level vbmeta header since we'll need it below. */
     avb_vbmeta_image_header_to_host_byte_order(
@@ -1445,6 +1549,7 @@ AvbSlotVerifyResult avb_slot_verify(AvbOps* ops,
        * I/O or OOM error.
        */
       AvbSlotVerifyResult sub_ret = append_options(ops,
+                                                   flags,
                                                    slot_data,
                                                    &toplevel_vbmeta,
                                                    algorithm_type,
@@ -1472,7 +1577,6 @@ AvbSlotVerifyResult avb_slot_verify(AvbOps* ops,
     } else {
       avb_slot_verify_data_free(slot_data);
     }
-  }
 
   if (!allow_verification_error) {
     avb_assert(ret == AVB_SLOT_VERIFY_RESULT_OK);

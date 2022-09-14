@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019, 2021 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -48,6 +48,7 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
   UINT32 DataSize = 0;
   UINT32 Pidx;
   UINT32 Qidx;
+  CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
 
   memset (ipv4buf, '\0', MAX_IP_ADDR_BUF);
   AsciiStrnCpyS (ipv4buf, MAX_IP_ADDR_BUF, " eipv4=", 7);
@@ -56,7 +57,9 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
   memset (macbuf, '\0', MAX_IP_ADDR_BUF);
   AsciiStrnCpyS (macbuf, MAX_IP_ADDR_BUF, " ermac=", 7);
 
-  if (EarlyEthEnabled_LA ()) {
+  GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
+
+  if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC"))) {
     DataSize = BOOT_IMG_MAX_PAGE_SIZE;
   } else {
     GetPageSize (&DataSize);
@@ -73,10 +76,11 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
     return EFI_BAD_BUFFER_SIZE;
   }
 
-  Status = LoadImageFromPartition (Buffer, &DataSize, EARLY_ETH_PNAME);
+  Status = LoadImageFromPartition (Buffer, &DataSize, (CHAR16 *)L"emac");
   if (Status != EFI_SUCCESS) {
     FreePages (Buffer, 1);
-    DEBUG ((EFI_D_ERROR, "Failed to load data for early ip address : %u\n", Status));
+    DEBUG ((EFI_D_ERROR, "Failed to load data for early ip address:%u\n",
+                                                                  Status));
     return Status;
   }
 
@@ -85,20 +89,19 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
   /* Extract ipv4 address string */
   Pidx = IP_ADDR_STR_OFFSET;
   Qidx = 0;
-  while (((CHAR8)rawbuf[Pidx] != EARLY_ADDR_TERMINATOR)
-           && (Qidx < 16))
-  {
-     if ((rawbuf[Pidx] == '.')
-         || ((rawbuf[Pidx] > 47)
-         && (rawbuf[Pidx] < 58)))
-    {
-       ipv4buf[Qidx + 7] = rawbuf[Pidx];
-       Pidx++;
-       Qidx++;
+  while (((CHAR8)rawbuf[Pidx] !=
+         EARLY_ADDR_TERMINATOR) &&
+         (Qidx < 16)) {
+    if ((rawbuf[Pidx] == '.') ||
+       ((rawbuf[Pidx] > 47) &&
+       (rawbuf[Pidx] < 58))) {
+      ipv4buf[Qidx + 7] = rawbuf[Pidx];
+      Pidx++;
+      Qidx++;
     } else {
         FreePages (Buffer, 1);
-        DEBUG ((EFI_D_ERROR, "Invalid char for early ipv4 0x%x at %d\n",
-               rawbuf[Pidx], Pidx));
+        DEBUG ((EFI_D_VERBOSE, "Invalid char for early ipv4 0x%x at %d\n",
+                                                     rawbuf[Pidx], Pidx));
         return EFI_INVALID_PARAMETER;
     }
   }
@@ -106,24 +109,24 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
   /* Extract ipv6 address string */
   ++Pidx;
   Qidx = 0;
-  while ((CHAR8)rawbuf[Pidx] != EARLY_ADDR_TERMINATOR) {
-     if ((rawbuf[Pidx] == '.')
-       || (rawbuf[Pidx] == ':')
-       || (rawbuf[Pidx] == '/')
-       || ((rawbuf[Pidx] > 47)
-       && (rawbuf[Pidx] < 58))
-       || ((rawbuf[Pidx] > 96)
-       && (rawbuf[Pidx] < 103))
-       || ((rawbuf[Pidx] > 64)
-       && (rawbuf[Pidx] < 71)))
-    {
+  while ((CHAR8)rawbuf[Pidx] !=
+          EARLY_ADDR_TERMINATOR) {
+     if ((rawbuf[Pidx] == '.') ||
+        (rawbuf[Pidx] == ':') ||
+        (rawbuf[Pidx] == '/') ||
+        ((rawbuf[Pidx] > 47) &&
+        (rawbuf[Pidx] < 58)) ||
+        ((rawbuf[Pidx] > 96) &&
+        (rawbuf[Pidx] < 103)) ||
+        ((rawbuf[Pidx] > 64) &&
+        (rawbuf[Pidx] < 71))) {
        ipv6buf[Qidx + 7] = rawbuf[Pidx];
        Pidx++;
        Qidx++;
     } else {
         FreePages (Buffer, 1);
-        DEBUG ((EFI_D_ERROR, "Invalid char for early ipv6 0x%x at %d\n",
-              rawbuf[Pidx], Pidx));
+        DEBUG ((EFI_D_VERBOSE, "Invalid char for early ipv6 0x%x at %d\n",
+                                                     rawbuf[Pidx], Pidx));
         return EFI_INVALID_PARAMETER;
     }
   }
@@ -131,22 +134,23 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
   /* Extract mac address string */
   ++Pidx;
   Qidx = 0;
-  while (((CHAR8)rawbuf[Pidx] != EARLY_ADDR_TERMINATOR) && (Qidx < 18)) {
-    if ((rawbuf[Pidx] == ':')
-       || ((rawbuf[Pidx] > 47)
-       && (rawbuf[Pidx] < 58))
-       || ((rawbuf[Pidx] > 96)
-       && (rawbuf[Pidx] < 103))
-       || ((rawbuf[Pidx] > 64)
-       && (rawbuf[Pidx] < 71)))
-    {
+  while (((CHAR8)rawbuf[Pidx] !=
+         EARLY_ADDR_TERMINATOR) &&
+         (Qidx < MAC_ADDR_LEN)) {
+    if ((rawbuf[Pidx] == ':') ||
+       ((rawbuf[Pidx] > 47) &&
+       (rawbuf[Pidx] < 58)) ||
+       ((rawbuf[Pidx] > 96) &&
+       (rawbuf[Pidx] < 103)) ||
+       ((rawbuf[Pidx] > 64) &&
+       (rawbuf[Pidx] < 71))) {
        macbuf[Qidx + 7] = rawbuf[Pidx];
        Pidx++;
        Qidx++;
     } else {
         FreePages (Buffer, 1);
-        DEBUG ((EFI_D_ERROR, "Invalid char for early mac 0x%x at %d\n",
-              rawbuf[Pidx], Pidx));
+        DEBUG ((EFI_D_VERBOSE, "Invalid char for early mac 0x%x at %d\n",
+                                                    rawbuf[Pidx], Pidx));
         return EFI_INVALID_PARAMETER;
     }
   }
@@ -160,23 +164,9 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
  * Applicable for both Linux and Android builds.
  */
 BOOLEAN
-EarlyEthEnabled ()
+EarlyEthEnabled (VOID)
 {
 #if EARLY_ETH_ENABLED
-  return 1;
-#else
-  return 0;
-#endif
-}
-
-/*
- * Return 1 if build has early ethernet feature enabled otherwise 0.
- * Applicable only for Android builds.
- */
-BOOLEAN
-EarlyEthEnabled_LA ()
-{
-#if EARLY_ETH_ENABLED_LA
   return 1;
 #else
   return 0;

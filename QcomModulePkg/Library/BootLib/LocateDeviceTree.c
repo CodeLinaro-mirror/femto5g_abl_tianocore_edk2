@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -170,7 +170,7 @@ DeviceTreeCompatible (VOID *dtb,
   } else if (board_prop && len_board_id > 0) {
     if (len_board_id % BOARD_ID_SIZE) {
       DEBUG ((EFI_D_ERROR,
-              "qcom,pmic-id (%d) in device tree is not a multiple of (%d)\n",
+              "qcom,board-id (%d) in device tree is not a multiple of (%d)\n",
               len_board_id, BOARD_ID_SIZE));
       goto Exit;
     }
@@ -542,8 +542,8 @@ CheckAllBitsSet (UINT32 DtMatchVal)
 }
 
 STATIC VOID
-ReadBestPmicMatch (CONST CHAR8 *PmicProp, UINT32 PmicEntCount,
-                    PmicIdInfo *BestPmicInfo)
+ReadBestPmicMatch (CONST CHAR8 *PmicProp, INT32 PmicMaxIdx,
+                    UINT32 PmicEntCount, PmicIdInfo *BestPmicInfo)
 {
   UINT32 PmicEntIdx;
   UINT32 Idx;
@@ -552,7 +552,7 @@ ReadBestPmicMatch (CONST CHAR8 *PmicProp, UINT32 PmicEntCount,
   memset (BestPmicInfo, 0, sizeof (PmicIdInfo));
   for (PmicEntIdx = 0; PmicEntIdx < PmicEntCount; PmicEntIdx++) {
     memset (&CurPmicInfo, 0, sizeof (PmicIdInfo));
-    for (Idx = 0; Idx < MAX_PMIC_IDX; Idx++) {
+    for (Idx = 0; Idx < PmicMaxIdx; Idx++) {
       CurPmicInfo.DtPmicModel[Idx] =
           fdt32_to_cpu (((struct pmic_id *)PmicProp)->pmic_version[Idx]);
 
@@ -598,25 +598,14 @@ ReadBestPmicMatch (CONST CHAR8 *PmicProp, UINT32 PmicEntCount,
           sizeof (struct PmicIdInfo));
     } else if (BestPmicInfo->DtMatchVal ==
           CurPmicInfo.DtMatchVal) {
-      if (BestPmicInfo->DtPmicRev[0] < CurPmicInfo.DtPmicRev[0]) {
-        gBS->CopyMem (BestPmicInfo, &CurPmicInfo,
-          sizeof (struct PmicIdInfo));
-      } else if (BestPmicInfo->DtPmicRev[1] <
-          CurPmicInfo.DtPmicRev[1]) {
-        gBS->CopyMem (BestPmicInfo, &CurPmicInfo,
-          sizeof (struct PmicIdInfo));
-      } else if (BestPmicInfo->DtPmicRev[2] <
-          CurPmicInfo.DtPmicRev[2]) {
-        gBS->CopyMem (BestPmicInfo, &CurPmicInfo,
-          sizeof (struct PmicIdInfo));
-      } else if (BestPmicInfo->DtPmicRev[3] <
-          CurPmicInfo.DtPmicRev[3]) {
-        gBS->CopyMem (BestPmicInfo, &CurPmicInfo,
-          sizeof (struct PmicIdInfo));
+      for (Idx = 0; Idx < PmicMaxIdx; Idx++) {
+        if (BestPmicInfo->DtPmicRev[Idx] < CurPmicInfo.DtPmicRev[Idx]) {
+          gBS->CopyMem (BestPmicInfo, &CurPmicInfo, sizeof (struct PmicIdInfo));
+        }
       }
     }
 
-    PmicProp += sizeof (struct pmic_id);
+    PmicProp += sizeof (UINT32) * PmicMaxIdx;
   }
 }
 
@@ -742,15 +731,23 @@ STATIC EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
 
     DEBUG ((EFI_D_VERBOSE, "BoardSubtype = %x, DtSubType = %x\n",
             BoardPlatformSubType (), CurDtbInfo->DtPlatformSubtype));
-    if (CurDtbInfo->DtPlatformSubtype == BoardPlatformSubType ()) {
+    if ((CurDtbInfo->DtPlatformSubtype & PLATFORM_SUBTYPE_MASK) ==
+        BoardPlatformSubType ()) {
       CurDtbInfo->DtMatchVal |= BIT (SUBTYPE_EXACT_MATCH);
-    } else if (CurDtbInfo->DtPlatformSubtype == 0) {
+    } else if ((CurDtbInfo->DtPlatformSubtype & PLATFORM_SUBTYPE_MASK) == 0) {
       CurDtbInfo->DtMatchVal |= BIT (SUBTYPE_DEFAULT_MATCH);
     } else {
       DEBUG ((EFI_D_VERBOSE, "subtype-id doesnot match\n"));
       /* If it's neither exact nor default match don't select dtb */
       CurDtbInfo->DtMatchVal = BIT (NONE_MATCH);
       return EFI_NOT_FOUND;
+    }
+
+    if ((CurDtbInfo->DtPlatformSubtype & DDR_MASK) ==
+        (BoardPlatformHlosSubType() & DDR_MASK)) {
+      CurDtbInfo->DtMatchVal |= BIT (DDR_MATCH);
+    } else {
+      DEBUG ((EFI_D_VERBOSE, "ddr size does not match\n"));
     }
   } else {
     DEBUG ((EFI_D_VERBOSE, "qcom,board-id does not exist (or) (%d) "
@@ -785,9 +782,13 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   CONST CHAR8 *PlatProp = NULL;
   CONST CHAR8 *BoardProp = NULL;
   CONST CHAR8 *PmicProp = NULL;
+  CONST CHAR8 *PmicPropSz = NULL;
   INT32 LenBoardId;
   INT32 LenPlatId;
   INT32 LenPmicId;
+  INT32 LenPmicIdSz;
+  INT32 PmicMaxIdx;
+  INT32 PmicEntSz;
   INT32 MinPlatIdLen = PLAT_ID_SIZE;
   INT32 RootOffset = 0;
   VOID *Dtb = CurDtbInfo->Dtb;
@@ -863,12 +864,33 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   /*Get the pmic property from Dtb then compare the dtb vs Board*/
   PmicProp =
       (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "qcom,pmic-id", &LenPmicId);
-  if ((PmicProp) && (LenPmicId > 0) && (!(LenPmicId % PMIC_ID_SIZE))) {
-    PmicEntCount = LenPmicId / PMIC_ID_SIZE;
+
+  if ((PmicProp) &&
+      (LenPmicId > 0)) {
+    PmicPropSz =
+      (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "qcom,pmic-id-size",
+                                   &LenPmicIdSz);
+    if ((PmicPropSz) &&
+        (LenPmicIdSz > 0)) {
+      PmicMaxIdx = (fdt32_to_cpu (*((UINT32 *)PmicPropSz)));
+    } else {
+      /* By default support four pmic, qcom,pmic-id = <a, b, c, d>*/
+      PmicMaxIdx = PMIC_IDX4;
+    }
+
+    PmicEntSz = PmicMaxIdx * sizeof (UINT32);
+    if (LenPmicId % PmicEntSz) {
+        DEBUG ((EFI_D_VERBOSE,
+                 "LenPmicId(%d) is not multiple of PmicEntSz(%d)\n",
+                 LenPmicId, PmicEntSz));
+        goto cleanup;
+    }
+
+    PmicEntCount = LenPmicId / PmicEntSz;
     /* Get the best match pmic */
-    ReadBestPmicMatch (PmicProp, PmicEntCount, &BestPmicInfo);
+    ReadBestPmicMatch (PmicProp, PmicMaxIdx, PmicEntCount, &BestPmicInfo);
     CurDtbInfo->DtMatchVal |= BestPmicInfo.DtMatchVal;
-    for (Idx = 0; Idx < MAX_PMIC_IDX; Idx++) {
+    for (Idx = 0; Idx < PmicMaxIdx; Idx++) {
       CurDtbInfo->DtPmicModel[Idx] = BestPmicInfo.DtPmicModel[Idx];
       CurDtbInfo->DtPmicRev[Idx] = BestPmicInfo.DtPmicRev[Idx];
     }
@@ -877,9 +899,7 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
       "BestPmicInfo.DtMatchVal :%x\n", CurDtbInfo->DtMatchVal,
       BestPmicInfo.DtMatchVal));
   } else {
-    DEBUG ((EFI_D_VERBOSE, "qcom,pmic-id does not exit (or) is (%d)"
-                           " not a multiple of (%d)\n",
-            LenPmicId, PMIC_ID_SIZE));
+    DEBUG ((EFI_D_VERBOSE, "qcom,pmic-id does not exit\n"));
   }
 
 cleanup:
@@ -903,6 +923,8 @@ cleanup:
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else if (BestDtbInfo->DtPmicRev[3] < CurDtbInfo->DtPmicRev[3]) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
+      } else if (BestDtbInfo->DtPlatformSubtype > CurDtbInfo->DtPlatformSubtype) {
+        gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else {
         FindBestMatch = FALSE;
       }
@@ -914,6 +936,8 @@ cleanup:
 /*
  * For Header Version 2, the arguments Kernel and KernelSize will be
  * the entire bootimage and the bootimage size.
+ * For Header Version 3, Kernel holds the base of the vendor_boot
+ * image and KernelSize holds its size.
  */
 VOID *
 GetSocDtb (VOID *Kernel, UINT32 KernelSize, UINT32 DtbOffset, VOID *DtbLoadAddr)
@@ -1027,7 +1051,11 @@ GetOvrdDtb ( VOID **DtboImgBuffer)
   }
 
   BlockIo = HandleInfoList[0].BlkIo;
-  DtboImgSz = (BlockIo->Media->LastBlock + 1) * BlockIo->Media->BlockSize;
+  DtboImgSz = GetPartitionSize (BlockIo);
+  if (!DtboImgSz) {
+    Status = EFI_BAD_BUFFER_SIZE;
+    goto err;
+  }
   *DtboImgBuffer = AllocateZeroPool (DtboImgSz);
   if (*DtboImgBuffer == NULL) {
     DEBUG ((EFI_D_ERROR, "Override DTB: Buffer allocation failure\n"));
@@ -1197,6 +1225,7 @@ STATIC int
 platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
                             struct dt_entry_node *dt_list)
 {
+  UINT32 cur_dt_hlos_ddr;
   UINT32 cur_dt_hw_platform;
   UINT32 cur_dt_hw_subtype;
   UINT32 cur_dt_msm_id;
@@ -1210,6 +1239,9 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
   cur_dt_hw_platform = (cur_dt_entry->variant_id & 0x000000ff);
   cur_dt_hw_subtype = (cur_dt_entry->board_hw_subtype & 0xff);
 
+  /* Bits 10:8 contain ddr information */
+  cur_dt_hlos_ddr = (cur_dt_entry->board_hw_subtype & 0x700);
+
   /* 1. must match the msm_id, platform_hw_id, platform_subtype and DDR size
    *  soc, board major/minor, pmic major/minor must less than board info
    *  2. find the matched DTB then return 1
@@ -1219,6 +1251,7 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
   if ((cur_dt_msm_id == (BoardPlatformRawChipId () & 0x0000ffff)) &&
       (cur_dt_hw_platform == BoardPlatformType ()) &&
       (cur_dt_hw_subtype == BoardPlatformSubType ()) &&
+      (cur_dt_hlos_ddr == (BoardPlatformHlosSubType() & 0x700)) &&
       (cur_dt_entry->soc_rev <= BoardPlatformChipVersion ()) &&
       ((cur_dt_entry->variant_id & 0x00ffff00) <=
        (BoardTargetId () & 0x00ffff00)) &&
@@ -1285,6 +1318,10 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
       current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
       board_info = BoardPlatformFoundryId () << 16;
       break;
+    case DTB_DDR:
+      current_info = ((dt_node_tmp1->dt_entry_m->board_hw_subtype) & 0x700);
+      board_info = (BoardPlatformHlosSubType () & 0x700);
+      break;
     case DTB_PMIC_MODEL:
       for (i = 0; i < 4; i++) {
         current_pmic_model[i] = (dt_node_tmp1->dt_entry_m->pmic_rev[i] & 0xff);
@@ -1325,6 +1362,9 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
     switch (dtb_info) {
     case DTB_FOUNDRY:
       current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
+      break;
+    case DTB_DDR:
+      current_info = ((dt_node_tmp1->dt_entry_m->board_hw_subtype) & 0x700);
       break;
     case DTB_PMIC_MODEL:
       for (i = 0; i < 4; i++) {
@@ -1512,6 +1552,12 @@ platform_dt_match_best (struct dt_entry_node *dt_list)
   * check, if couldn't find the exact match from DTB, will exact match 0x0.
   */
   platform_dt_absolute_compat_match (dt_list, DTB_FOUNDRY);
+
+  /* check DDR type
+  * the DDR type must exact match board DDR tpe, this is compatibility
+  * check, if couldn't find the exact match from DTB, will exact match 0x0.
+  */
+  platform_dt_absolute_compat_match (dt_list, DTB_DDR);
 
   /* check PMIC model
   * the PMIC model must exact match board PMIC model, this is compatibility

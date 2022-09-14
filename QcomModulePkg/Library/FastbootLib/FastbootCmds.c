@@ -18,7 +18,7 @@ found at
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2015 - 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015 - 2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -56,12 +56,13 @@ found at
 #include <Library/PartitionTableUpdate.h>
 #include <Library/PcdLib.h>
 #include <Library/PrintLib.h>
+#include <Library/ThreadStack.h>
 #include <Library/UefiApplicationEntryPoint.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/UnlockMenu.h>
-#include <Library/EarlyUsbInit.h>
+#include <Library/BootLinux.h>
 #include <Uefi.h>
 
 #include <Guid/EventGroup.h>
@@ -97,14 +98,23 @@ STATIC struct GetVarPartitionInfo PublishedPartInfo[MAX_NUM_PARTITIONS];
 STATIC CONST CHAR16 *CriticalPartitions[] = {
     L"abl",  L"rpm",        L"tz",      L"sdi",       L"xbl",       L"hyp",
     L"pmic", L"bootloader", L"devinfo", L"partition", L"devcfg",    L"ddr",
-    L"frp",  L"cdt",        L"cmnlib",  L"cmnlib64",  L"keymaster", L"mdtp"};
+    L"frp",  L"cdt",        L"cmnlib",  L"cmnlib64",  L"keymaster", L"mdtp",
+    L"aop",  L"multiimgoem", L"secdata", L"imagefv",  L"qupfw", L"uefisecapp"};
+
+STATIC BOOLEAN
+IsCriticalPartition (CHAR16 *PartitionName);
+
+STATIC CONST CHAR16 *VirtualAbCriticalPartitions[] = {
+    L"misc",  L"metadata",  L"userdata"};
+
+STATIC BOOLEAN
+CheckVirtualAbCriticalPartition (CHAR16 *PartitionName);
 #endif
 
 STATIC FASTBOOT_VAR *Varlist;
 STATIC BOOLEAN Finished = FALSE;
 STATIC CHAR8 StrSerialNum[MAX_RSP_SIZE];
 STATIC CHAR8 FullProduct[MAX_RSP_SIZE];
-STATIC CHAR8 PlatformVersion[MAX_RSP_SIZE];
 STATIC CHAR8 StrVariant[MAX_RSP_SIZE];
 STATIC CHAR8 StrBatteryVoltage[MAX_RSP_SIZE];
 STATIC CHAR8 StrBatterySocOk[MAX_RSP_SIZE];
@@ -114,6 +124,7 @@ STATIC CHAR8 StrSocVersion[MAX_RSP_SIZE];
 STATIC CHAR8 LogicalBlkSizeStr[MAX_RSP_SIZE];
 STATIC CHAR8 EraseBlkSizeStr[MAX_RSP_SIZE];
 STATIC CHAR8 MaxDownloadSizeStr[MAX_RSP_SIZE];
+STATIC CHAR8 SnapshotMergeState[MAX_RSP_SIZE];
 
 struct GetVarSlotInfo {
   CHAR8 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
@@ -161,7 +172,12 @@ STATIC UINT8 *mDataBuffer = NULL;
 STATIC UINT8 *mFlashDataBuffer = NULL;
 STATIC UINT8 *mUsbDataBuffer = NULL;
 
+STATIC EFI_KERNEL_PROTOCOL  *KernIntf = NULL;
+STATIC BOOLEAN IsMultiThreadSupported = FALSE;
 STATIC BOOLEAN IsFlashComplete = TRUE;
+STATIC LockHandle *LockDownload;
+STATIC LockHandle *LockFlash;
+
 STATIC EFI_STATUS FlashResult = EFI_SUCCESS;
 #ifdef ENABLE_UPDATE_PARTITIONS_CMDS
 STATIC EFI_EVENT UsbTimerEvent;
@@ -195,11 +211,32 @@ typedef struct {
   VOID *Data;
 } CmdInfo;
 
+typedef struct {
+  CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
+  UINT32 PartitionSize;
+  UINT8 *FlashDataBuffer;
+  UINT64 FlashNumDataBytes;
+} FlashInfo;
+
+STATIC BOOLEAN FlashSplitNeeded;
 STATIC BOOLEAN UsbTimerStarted;
 
-BOOLEAN IsUsbTimerStarted (VOID)
-{
+BOOLEAN IsUsbTimerStarted (VOID) {
   return UsbTimerStarted;
+}
+
+BOOLEAN IsFlashSplitNeeded (VOID)
+{
+  if (IsUseMThreadParallel ()) {
+    return FlashSplitNeeded;
+  } else {
+    return UsbTimerStarted;
+  }
+}
+
+BOOLEAN FlashComplete (VOID)
+{
+  return IsFlashComplete;
 }
 
 #ifdef DISABLE_PARALLEL_DOWNLOAD_FLASH
@@ -828,9 +865,10 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
     return EFI_VOLUME_CORRUPTED;
   }
   // Check image will fit on device
-  SparseImgData.PartitionSize =
-                              (SparseImgData.BlockIo->Media->LastBlock + 1)
-                               * SparseImgData.BlockIo->Media->BlockSize;
+  SparseImgData.PartitionSize = GetPartitionSize (SparseImgData.BlockIo);
+  if (!SparseImgData.PartitionSize) {
+    return EFI_BAD_BUFFER_SIZE;
+  }
 
   if (sz < sizeof (sparse_header_t)) {
     DEBUG ((EFI_D_ERROR, "Input image is invalid\n"));
@@ -1025,21 +1063,10 @@ HandleRawImgFlash (IN CHAR16 *PartitionName,
     return EFI_VOLUME_CORRUPTED;
   }
 
-  if (CHECK_ADD64 (BlockIo->Media->LastBlock, 1)) {
-    DEBUG ((EFI_D_ERROR, "Integer overflow while adding LastBlock and 1\n"));
-    return EFI_INVALID_PARAMETER;
-  }
-
-  if ((MAX_UINT64 / (BlockIo->Media->LastBlock + 1)) <
-      (UINT64)BlockIo->Media->BlockSize) {
-    DEBUG ((EFI_D_ERROR,
-            "Integer overflow while multiplying LastBlock and BlockSize\n"));
-    return EFI_BAD_BUFFER_SIZE;
-  }
-
   /* Check image will fit on device */
-  PartitionSize = (BlockIo->Media->LastBlock + 1) * BlockIo->Media->BlockSize;
-  if (PartitionSize < Size) {
+  PartitionSize = GetPartitionSize (BlockIo);
+  if (PartitionSize < Size ||
+      !PartitionSize) {
     DEBUG ((EFI_D_ERROR, "Partition not big enough.\n"));
     DEBUG ((EFI_D_ERROR, "Partition Size:\t%d\nImage Size:\t%d\n",
             PartitionSize, Size));
@@ -1099,10 +1126,9 @@ HandleUbiImgFlash (
   }
 
   /* Check if Image fits into partition */
-  PartitionSize =
-        ((BlockIo->Media->LastBlock + 1) * (UINT64)BlockIo->Media->BlockSize);
-
-  if (Size > PartitionSize) {
+  PartitionSize = GetPartitionSize (BlockIo);
+  if (Size > PartitionSize ||
+    !PartitionSize) {
     DEBUG ((EFI_D_ERROR, "Input Size is invalid\n"));
     return EFI_INVALID_PARAMETER;
   }
@@ -1225,6 +1251,13 @@ HandleMetaImgFlash (IN CHAR16 *PartitionName,
       return EFI_INVALID_PARAMETER;
     }
     AsciiStrToUnicodeStr (img_header_entry[i].ptn_name, PartitionNameFromMeta);
+
+    if (!IsUnlockCritical () &&
+        IsCriticalPartition (PartitionNameFromMeta)) {
+      FastbootFail ("Flashing is not allowed for Critical Partitions\n");
+      return EFI_INVALID_PARAMETER;
+    }
+
     Status = HandleRawImgFlash (
         PartitionNameFromMeta, ARRAY_SIZE (PartitionNameFromMeta),
         (void *)Image + img_header_entry[i].start_offset,
@@ -1273,6 +1306,59 @@ FastbootErasePartition (IN CHAR16 *PartitionName)
 
   return Status;
 }
+
+INT32 __attribute__ ( (no_sanitize ("safe-stack")))
+SparseImgFlashThread (VOID* Arg)
+{
+  Thread* CurrentThread = KernIntf->Thread->GetCurrentThread ();
+  FlashInfo* ThreadFlashInfo = (FlashInfo*) Arg;
+
+  if (!ThreadFlashInfo || !ThreadFlashInfo->FlashDataBuffer) {
+    return 0;
+  }
+
+  KernIntf->Lock->AcquireLock (LockFlash);
+  IsFlashComplete = FALSE;
+  FlashSplitNeeded = TRUE;
+
+  HandleSparseImgFlash (ThreadFlashInfo->PartitionName,
+          ThreadFlashInfo->PartitionSize,
+          ThreadFlashInfo->FlashDataBuffer,
+          ThreadFlashInfo->FlashNumDataBytes);
+
+  FlashSplitNeeded = FALSE;
+  IsFlashComplete = TRUE;
+  KernIntf->Lock->ReleaseLock (LockFlash);
+
+  ThreadStackNodeRemove (CurrentThread);
+
+  FreePool (ThreadFlashInfo);
+  ThreadFlashInfo = NULL;
+
+  KernIntf->Thread->ThreadExit (0);
+
+  return 0;
+}
+
+EFI_STATUS CreateSparseImgFlashThread (IN FlashInfo* ThreadFlashInfo)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  Thread* SparseImgFlashTD = NULL;
+
+  SparseImgFlashTD = KernIntf->Thread->ThreadCreate ("SparseImgFlashThread",
+      SparseImgFlashThread, (VOID*)ThreadFlashInfo, UEFI_THREAD_PRIORITY,
+      DEFAULT_STACK_SIZE);
+
+  if (SparseImgFlashTD == NULL) {
+    return EFI_NOT_READY;
+  }
+
+  AllocateUnSafeStackPtr (SparseImgFlashTD);
+
+  Status = KernIntf->Thread->ThreadResume (SparseImgFlashTD);
+  return Status;
+}
+
 #endif
 
 /* Handle Download Command */
@@ -1318,6 +1404,11 @@ CmdDownload (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
 
   gBS->CopyMem (GetFastbootDeviceData ()->gTxBuffer, Response,
                 sizeof (Response));
+
+  if (IsUseMThreadParallel ()) {
+    KernIntf->Lock->AcquireLock (LockDownload);
+  }
+
   mState = ExpectDataState;
   mBytesReceivedSoFar = 0;
   GetFastbootDeviceData ()->UsbDeviceProtocol->Send (
@@ -1366,6 +1457,7 @@ STATIC VOID StopUsbTimer (VOID)
     gBS->CloseEvent (UsbTimerEvent);
     UsbTimerEvent = NULL;
   }
+
   UsbTimerStarted = FALSE;
 }
 #else
@@ -1468,14 +1560,43 @@ IsCriticalPartition (CHAR16 *PartitionName)
   return FALSE;
 }
 
+STATIC BOOLEAN
+CheckVirtualAbCriticalPartition (CHAR16 *PartitionName)
+{
+  VirtualAbMergeStatus SnapshotMergeStatus;
+  UINT32 Iter = 0;
+
+  SnapshotMergeStatus = GetSnapshotMergeStatus ();
+  if ((SnapshotMergeStatus == MERGING ||
+      SnapshotMergeStatus == SNAPSHOTTED)) {
+    for (Iter = 0; Iter < ARRAY_SIZE (VirtualAbCriticalPartitions); Iter++) {
+      if (!StrnCmp (PartitionName, VirtualAbCriticalPartitions[Iter],
+                  StrLen (VirtualAbCriticalPartitions[Iter])))
+        return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 STATIC VOID ExchangeFlashAndUsbDataBuf (VOID)
 {
   VOID *mTmpbuff;
+
+  if (IsUseMThreadParallel ()) {
+    KernIntf->Lock->AcquireLock (LockDownload);
+    KernIntf->Lock->AcquireLock (LockFlash);
+  }
 
   mTmpbuff = mUsbDataBuffer;
   mUsbDataBuffer = mFlashDataBuffer;
   mFlashDataBuffer = mTmpbuff;
   mFlashNumDataBytes = mNumDataBytes;
+
+  if (IsUseMThreadParallel ()) {
+    KernIntf->Lock->ReleaseLock (LockFlash);
+    KernIntf->Lock->ReleaseLock (LockDownload);
+  }
 }
 
 STATIC EFI_STATUS
@@ -1563,6 +1684,8 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   CHAR16 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
   CHAR8 FlashResultStr[MAX_RSP_SIZE] = "";
   UINT64 PartitionSize = 0;
+  UINT32 Ret;
+  VirtualAbMergeStatus SnapshotMergeStatus;
 
   ExchangeFlashAndUsbDataBuf ();
   if (mFlashDataBuffer == NULL) {
@@ -1588,6 +1711,33 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
     if (!IsUnlockCritical () && IsCriticalPartition (PartitionName)) {
       FastbootFail ("Flashing is not allowed for Critical Partitions\n");
       return;
+    }
+  }
+
+  if (IsVirtualAbOtaSupported ()) {
+    if (CheckVirtualAbCriticalPartition (PartitionName)) {
+      AsciiSPrint (FlashResultStr, MAX_RSP_SIZE,
+                    "Flashing of %s is not allowed in %a state",
+                    PartitionName, SnapshotMergeState);
+      FastbootFail (FlashResultStr);
+      return;
+    }
+
+    SnapshotMergeStatus = GetSnapshotMergeStatus ();
+    if (((SnapshotMergeStatus == MERGING) ||
+          (SnapshotMergeStatus == SNAPSHOTTED)) &&
+          !StrnCmp (PartitionName, L"super", StrLen (L"super"))) {
+
+      Status = SetSnapshotMergeStatus (CANCELLED);
+      if (Status != EFI_SUCCESS) {
+        FastbootFail ("Failed to update snapshot state to cancel");
+        return;
+      }
+
+      //updating fbvar snapshot-merge-state
+      AsciiSPrint (SnapshotMergeState,
+                    AsciiStrLen (VabSnapshotMergeStatus[NONE_MERGE_STATUS]) + 1,
+                    "%a", VabSnapshotMergeStatus[NONE_MERGE_STATUS]);
     }
   }
 
@@ -1619,8 +1769,11 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
     LunSet = TRUE;
   }
 
-  if (!StrnCmp (PartitionName, L"partition", StrLen (L"partition"))) {
-    GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
+  GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
+
+  if ((!StrnCmp (PartitionName, L"partition", StrLen (L"partition"))) ||
+       ((!StrnCmp (PartitionName, L"mibib", StrLen (L"mibib"))) &&
+       (!AsciiStrnCmp (BootDeviceType, "NAND", AsciiStrLen ("NAND"))))) {
     if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
       UfsGetSetBootLun (&UfsBootLun, TRUE); /* True = Get */
       if (UfsBootLun != 0x1) {
@@ -1637,8 +1790,20 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
     PartitionDump ();
     DEBUG ((EFI_D_INFO, "*************** Current partition Table Dump End   "
                         "*******************\n"));
-    Status = UpdatePartitionTable (mFlashDataBuffer, mFlashNumDataBytes, Lun,
-                                   Ptable);
+    if (!AsciiStrnCmp (BootDeviceType, "NAND", AsciiStrLen ("NAND"))) {
+      Ret = PartitionVerifyMibibImage (mFlashDataBuffer);
+      if (Ret) {
+        FastbootFail ("Error Updating partition Table\n");
+        goto out;
+      }
+      Status = HandleRawImgFlash (PartitionName,
+                        ARRAY_SIZE (PartitionName),
+                        mFlashDataBuffer, mFlashNumDataBytes);
+    }
+    else {
+      Status = UpdatePartitionTable (mFlashDataBuffer, mFlashNumDataBytes,
+                        Lun, Ptable);
+    }
     /* Signal the Block IO to update and reenumerate the parition table */
     if (Status == EFI_SUCCESS)  {
       Status = ReenumeratePartTable ();
@@ -1674,29 +1839,57 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
       goto out;
     }
 
-    IsFlashComplete = FALSE;
-    PartitionSize = (BlockIo->Media->LastBlock + 1)
-                        * (BlockIo->Media->BlockSize);
+    PartitionSize = GetPartitionSize (BlockIo);
+    if (!PartitionSize) {
+      FastbootFail ("Partition error size");
+      goto out;
+    }
 
     if ((PartitionSize > MaxDownLoadSize) &&
          !IsDisableParallelDownloadFlash ()) {
-      Status = HandleUsbEventsInTimer ();
-      if (EFI_ERROR (Status)) {
-        DEBUG ((EFI_D_ERROR, "Failed to handle usb event: %r\n", Status));
-        IsFlashComplete = TRUE;
-        StopUsbTimer ();
+      if (IsUseMThreadParallel ()) {
+        FlashInfo* ThreadFlashInfo = AllocateZeroPool (sizeof (FlashInfo));
+        if (!ThreadFlashInfo) {
+          DEBUG ((EFI_D_ERROR,
+                  "ERROR: Failed to allocate memory for ThreadFlashInfo\n"));
+          return ;
+        }
+
+        ThreadFlashInfo->FlashDataBuffer = mFlashDataBuffer,
+        ThreadFlashInfo->FlashNumDataBytes = mFlashNumDataBytes;
+
+        StrnCpyS (ThreadFlashInfo->PartitionName, MAX_GPT_NAME_SIZE,
+                PartitionName, ARRAY_SIZE (PartitionName));
+        ThreadFlashInfo->PartitionSize = ARRAY_SIZE (PartitionName);
+
+        Status = CreateSparseImgFlashThread (ThreadFlashInfo);
       } else {
-        UsbTimerStarted = TRUE;
+        IsFlashComplete = FALSE;
+
+        Status = HandleUsbEventsInTimer ();
+        if (EFI_ERROR (Status)) {
+          DEBUG ((EFI_D_ERROR, "Failed to handle usb event: %r\n", Status));
+          IsFlashComplete = TRUE;
+          StopUsbTimer ();
+        } else {
+          UsbTimerStarted = TRUE;
+        }
+      }
+
+      if (!EFI_ERROR (Status)) {
         FastbootOkay ("");
       }
     }
 
-    FlashResult = HandleSparseImgFlash (PartitionName,
+    if (EFI_ERROR (Status) ||
+      !IsUseMThreadParallel () ||
+      (PartitionSize <= MaxDownLoadSize)) {
+      FlashResult = HandleSparseImgFlash (PartitionName,
                                         ARRAY_SIZE (PartitionName),
                                         mFlashDataBuffer, mFlashNumDataBytes);
-
-    IsFlashComplete = TRUE;
-    StopUsbTimer ();
+      IsFlashComplete = TRUE;
+      StopUsbTimer ();
+    }
   } else if (!AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
     FlashResult = HandleUbiImgFlash (PartitionName,
                                      ARRAY_SIZE (PartitionName),
@@ -1768,6 +1961,10 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   CHAR16 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
   BOOLEAN MultiSlotBoot = PartitionHasMultiSlot (L"boot");
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
+  CHAR8 EraseResultStr[MAX_RSP_SIZE] = "";
+  VirtualAbMergeStatus SnapshotMergeStatus;
+
+  WaitForFlashFinished ();
 
   if (AsciiStrLen (arg) >= MAX_GPT_NAME_SIZE) {
     FastbootFail ("Invalid partition name");
@@ -1787,6 +1984,33 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
     if (!IsUnlockCritical () && IsCriticalPartition (PartitionName)) {
       FastbootFail ("Erase is not allowed for Critical Partitions\n");
       return;
+    }
+  }
+
+  if (IsVirtualAbOtaSupported ()) {
+    if (CheckVirtualAbCriticalPartition (PartitionName)) {
+      AsciiSPrint (EraseResultStr, MAX_RSP_SIZE,
+                    "Erase of %s is not allowed in %a state",
+                    PartitionName, SnapshotMergeState);
+      FastbootFail (EraseResultStr);
+      return;
+    }
+
+    SnapshotMergeStatus = GetSnapshotMergeStatus ();
+    if (((SnapshotMergeStatus == MERGING) ||
+          (SnapshotMergeStatus == SNAPSHOTTED)) &&
+          !StrnCmp (PartitionName, L"super", StrLen (L"super"))) {
+
+      Status = SetSnapshotMergeStatus (CANCELLED);
+      if (Status != EFI_SUCCESS) {
+        FastbootFail ("Failed to update snapshot state to cancel");
+        return;
+      }
+
+      //updating fbvar snapshot-merge-state
+      AsciiSPrint (SnapshotMergeState,
+                    AsciiStrLen (VabSnapshotMergeStatus[NONE_MERGE_STATUS]) + 1,
+                    "%a", VabSnapshotMergeStatus[NONE_MERGE_STATUS]);
     }
   }
 
@@ -1862,6 +2086,13 @@ CmdSetActive (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   if (!Arg) {
     FastbootFail ("Invalid Input Parameters");
     return;
+  }
+
+  if (IsVirtualAbOtaSupported ()) {
+    if (GetSnapshotMergeStatus () == MERGING) {
+      FastbootFail ("Slot Change is not allowed in merging state");
+      return;
+    }
   }
 
   InputSlot = AsciiStrStr (Arg, Delim);
@@ -2007,11 +2238,17 @@ AcceptData (IN UINT64 Size, IN VOID *Data)
       gBS->SetMem ((VOID *)(Data + mNumDataBytes), RoundSize - mNumDataBytes,
                    0);
     }
-    /* Stop usb timer after data transfer completed */
-    StopUsbTimer ();
-    /* Postpone Fastboot Okay until flash completed */
-    FastbootOkayDelay ();
     mState = ExpectCmdState;
+
+    if (IsUseMThreadParallel ())  {
+      KernIntf->Lock->ReleaseLock (LockDownload);
+      FastbootOkay ("");
+    } else {
+      /* Stop usb timer after data transfer completed */
+      StopUsbTimer ();
+      /* Postpone Fastboot Okay until flash completed */
+      FastbootOkayDelay ();
+    }
   } else {
     GetFastbootDeviceData ()->UsbDeviceProtocol->Send (
         ENDPOINT_IN, GetXfrSize (), (Data + mBytesReceivedSoFar));
@@ -2150,6 +2387,68 @@ GetMaxAllocatableMemory (
   return;
 }
 
+//Shoud block command until flash finished
+VOID WaitForFlashFinished (VOID)
+{
+  if (!IsFlashComplete &&
+    IsUseMThreadParallel ()) {
+    KernIntf->Lock->AcquireLock (LockFlash);
+    KernIntf->Lock->ReleaseLock (LockFlash);
+  }
+}
+
+VOID ThreadSleep (TimeDuration Delay)
+{
+  KernIntf->Thread->ThreadSleep (Delay);
+}
+
+BOOLEAN IsUseMThreadParallel (VOID)
+{
+  if (FixedPcdGetBool (EnableMultiThreadFlash)) {
+    return IsMultiThreadSupported;
+  }
+
+  return FALSE;
+}
+
+VOID InitMultiThreadEnv ()
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  if (IsDisableParallelDownloadFlash ()) {
+    return;
+  }
+
+  Status = gBS->LocateProtocol (&gEfiKernelProtocolGuid, NULL,
+      (VOID **)&KernIntf);
+
+  if ((Status != EFI_SUCCESS) ||
+    (KernIntf == NULL) ||
+    KernIntf->Version < EFI_KERNEL_PROTOCOL_VER_UNSAFE_STACK_APIS) {
+    DEBUG ((EFI_D_VERBOSE, "Multi thread is not supported.\n"));
+    return;
+  }
+
+  KernIntf->Lock->InitLock ("DOWNLOAD", &LockDownload);
+  if (&LockDownload == NULL) {
+     DEBUG ((EFI_D_ERROR, "InitLock LockDownload error \n"));
+     return;
+  }
+
+  KernIntf->Lock->InitLock ("FLASH", &LockFlash);
+  if (&LockFlash == NULL) {
+    DEBUG ((EFI_D_ERROR, "InitLock LockFlash error \n"));
+    KernIntf->Lock->DestroyLock (LockDownload);
+    return;
+  }
+
+  //init MultiThreadEnv succeeded, use multi thread to flash
+  IsMultiThreadSupported = TRUE;
+
+  DEBUG ((EFI_D_VERBOSE,
+          "InitMultiThreadEnv successfully, will use thread to flash \n"));
+}
+
 EFI_STATUS
 FastbootCmdsInit (VOID)
 {
@@ -2222,6 +2521,9 @@ FastbootCmdsInit (VOID)
                               MaxDownLoadSize : MaxDownLoadSize / 2;
 
   FastbootCommandSetup ((VOID *)FastBootBuffer, MaxDownLoadSize);
+
+  InitMultiThreadEnv ();
+
   return EFI_SUCCESS;
 }
 
@@ -2294,6 +2596,49 @@ CmdRebootFastboot (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
   // Shouldn't get here
   FastbootFail ("Failed to reboot");
 }
+
+#ifdef VIRTUAL_AB_OTA
+STATIC VOID
+CmdUpdateSnapshot (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
+{
+  CHAR8 *Command = NULL;
+  CONST CHAR8 *Delim = ":";
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Command = AsciiStrStr (Arg, Delim);
+  if (Command) {
+    Command++;
+
+    if (!AsciiStrnCmp (Command, "merge", AsciiStrLen ("merge"))) {
+      if (GetSnapshotMergeStatus () == MERGING) {
+        CmdRebootFastboot (Arg, Data, Size);
+      }
+      FastbootOkay ("");
+      return;
+    } else if (!AsciiStrnCmp (Command, "cancel", AsciiStrLen ("cancel"))) {
+      if (!IsUnlocked ()) {
+        FastbootFail ("Snapshot Cancel is not allowed in Lock State");
+        return;
+      }
+
+      Status = SetSnapshotMergeStatus (CANCELLED);
+      if (Status != EFI_SUCCESS) {
+        FastbootFail ("Failed to update snapshot state to cancel");
+        return;
+      }
+
+      //updating fbvar snapshot-merge-state
+      AsciiSPrint (SnapshotMergeState,
+                    AsciiStrLen (VabSnapshotMergeStatus[NONE_MERGE_STATUS]) + 1,
+                    "%a", VabSnapshotMergeStatus[NONE_MERGE_STATUS]);
+      FastbootOkay ("");
+      return;
+    }
+  }
+  FastbootFail ("Invalid snapshot-update command");
+  return;
+}
+#endif
 #endif
 
 STATIC VOID
@@ -2304,7 +2649,7 @@ CmdContinue (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
   BootInfo Info = {0};
 
   Info.MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
-  Status = LoadImageAndAuth (&Info, FALSE);
+  Status = LoadImageAndAuth (&Info, FALSE, FALSE);
   if (Status != EFI_SUCCESS) {
     AsciiSPrint (Resp, sizeof (Resp), "Failed to load image from partition: %r",
                  Status);
@@ -2427,9 +2772,9 @@ STATIC VOID
 CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 {
   boot_img_hdr *hdr = Data;
+  boot_img_hdr_v3 *HdrV3 = Data;
   EFI_STATUS Status = EFI_SUCCESS;
   UINT32 ImageSizeActual = 0;
-  UINT32 ImageHdrSize = BOOT_IMG_MAX_PAGE_SIZE;
   UINT32 PageSize = 0;
   UINT32 SigActual = SIGACTUAL;
   CHAR8 Resp[MAX_RSP_SIZE];
@@ -2461,28 +2806,17 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
     return;
   }
 
-  hdr->cmdline[BOOT_ARGS_SIZE - 1] = '\0';
+  if (hdr->header_version <= BOOT_HEADER_VERSION_TWO) {
+    hdr->cmdline[BOOT_ARGS_SIZE - 1] = '\0';
+  } else {
+    HdrV3->cmdline[BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE - 1] = '\0';
+  }
+
   SetBootDevImage ();
 
-  Status = CheckImageHeader (Data, ImageHdrSize, &ImageSizeActual,
-                             &PageSize, FALSE);
-  if (Status != EFI_SUCCESS) {
-    AsciiSPrint (Resp, sizeof (Resp), "Invalid Boot image Header: %r", Status);
-    FastbootFail (Resp);
-    goto out;
-  }
-
-  if (ImageSizeActual > Size) {
-    FastbootFail ("BootImage is Incomplete");
-    goto out;
-  }
-  if ((MaxDownLoadSize - (ImageSizeActual - SigActual)) < PageSize) {
-    FastbootFail ("BootImage: Size os greater than boot image buffer can hold");
-    goto out;
-  }
-
   Info.Images[0].ImageBuffer = Data;
-  Info.Images[0].ImageSize = ImageSizeActual;
+  /* The actual image size will be updated in LoadImageAndAuth */
+  Info.Images[0].ImageSize = Size;
   Info.Images[0].Name = "boot";
   Info.NumLoadedImages = 1;
   Info.MultiSlotBoot = PartitionHasMultiSlot (L"boot");
@@ -2494,11 +2828,23 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
       goto out;
     }
   }
-  Status = LoadImageAndAuth (&Info, FALSE);
+
+  Status = LoadImageAndAuth (&Info, FALSE, FALSE);
   if (Status != EFI_SUCCESS) {
     AsciiSPrint (Resp, sizeof (Resp),
                  "Failed to load/authenticate boot image: %r", Status);
     FastbootFail (Resp);
+    goto out;
+  }
+
+  ImageSizeActual = Info.Images[0].ImageSize;
+
+  if (ImageSizeActual > Size) {
+    FastbootFail ("BootImage is Incomplete");
+    goto out;
+  }
+  if ((MaxDownLoadSize - (ImageSizeActual - SigActual)) < PageSize) {
+    FastbootFail ("BootImage: Size is greater than boot image buffer can hold");
     goto out;
   }
 
@@ -2540,9 +2886,9 @@ is_display_supported ( VOID )
   UINT32 ParamSize = sizeof (PanelConfig);
   PanelConfig.uPanelIndex = Index;
 
-  if (EFI_SUCCESS == (Status = gBS->LocateProtocol (&DisplayUtilGUID,
+  if (EFI_SUCCESS == gBS->LocateProtocol (&DisplayUtilGUID,
                                     NULL,
-                                    (VOID **)&pDisplayUtilProtocol))) {
+                                    (VOID **)&pDisplayUtilProtocol)) {
      Status = pDisplayUtilProtocol->DisplayUtilsGetProperty (
                                      EFI_DISPLAY_UTILS_PANEL_CONFIG,
                                     (VOID*)&PanelConfig, &ParamSize);
@@ -2581,7 +2927,7 @@ SetDeviceUnlock (UINT32 Type, BOOLEAN State)
 
   if (GetAVBVersion () != AVB_LE &&
       is_display_supported () &&
-      FixedPcdGetBool (EnableDisplayMenu)) {
+      IsEnableDisplayMenuFlagSupported ()) {
     Status = DisplayUnlockMenu (Type, State);
     if (Status != EFI_SUCCESS) {
       FastbootFail ("Command not support: the display is not enabled");
@@ -2598,8 +2944,10 @@ SetDeviceUnlock (UINT32 Type, BOOLEAN State)
          return;
     }
     FastbootOkay ("");
-    if(GetAVBVersion () != AVB_LE && !FixedPcdGetBool (EnableDisplayMenu))
-      RebootDevice(RECOVERY_MODE);
+    if (GetAVBVersion () != AVB_LE &&
+       !IsEnableDisplayMenuFlagSupported ()) {
+      RebootDevice (RECOVERY_MODE);
+    }
   }
 }
 #endif
@@ -2867,61 +3215,7 @@ CmdFlashingGetUnlockAbility (CONST CHAR8 *arg, VOID *data, UINT32 sz)
 }
 #endif
 
-#ifdef TARGET_SUPPORTS_EARLY_USB_INIT
-/* Handle USB Composition setting */
-STATIC VOID
-CmdSetUsbCompositionPid (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
-{
-  EFI_STATUS Status;
-  CHAR8 *Ptr = NULL;
-  CONST CHAR8 *Delim = " ";
-  UINTN PidStrLen = 0;
-
-  if(IsUsbQtiPartitionPresent()) {
-    FastbootFail ("Feature not supported for the target!");
-    return;
-  }
-
-  if (Arg) {
-    PidStrLen = AsciiStrLen (Arg);
-    // Currently supported inputs to the command is either "disable" string
-    // or pid values which is usually 4 character long.
-    if ((PidStrLen < 5) || (PidStrLen > 8)) {
-      FastbootFail ("Invalid input entered");
-      return;
-    }
-    Ptr = AsciiStrStr (Arg, Delim);
-    Ptr++;
-  } else {
-    FastbootFail ("Invalid input entered");
-    return;
-  }
-
- if (!AsciiStrCmp (Ptr, "disable")) {
-   Status = ClearDevInfoUsbCompositionPid();
-   if (Status != EFI_SUCCESS) {
-     FastbootFail ("Failed to clear USB Composition PID");
-   } else {
-     FastbootOkay ("USB Composition Cleared");
-   }
-   return;
- } else if ((PidStrLen != (USB_PID_SZ - 1))) {
-    Status = SetDevInfoUsbComposition(Ptr, PidStrLen);
-    if (Status != EFI_SUCCESS) {
-	    FastbootFail ("Failed to set USB Composition PID");
-    } else {
-	    FastbootOkay ("USB Composition PID is set");
-    }
-    return;
- }
- else {
-    FastbootFail ("Invalid input entered");
-    return;
- }
-}
-#endif
-
-#if HIBERNATION_SUPPORT
+#if HIBERNATION_SUPPORT_INSECURE
 STATIC VOID
 CmdGoldenSnapshot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 {
@@ -2985,12 +3279,6 @@ CmdOemDevinfo (CONST CHAR8 *arg, VOID *data, UINT32 sz)
                IsChargingScreenEnable () ? "true" : "false");
   FastbootInfo (DeviceInfo);
   WaitForTransferComplete ();
-  if(EarlyUsbInitEnabled() && !IsUsbQtiPartitionPresent()) {
-    AsciiSPrint (DeviceInfo, sizeof (DeviceInfo), "USB Composition PID: %a",
-		  GetDevInfoUsbPid());
-    FastbootInfo (DeviceInfo);
-    WaitForTransferComplete ();
-  }
 
   if(IsHibernationEnabled()) {
     AsciiSPrint (DeviceInfo, sizeof (DeviceInfo), "Erase swap on restore: %a",
@@ -3069,7 +3357,8 @@ AcceptCmd (IN UINT64 Size, IN CHAR8 *Data)
     /* Wait for flash finished before next command */
     if (AsciiStrnCmp (Data, "download", AsciiStrLen ("download"))) {
       StopUsbTimer ();
-      if (!IsFlashComplete) {
+      if (!IsFlashComplete &&
+          !IsUseMThreadParallel ()) {
         Status = AcceptCmdTimerInit (Size, Data);
         if (Status == EFI_SUCCESS) {
           return;
@@ -3233,11 +3522,12 @@ GetPartitionType (IN CHAR16 *PartName, OUT CHAR8 * PartType)
 }
 
 STATIC EFI_STATUS
-GetPartitionSize (IN CHAR16 *PartName, OUT CHAR8 * PartSize)
+GetPartitionSizeViaName (IN CHAR16 *PartName, OUT CHAR8 * PartSize)
 {
   EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
   EFI_HANDLE *Handle = NULL;
   EFI_STATUS Status = EFI_INVALID_PARAMETER;
+  UINT64 PartitionSize;
 
   Status = PartitionGetInfo (PartName, &BlockIo, &Handle);
   if (Status != EFI_SUCCESS) {
@@ -3249,9 +3539,12 @@ GetPartitionSize (IN CHAR16 *PartName, OUT CHAR8 * PartSize)
     return EFI_VOLUME_CORRUPTED;
   }
 
-  AsciiSPrint (PartSize, MAX_RSP_SIZE, " 0x%llx",
-               (UINT64) (BlockIo->Media->LastBlock + 1) *
-                   BlockIo->Media->BlockSize);
+  PartitionSize = GetPartitionSize (BlockIo);
+  if (!PartitionSize) {
+    return EFI_BAD_BUFFER_SIZE;
+  }
+
+  AsciiSPrint (PartSize, MAX_RSP_SIZE, " 0x%llx", PartitionSize);
   return EFI_SUCCESS;
 
 }
@@ -3295,7 +3588,7 @@ PublishGetVarPartitionInfo (
                             AsciiStrLen (
                               PublishedPartInfo[PtnLoopCount].part_name));
     if (!EFI_ERROR (Status)) {
-      Status = GetPartitionSize (
+      Status = GetPartitionSizeViaName (
                             PartitionNameUniCode,
                             PublishedPartInfo[PtnLoopCount].size_response);
       if (Status == EFI_SUCCESS) {
@@ -3392,6 +3685,7 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
   UINT32 PartitionCount = 0;
   BOOLEAN MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
   MemCardType Type = UNKNOWN;
+  VirtualAbMergeStatus SnapshotMergeStatus;
 
   mDataBuffer = Base;
   mNumDataBytes = Size;
@@ -3439,10 +3733,7 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
       {"oem off-mode-charge", CmdOemOffModeCharger},
       {"oem select-display-panel", CmdOemSelectDisplayPanel},
       {"oem device-info", CmdOemDevinfo},
-#ifdef TARGET_SUPPORTS_EARLY_USB_INIT
-      {"oem usb-pid", CmdSetUsbCompositionPid},
-#endif
-#if HIBERNATION_SUPPORT
+#if HIBERNATION_SUPPORT_INSECURE
       {"oem golden-snapshot", CmdGoldenSnapshot},
 #endif
       {"continue", CmdContinue},
@@ -3450,6 +3741,9 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
 #ifdef DYNAMIC_PARTITION_SUPPORT
       {"reboot-recovery", CmdRebootRecovery},
       {"reboot-fastboot", CmdRebootFastboot},
+#ifdef VIRTUAL_AB_OTA
+      {"snapshot-update", CmdUpdateSnapshot},
+#endif
 #endif
       {"reboot-bootloader", CmdRebootBootloader},
       {"getvar:", CmdGetVar},
@@ -3472,10 +3766,29 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
     FastbootPublishVar ("is-userspace", "no");
   }
 
+  if (IsVirtualAbOtaSupported ()) {
+    SnapshotMergeStatus = GetSnapshotMergeStatus ();
+
+    switch (SnapshotMergeStatus) {
+      case SNAPSHOTTED:
+        SnapshotMergeStatus = SNAPSHOTTED;
+        break;
+      case MERGING:
+        SnapshotMergeStatus = MERGING;
+        break;
+      default:
+        SnapshotMergeStatus = NONE_MERGE_STATUS;
+        break;
+    }
+
+    AsciiSPrint (SnapshotMergeState,
+                  AsciiStrLen (VabSnapshotMergeStatus[SnapshotMergeStatus]) + 1,
+                  "%a", VabSnapshotMergeStatus[SnapshotMergeStatus]);
+    FastbootPublishVar ("snapshot-update-status", SnapshotMergeState);
+  }
+
   AsciiSPrint (FullProduct, sizeof (FullProduct), "%a", PRODUCT_NAME);
   FastbootPublishVar ("product", FullProduct);
-  AsciiSPrint (PlatformVersion, sizeof (PlatformVersion), "%d", ANDROID_PLATFORM_VERSION);
-  FastbootPublishVar ("android-platform-version", PlatformVersion);
   FastbootPublishVar ("serialno", StrSerialNum);
   FastbootPublishVar ("secure", IsSecureBootEnabled () ? "yes" : "no");
   if (MultiSlotBoot) {
@@ -3529,6 +3842,12 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
   AsciiSPrint (StrSocVersion, sizeof (StrSocVersion), "%x",
                 BoardPlatformChipVersion ());
   FastbootPublishVar ("hw-revision", StrSocVersion);
+
+  if (IsDisableParallelDownloadFlash()) {
+    FastbootPublishVar ("parallel-download-flash", "no");
+  } else {
+    FastbootPublishVar ("parallel-download-flash", "yes");
+  }
 
   /* Register handlers for the supported commands*/
   UINT32 FastbootCmdCnt = sizeof (cmd_list) / sizeof (cmd_list[0]);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -34,25 +34,23 @@
 #include "UpdateDeviceTree.h"
 #include "AutoGen.h"
 #include <Library/UpdateDeviceTree.h>
-#include <Library/PartitionTableUpdate.h>
 #include <Library/LocateDeviceTree.h>
 #include <Library/BootLinux.h>
 #include <Protocol/EFIChipInfoTypes.h>
 #include <Protocol/EFIDDRGetConfig.h>
 #include <Protocol/EFIRng.h>
 #include <Library/PartialGoods.h>
+#include <Library/FdtRw.h>
 
 #define NUM_SPLASHMEM_PROP_ELEM 4
 #define DEFAULT_CELL_SIZE 2
+#define NUM_RNG_SEED_WORDS 512
 
 STATIC struct FstabNode FstabTable = {"/firmware/android/fstab", "dev",
                                       "/soc/"};
 STATIC struct FstabNode DynamicFstabTable = {"/firmware/android/fstab",
                                               "status",
                                               ""};
-STATIC struct FstabNode VbmetaTable = {"/firmware/android/vbmeta", "parts",
-                                      ""};
-
 STATIC struct DisplaySplashBufferInfo splashBuf;
 STATIC UINTN splashBufSize = sizeof (splashBuf);
 
@@ -73,34 +71,52 @@ PrintSplashMemInfo (CONST CHAR8 *data, INT32 datalen)
 }
 
 STATIC EFI_STATUS
-GetDDRInfo (UINT8 *DdrDeviceType)
+ValidateDdrRankChannel (struct ddr_details_entry_info *DdrInfo)
+{
+  if (DdrInfo->num_channels > MAX_CHANNELS) {
+    DEBUG ((EFI_D_ERROR, "ERROR: Number of channels is over the limit\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  for (UINT8 Chan = 0; Chan < DdrInfo->num_channels; Chan++) {
+    if (DdrInfo->num_ranks[Chan] > MAX_RANKS) {
+      DEBUG ((EFI_D_ERROR, "ERROR: Number of ranks is over the limit\n"));
+      return EFI_INVALID_PARAMETER;
+    }
+  }
+
+  return EFI_SUCCESS;
+}
+
+STATIC EFI_STATUS
+GetDDRInfo (struct ddr_details_entry_info *DdrInfo,
+            UINT64 *Revision)
 {
   EFI_DDRGETINFO_PROTOCOL *DdrInfoIf;
-  struct ddr_details_entry_info DdrInfo;
   EFI_STATUS Status;
 
   Status = gBS->LocateProtocol (&gEfiDDRGetInfoProtocolGuid, NULL,
                                 (VOID **)&DdrInfoIf);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_VERBOSE,
-            "INFO: Unable to get DDR Info protocol. DDR type not updated:%r\n",
+            "INFO: Unable to get DDR Info protocol:%r\n",
             Status));
     return Status;
   }
 
-  Status = DdrInfoIf->GetDDRDetails (DdrInfoIf, &DdrInfo);
+  Status = DdrInfoIf->GetDDRDetails (DdrInfoIf, DdrInfo);
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "INFO: GetDDR details failed\n"));
     return Status;
   }
 
-  *DdrDeviceType = DdrInfo.device_type;
-  DEBUG ((EFI_D_VERBOSE, "DDR deviceType:%d", *DdrDeviceType));
+  *Revision = DdrInfoIf->Revision;
+  DEBUG ((EFI_D_VERBOSE, "DDR Header Revision =0x%x\n", *Revision));
   return Status;
 }
 
 STATIC EFI_STATUS
-GetKaslrSeed (UINT64 *KaslrSeed)
+GetRandomSeed (UINT64 *RandomSeed)
 {
   EFI_QCOM_RNG_PROTOCOL *RngIf;
   EFI_STATUS Status;
@@ -108,7 +124,7 @@ GetKaslrSeed (UINT64 *KaslrSeed)
   Status = gBS->LocateProtocol (&gQcomRngProtocolGuid, NULL, (VOID **)&RngIf);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_VERBOSE,
-            "Error locating PRNG protocol. Fail to generate Kaslr seed:%r\n",
+            "Error locating PRNG protocol. Fail to generate random seed:%r\n",
             Status));
     return Status;
   }
@@ -116,12 +132,12 @@ GetKaslrSeed (UINT64 *KaslrSeed)
   Status = RngIf->GetRNG (RngIf,
                           &gEfiRNGAlgRawGuid,
                           sizeof (UINTN),
-                          (UINT8 *)KaslrSeed);
+                          (UINT8 *)RandomSeed);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_VERBOSE,
          "Error getting PRNG random number. Fail to generate Kaslr seed:%r\n",
          Status));
-    *KaslrSeed = 0;
+    *RandomSeed = 0;
     return Status;
   }
 
@@ -151,7 +167,7 @@ UpdateSplashMemInfo (VOID *fdt)
           splashBuf.uVersion, splashBuf.uFrameAddr, splashBuf.uFrameSize));
 
   /* Get offset of the splash memory reservation node */
-  ret = fdt_path_offset (fdt, "/reserved-memory/splash_region");
+  ret = FdtPathOffset (fdt, "/reserved-memory/splash_region");
   if (ret < 0) {
     DEBUG ((EFI_D_ERROR, "ERROR: Could not get splash memory region node\n"));
     return EFI_NOT_FOUND;
@@ -214,6 +230,162 @@ error:
   return Status;
 }
 
+STATIC EFI_STATUS
+UpdateDemuraRegion (VOID *fdt, CONST CHAR8 *Path,
+                    UINT32 HFCAddr, UINT32 HFCSize)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 DemuraInfoSize = 4 * sizeof (UINT32);
+  CONST struct fdt_property *Prop = NULL;
+  INT32 PropLen = 0;
+  CHAR8 *tmp = NULL;
+  INT32 ret = 0;
+  UINT32 offset = 0;
+
+  if (Path != NULL)
+  {
+    ret = FdtPathOffset (fdt, Path);
+    if (ret < 0) {
+      /* Just return success if demura node not exists */
+      return EFI_SUCCESS;
+    }
+
+    offset = (UINT32)ret;
+    Prop = fdt_get_property (fdt, offset, "reg", &PropLen);
+
+    if (!Prop) {
+      DEBUG ((EFI_D_WARN, "Could not find the demura reg property\n"));
+      Status = EFI_NOT_FOUND;
+    } else if (PropLen < DemuraInfoSize) {
+      DEBUG ((EFI_D_WARN, "Invalid demura node size\n"));
+      Status = EFI_INVALID_PARAMETER;
+    } else {
+      /* First, update the demura HFC Address */
+      tmp = (CHAR8 *)Prop->data + sizeof (UINT32);
+      HFCAddr = cpu_to_fdt32 (HFCAddr);
+      memcpy (tmp, &HFCAddr, sizeof (UINT32));
+
+      /* Next, update the demura HFC Size */
+      tmp += (2 * sizeof (UINT32));
+      HFCSize = cpu_to_fdt32 (HFCSize);
+      memcpy (tmp, &HFCSize, sizeof (UINT32));
+
+      /* Update the property value in place */
+      ret = fdt_setprop_inplace (fdt, offset, "reg", Prop->data, PropLen);
+      if (ret < 0) {
+        DEBUG ((EFI_D_WARN, "Could not update demura info\n"));
+        Status = EFI_NO_MAPPING;
+      }
+    }
+  }
+
+  return Status;
+}
+
+STATIC EFI_STATUS
+UpdateDemuraPanelID (VOID *fdt, CONST CHAR8 *Path, UINT64 PanelID)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 PanelIDSize = sizeof (UINT64);
+  CONST struct fdt_property *Prop = NULL;
+  INT32 PropLen = 0;
+  CHAR8 *tmp = NULL;
+  INT32 ret = 0;
+  UINT32 offset = 0;
+
+  if (Path != NULL)
+  {
+    /* Get offset of the display node */
+    ret = FdtPathOffset (fdt, Path);
+    if (ret < 0) {
+      /* Just return success if display node not exists */
+      return EFI_SUCCESS;
+    }
+
+    offset = (UINT32)ret;
+    Prop = fdt_get_property (fdt, offset, "qcom,demura-panel-id", &PropLen);
+
+    if (!Prop) {
+      DEBUG ((EFI_D_WARN, "Could not find the panel id property\n"));
+      Status = EFI_NOT_FOUND;
+    } else if (PropLen < PanelIDSize) {
+      DEBUG ((EFI_D_WARN, "Invalid panel ID size\n"));
+      Status = EFI_INVALID_PARAMETER;
+    } else {
+      /* Update panel id */
+      tmp = (CHAR8 *)Prop->data;
+      PanelID = fdt64_to_cpu (PanelID);
+      memcpy (tmp, &PanelID, sizeof (UINT64));
+
+      /* Update the property value in place */
+      ret = fdt_setprop_inplace (fdt,
+                                 offset,
+                                 "qcom,demura-panel-id",
+                                 Prop->data,
+                                 PropLen);
+      if (ret < 0) {
+        DEBUG ((EFI_D_WARN, "Could not update demura panel id\n"));
+        Status = EFI_NO_MAPPING;
+      }
+    }
+  }
+
+  return Status;
+}
+
+STATIC EFI_STATUS
+UpdateDemuraInfo (VOID *fdt)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  struct DisplayDemuraInfoType DemuraInfo;
+  UINTN DemuraInfoSize = sizeof (DemuraInfo);
+
+  memset (&DemuraInfo, 0, DemuraInfoSize);
+
+  Status = gRT->GetVariable ((CHAR16 *)L"DisplayDemuraInfo",
+                             &gQcomTokenSpaceGuid,
+                             NULL,
+                             &DemuraInfoSize,
+                             &DemuraInfo);
+  if ((Status == EFI_SUCCESS) &&
+      (DemuraInfo.Version > 0)) {
+    /* Update demura 0 region */
+    if ((DemuraInfo.Demura0HFCAddr != 0) &&
+        (DemuraInfo.Demura0HFCSize != 0)) {
+      UpdateDemuraRegion(fdt,
+                         "/reserved-memory/demura_region_0",
+                         DemuraInfo.Demura0HFCAddr,
+                         DemuraInfo.Demura0HFCSize);
+    }
+
+    /* Update demura 1 region */
+    if ((DemuraInfo.Demura1HFCAddr != 0) &&
+        (DemuraInfo.Demura1HFCSize != 0)) {
+      UpdateDemuraRegion(fdt,
+                         "/reserved-memory/demura_region_1",
+                         DemuraInfo.Demura1HFCAddr,
+                         DemuraInfo.Demura1HFCSize);
+    }
+
+    /* Update demura 0 panel id */
+    if (DemuraInfo.Demura0PanelID != 0) {
+      UpdateDemuraPanelID(fdt,
+                          "/soc/qcom,dsi-display-primary",
+                          DemuraInfo.Demura0PanelID);
+    }
+
+    /* Update demura 1 panel id */
+    if (DemuraInfo.Demura1PanelID != 0) {
+
+      UpdateDemuraPanelID(fdt,
+                          "/soc/qcom,dsi-display-secondary",
+                          DemuraInfo.Demura1PanelID);
+    }
+  }
+
+  return Status;
+}
+
 UINT32
 fdt_check_header_ext (VOID *fdt)
 {
@@ -264,13 +436,14 @@ UpdateGranuleInfo (VOID *fdt)
     return;
   }
 
-  GranuleNodeOffset = fdt_path_offset (fdt, "/mem-offline");
+  GranuleNodeOffset = FdtPathOffset (fdt, "/mem-offline");
   if (GranuleNodeOffset < 0) {
     DEBUG ((EFI_D_VERBOSE, "INFO: Could not find mem-offline node.\n"));
     return;
   }
 
-  Ret = fdt_setprop_u32 (fdt, GranuleNodeOffset, "granule", GranuleSize);
+  FdtPropUpdateFunc (fdt, GranuleNodeOffset, "granule",
+                     GranuleSize, fdt_setprop_u32, Ret);
   if (Ret) {
     DEBUG ((EFI_D_ERROR, "INFO: Granule size update failed.\n"));
   }
@@ -349,14 +522,10 @@ AddMemMap (VOID *Fdt, UINT32 MemNodeOffset, BOOLEAN BootWith32Bit)
     return Status;
   }
 
-  Status = GetRamPartitions (&RamPartitions, &NumPartitions);
+  Status = ReadRamPartitions (&RamPartitions, &NumPartitions);
   if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "Error returned from GetRamPartitions %r\n", Status));
+    DEBUG ((EFI_D_ERROR, "Error returned from ReadRamPartitions %r\n", Status));
     return Status;
-  }
-  if (!RamPartitions) {
-    DEBUG ((EFI_D_ERROR, "RamPartitions is NULL\n"));
-    return EFI_NOT_FOUND;
   }
 
   DEBUG ((EFI_D_INFO, "RAM Partitions\r\n"));
@@ -381,6 +550,7 @@ AddMemMap (VOID *Fdt, UINT32 MemNodeOffset, BOOLEAN BootWith32Bit)
 
   FreePool (RamPartitions);
   RamPartitions = NULL;
+  RamPartitionEntries = NULL;
 
   return EFI_SUCCESS;
 }
@@ -419,11 +589,11 @@ dev_tree_add_mem_info (VOID *fdt, UINT32 offset, UINT32 addr, UINT32 size)
 
   if (!mem_info_cnt) {
     /* Replace any other reg prop in the memory node. */
-    ret = fdt_setprop_u32 (fdt, offset, "reg", addr);
     mem_info_cnt = 1;
+    FdtPropUpdateFunc (fdt, offset, "reg", addr, fdt_setprop_u32, ret);
   } else {
     /* Append the mem info to the reg prop for subsequent nodes.  */
-    ret = fdt_appendprop_u32 (fdt, offset, "reg", addr);
+    FdtPropUpdateFunc (fdt, offset, "reg", addr, fdt_appendprop_u32, ret);
   }
 
   if (ret) {
@@ -431,8 +601,7 @@ dev_tree_add_mem_info (VOID *fdt, UINT32 offset, UINT32 addr, UINT32 size)
         (EFI_D_ERROR, "Failed to add the memory information addr: %d\n", ret));
   }
 
-  ret = fdt_appendprop_u32 (fdt, offset, "reg", size);
-
+  FdtPropUpdateFunc (fdt, offset, "reg", size, fdt_appendprop_u32, ret);
   if (ret) {
     DEBUG (
         (EFI_D_ERROR, "Failed to add the memory information size: %d\n", ret));
@@ -449,11 +618,11 @@ dev_tree_add_mem_infoV64 (VOID *fdt, UINT32 offset, UINT64 addr, UINT64 size)
 
   if (!mem_info_cnt) {
     /* Replace any other reg prop in the memory node. */
-    ret = fdt_setprop_u64 (fdt, offset, "reg", addr);
     mem_info_cnt = 1;
+    FdtPropUpdateFunc (fdt, offset, "reg", addr, fdt_setprop_u64, ret);
   } else {
     /* Append the mem info to the reg prop for subsequent nodes.  */
-    ret = fdt_appendprop_u64 (fdt, offset, "reg", addr);
+    FdtPropUpdateFunc (fdt, offset, "reg", addr, fdt_appendprop_u64, ret);
   }
 
   if (ret) {
@@ -461,8 +630,7 @@ dev_tree_add_mem_infoV64 (VOID *fdt, UINT32 offset, UINT64 addr, UINT64 size)
         (EFI_D_ERROR, "Failed to add the memory information addr: %d\n", ret));
   }
 
-  ret = fdt_appendprop_u64 (fdt, offset, "reg", size);
-
+  FdtPropUpdateFunc (fdt, offset, "reg", size, fdt_appendprop_u64, ret);
   if (ret) {
     DEBUG (
         (EFI_D_ERROR, "Failed to add the memory information size: %d\n", ret));
@@ -482,9 +650,17 @@ UpdateDeviceTree (VOID *fdt,
   INT32 ret = 0;
   UINT32 offset;
   UINT32 PaddSize = 0;
-  UINT64 KaslrSeed = 0;
+  UINT64 RandomSeed = 0;
   UINT8 DdrDeviceType;
+  /* Single space reserved for chan(0-9) */
+  CHAR8 FdtRankProp[] = "ddr_device_rank_ch ";
+  /* Single spaces reserved for chan(0-9), rank(0-9) */
+  CHAR8 FdtHbbProp[] = "ddr_device_hbb_ch _rank ";
+  struct ddr_details_entry_info *DdrInfo;
+  UINT64 Revision;
   EFI_STATUS Status;
+  UINT64 UpdateDTStartTime = GetTimerCountms ();
+  UINT32 Index;
 
   /* Check the device tree header */
   ret = fdt_check_header (fdt) || fdt_check_header_ext (fdt);
@@ -508,7 +684,7 @@ UpdateDeviceTree (VOID *fdt,
   }
 
   /* Get offset of the memory node */
-  ret = fdt_path_offset (fdt, "/memory");
+  ret = FdtPathOffset (fdt, "/memory");
   if (ret < 0) {
     DEBUG ((EFI_D_ERROR, "ERROR: Could not find memory node ...\n"));
     return EFI_NOT_FOUND;
@@ -521,23 +697,83 @@ UpdateDeviceTree (VOID *fdt,
     return Status;
   }
 
-  Status = GetDDRInfo (&DdrDeviceType);
+  DdrInfo = AllocateZeroPool (sizeof (struct ddr_details_entry_info));
+  if (DdrInfo == NULL) {
+    DEBUG ((EFI_D_ERROR, "DDR Info Buffer: Out of resources\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
+  Status = GetDDRInfo (DdrInfo, &Revision);
   if (Status == EFI_SUCCESS) {
-    ret = fdt_appendprop_u32 (fdt, offset, (CONST char *)"ddr_device_type",
-                              (UINT32)DdrDeviceType);
+    DdrDeviceType = DdrInfo->device_type;
+    DEBUG ((EFI_D_VERBOSE, "DDR deviceType:%d\n", DdrDeviceType));
+
+    FdtPropUpdateFunc (fdt, offset, (CONST char *)"ddr_device_type",
+                       (UINT32)DdrDeviceType, fdt_appendprop_u32, ret);
     if (ret) {
       DEBUG ((EFI_D_ERROR,
-              "ERROR: Cannot update memory node [ddr_device_type] - 0x%x\n",
+              "ERROR: Cannot update memory node [ddr_device_type]:0x%x\n",
               ret));
     } else {
       DEBUG ((EFI_D_VERBOSE, "ddr_device_type is added to memory node\n"));
     }
+
+    if (Revision < EFI_DDRGETINFO_PROTOCOL_REVISION) {
+      DEBUG ((EFI_D_VERBOSE,
+              "ddr_device_rank, HBB not supported in Revision=0x%x\n",
+              Revision));
+    } else {
+      Status = ValidateDdrRankChannel (DdrInfo);
+      if (Status != EFI_SUCCESS) {
+        goto OutofUpdateRankChannel;
+      }
+
+      DEBUG ((EFI_D_VERBOSE, "DdrInfo->num_channels:%d\n",
+              DdrInfo->num_channels));
+      for (UINT8 Chan = 0; Chan < DdrInfo->num_channels; Chan++) {
+        DEBUG ((EFI_D_VERBOSE, "ddr_device_rank_ch%d:%d\n",
+                Chan, DdrInfo->num_ranks[Chan]));
+        AsciiSPrint (FdtRankProp, sizeof (FdtRankProp),
+                     "ddr_device_rank_ch%d", Chan);
+        FdtPropUpdateFunc (fdt, offset, (CONST char *)FdtRankProp,
+                           (UINT32)DdrInfo->num_ranks[Chan],
+                           fdt_appendprop_u32, ret);
+        if (ret) {
+          DEBUG ((EFI_D_ERROR,
+                  "ERROR: Cannot update memory node ddr_device_rank_ch%d:0x%x\n",
+                  Chan, ret));
+        } else {
+          DEBUG ((EFI_D_VERBOSE, "ddr_device_rank_ch%d added to memory node\n",
+                  Chan));
+        }
+        for (UINT8 Rank = 0; Rank < DdrInfo->num_ranks[Chan]; Rank++) {
+          DEBUG ((EFI_D_VERBOSE, "ddr_device_hbb_ch%d_rank%d:%d\n",
+                  Chan, Rank, DdrInfo->hbb[Chan][Rank]));
+          AsciiSPrint (FdtHbbProp, sizeof (FdtHbbProp),
+                       "ddr_device_hbb_ch%d_rank%d", Chan, Rank);
+          FdtPropUpdateFunc (fdt, offset, (CONST char *)FdtHbbProp,
+                             (UINT32)DdrInfo->hbb[Chan][Rank],
+                             fdt_appendprop_u32, ret);
+          if (ret) {
+            DEBUG ((EFI_D_ERROR,
+                    "ERROR: Cannot update memory node ddr_device_hbb_ch%d_rank%d:0x%x\n",
+                    Chan, Rank, ret));
+          } else {
+            DEBUG ((EFI_D_VERBOSE,
+                    "ddr_device_hbb_ch%d_rank%d added to memory node\n",
+                    Chan, Rank));
+          }
+        }
+      }
+    }
   }
 
+OutofUpdateRankChannel:
+
   UpdateSplashMemInfo (fdt);
+  UpdateDemuraInfo (fdt);
 
   /* Get offset of the chosen node */
-  ret = fdt_path_offset (fdt, "/chosen");
+  ret = FdtPathOffset (fdt, "/chosen");
   if (ret < 0) {
     DEBUG ((EFI_D_ERROR, "ERROR: Could not find chosen node ...\n"));
     return EFI_NOT_FOUND;
@@ -546,8 +782,8 @@ UpdateDeviceTree (VOID *fdt,
   offset = ret;
   if (cmdline) {
     /* Adding the cmdline to the chosen node */
-    ret = fdt_appendprop_string (fdt, offset, (CONST char *)"bootargs",
-                                 (CONST VOID *)cmdline);
+    FdtPropUpdateFunc (fdt, offset, (CONST char *)"bootargs",
+                      (CONST VOID *)cmdline, fdt_appendprop_string, ret);
     if (ret) {
       DEBUG ((EFI_D_ERROR,
               "ERROR: Cannot update chosen node [bootargs] - 0x%x\n", ret));
@@ -555,16 +791,34 @@ UpdateDeviceTree (VOID *fdt,
     }
   }
 
-  Status = GetKaslrSeed (&KaslrSeed);
+  for (Index = 0; Index < NUM_RNG_SEED_WORDS / sizeof (UINT64); Index++) {
+    Status = GetRandomSeed (&RandomSeed);
+    if (Status == EFI_SUCCESS) {
+
+      /* Adding the RNG seed to the chosen node */
+      FdtPropUpdateFunc (fdt, offset, (CONST CHAR8 *)"rng-seed",
+                        (UINT64)RandomSeed, fdt_appendprop_u64, ret);
+      if (ret) {
+        DEBUG ((EFI_D_ERROR,
+              "ERROR: Cannot update chosen node [rng-seed] - 0x%x\n", ret));
+        break;
+      }
+    } else {
+      DEBUG ((EFI_D_INFO, "ERROR: Cannot generate Random Seed - %r\n", Status));
+      break;
+    }
+  }
+
+  Status = GetRandomSeed (&RandomSeed);
   if (Status == EFI_SUCCESS) {
     /* Adding Kaslr Seed to the chosen node */
-    ret = fdt_appendprop_u64 (fdt, offset, (CONST char *)"kaslr-seed",
-                              (UINT64)KaslrSeed);
+    FdtPropUpdateFunc (fdt, offset, (CONST CHAR8 *)"kaslr-seed",
+                      (UINT64)RandomSeed, fdt_appendprop_u64, ret);
     if (ret) {
       DEBUG ((EFI_D_INFO,
               "ERROR: Cannot update chosen node [kaslr-seed] - 0x%x\n", ret));
     } else {
-      DEBUG ((EFI_D_INFO, "kaslr-Seed is added to chosen node\n"));
+      DEBUG ((EFI_D_VERBOSE, "kaslr-Seed is added to chosen node\n"));
     }
   } else {
     DEBUG ((EFI_D_INFO, "ERROR: Cannot generate Kaslr Seed - %r\n", Status));
@@ -572,7 +826,8 @@ UpdateDeviceTree (VOID *fdt,
 
   if (RamDiskSize) {
     /* Adding the initrd-start to the chosen node */
-    ret = fdt_setprop_u64 (fdt, offset, "linux,initrd-start", (UINT64)ramdisk);
+    FdtPropUpdateFunc (fdt, offset, (CONST CHAR8 *)"linux,initrd-start",
+                       (UINT64)ramdisk, fdt_setprop_u64, ret);
     if (ret) {
       DEBUG ((EFI_D_ERROR,
               "ERROR: Cannot update chosen node [linux,initrd-start] - 0x%x\n",
@@ -581,8 +836,8 @@ UpdateDeviceTree (VOID *fdt,
     }
 
     /* Adding the initrd-end to the chosen node */
-    ret = fdt_setprop_u64 (fdt, offset, "linux,initrd-end",
-                           ((UINT64)ramdisk + RamDiskSize));
+    FdtPropUpdateFunc (fdt, offset, (CONST CHAR8 *)"linux,initrd-end",
+                      (UINT64)ramdisk + RamDiskSize, fdt_setprop_u64, ret);
     if (ret) {
       DEBUG ((EFI_D_ERROR,
               "ERROR: Cannot update chosen node [linux,initrd-end] - 0x%x\n",
@@ -591,12 +846,6 @@ UpdateDeviceTree (VOID *fdt,
     }
   }
 
-  /* Update vbmeta node for PLATFORM_VERSION < 10 */
-  if ((ANDROID_PLATFORM_VERSION) &&
-      (ANDROID_PLATFORM_VERSION < 10)){
-    DEBUG ((EFI_D_ERROR, "Removing the ODM partition from DT.\n"));
-    UpdateVbmetaNode (fdt, "odm", NULL);
-  }
   /* Update fstab node */
   DEBUG ((EFI_D_VERBOSE, "Start DT fstab node update: %lu ms\n",
           GetTimerCountms ()));
@@ -616,124 +865,9 @@ UpdateDeviceTree (VOID *fdt,
   }
   fdt_pack (fdt);
 
+  DEBUG ((EFI_D_INFO, "Update Device Tree total time: %lu ms \n",
+        GetTimerCountms () - UpdateDTStartTime));
   return ret;
-}
-
-/* Update device tree for vbmeta node */
-EFI_STATUS
-UpdateVbmetaNode (VOID *fdt,
-                  CHAR8* OldPartStr,
-                  CHAR8* NewPartStr)
-{
-  INT32 ParentOffset = 0;
-  INT32 NodeOffset = 0;
-  CONST struct fdt_property *Prop = NULL;
-  INT32 PropLen = 0;
-  char *NodeName = NULL;
-  EFI_STATUS Status = EFI_SUCCESS;
-  CHAR8 *RestParts = NULL;
-  CHAR8 *ReplaceStr = NULL;
-  CHAR8 *PartitionString = NULL;
-  struct FstabNode Table = VbmetaTable;
-  struct FstabNode FsTable = FstabTable;
-  CHAR8 TempPartition[MAX_PARTITION_NAME_LEN];
-
-  PartitionString = AllocateZeroPool (sizeof (CHAR8) * MAX_PARTITION_NAME_LEN * MAX_NUM_PARTITIONS);
-  if (PartitionString == NULL) {
-    DEBUG ((EFI_D_ERROR, "Boot device buffer: Out of resources\n"));
-    Status = EFI_OUT_OF_RESOURCES;
-    goto error;
-  }
-
-  /* Find the parent node */
-  ParentOffset = fdt_path_offset (fdt, Table.ParentNode);
-  if (ParentOffset < 0) {
-    DEBUG ((EFI_D_ERROR, "Failed to Get parent node: fstab\terror: %d\n",
-            ParentOffset));
-    Status = EFI_NOT_FOUND;
-    goto error;
-  }
-  DEBUG ((EFI_D_INFO, "Node: %a found.\n",
-          fdt_get_name (fdt, ParentOffset, NULL)));
-
-  Prop = fdt_get_property (fdt, ParentOffset, Table.Property, &PropLen);
-  NodeName = (char *)(uintptr_t)fdt_get_name (fdt, ParentOffset, NULL);
-  if (!Prop) {
-    DEBUG ((EFI_D_ERROR, "Property:%a is not found for sub-node:%a\n",
-            Table.Property, NodeName));
-    Status = EFI_NOT_FOUND;
-    goto error;
-  } else {
-    /*Populate the PartitionString with Prop->data*/
-    gBS->CopyMem(PartitionString,(CHAR8 *)Prop->data,AsciiStrLen(Prop->data));
-
-    RestParts = (CHAR8 *)PartitionString;
-    ReplaceStr = AsciiStrStr (RestParts, OldPartStr);
-    if (!ReplaceStr){
-      DEBUG ((EFI_D_ERROR, "Unable to find the %a partition\n",OldPartStr));
-      Status = EFI_NOT_FOUND;
-      goto error;
-    }
-
-    RestParts = AsciiStrStr (ReplaceStr, ",");
-    if (RestParts){
-      RestParts++;
-      gBS->CopyMem (ReplaceStr, RestParts, AsciiStrLen(RestParts));
-      ReplaceStr = ReplaceStr + AsciiStrLen(RestParts);
-    }
-
-    if (NewPartStr){
-      if (RestParts)
-        AsciiSPrint(TempPartition, MAX_PARTITION_NAME_LEN, ",%a",NewPartStr);
-      else
-        AsciiSPrint(TempPartition, MAX_PARTITION_NAME_LEN, "%a",NewPartStr);
-
-      gBS->CopyMem(ReplaceStr, TempPartition, AsciiStrLen(TempPartition));
-      ReplaceStr = ReplaceStr+AsciiStrLen(TempPartition);
-    }
-    /*This case is for extra ','*/
-    if (!NewPartStr && !RestParts)
-      ReplaceStr = ReplaceStr-1;
-
-    *ReplaceStr = '\0';
-
-    Status = fdt_setprop_string(fdt,
-		         ParentOffset,
-			 Table.Property,
-			 (CHAR8 *)PartitionString);
-
-    if(Status){
-      DEBUG ((EFI_D_ERROR, "Unable to set property: %a\n",Table.Property));
-      Status = EFI_NOT_FOUND;
-      goto error;
-    }
-    Prop = fdt_get_property (fdt, ParentOffset, Table.Property, &PropLen);
-    NodeName = (char *)(uintptr_t)fdt_get_name (fdt, ParentOffset, NULL);
-
-    DEBUG ((EFI_D_VERBOSE, "Property:%a found for sub-node:%a\tProperty:%a\n",Table.Property, NodeName, Prop->data));
-
-    AsciiSPrint(TempPartition, MAX_PARTITION_NAME_LEN, "%a/%a",FsTable.ParentNode,OldPartStr);
-    /* Get the Odm Node Offset */
-    NodeOffset = fdt_path_offset (fdt, TempPartition);
-    if(NodeOffset < 0){
-      DEBUG ((EFI_D_ERROR, "Failed to Get parent node: %a\terror: %d\n",
-              OldPartStr, ParentOffset));
-      Status = EFI_NOT_FOUND;
-      goto error;
-    }
-    /*Remove the Partition Node */
-    Status = fdt_del_node(fdt, NodeOffset);
-    if(Status){
-      DEBUG ((EFI_D_ERROR, "fdt_del_node(OldPartStr): %s\n",fdt_strerror(Status)));
-      goto error;
-    }
-  }
-error:
-  if (PartitionString){
-    FreePool (PartitionString);
-    PartitionString = NULL;
-  }
-  return Status;
 }
 
 /* Update device tree for fstab node */
@@ -756,7 +890,7 @@ UpdateFstabNode (VOID *fdt)
   UINT32 PaddingEnd = 0;
 
   /* Find the parent node */
-  ParentOffset = fdt_path_offset (fdt, Table.ParentNode);
+  ParentOffset = FdtPathOffset (fdt, Table.ParentNode);
   if (ParentOffset < 0) {
     DEBUG ((EFI_D_VERBOSE, "Failed to Get parent node: fstab\terror: %d\n",
             ParentOffset));
@@ -798,8 +932,9 @@ UpdateFstabNode (VOID *fdt)
       /* For Dynamic partition support disable firmware fstab nodes. */
       if (IsDynamicPartitionSupport ()) {
         DEBUG ((EFI_D_VERBOSE, "Disabling node status :%a\n", NodeName));
-        Status = fdt_setprop (fdt, SubNodeOffset, Table.Property, "disabled",
-                             (AsciiStrLen ("disabled") + 1));
+        Status = FdtSetProp (fdt, SubNodeOffset, Table.Property,
+                          (CONST VOID *)"disabled",
+                          (AsciiStrLen ("disabled") + 1));
         if (Status) {
          DEBUG ((EFI_D_ERROR, "ERROR: Failed to disable Node: %a\n", NodeName));
         }

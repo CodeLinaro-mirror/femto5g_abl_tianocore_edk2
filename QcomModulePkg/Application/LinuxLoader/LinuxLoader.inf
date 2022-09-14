@@ -1,5 +1,5 @@
 #/* @file
-#  Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+#  Copyright (c) 2017-2018,2021 The Linux Foundation. All rights reserved.
 #  Portions Copyright (c) 2011-2013, ARM Limited. All rights reserved.
 #
 #  This program and the accompanying materials
@@ -39,7 +39,9 @@
 	EmbeddedPkg/EmbeddedPkg.dec
 	ArmPlatformPkg/ArmPlatformPkg.dec
 	MdeModulePkg/MdeModulePkg.dec
+	StdLib/StdLib.dec
 	QcomModulePkg/QcomModulePkg.dec
+
 
 [LibraryClasses]
 	DxeServicesTableLib
@@ -48,6 +50,7 @@
 	CacheMaintenanceLib
 	Zlib
 	ArmLib
+	ArmSmcLib
 	BaseLib
 	DebugLib
 	DevicePathLib
@@ -62,6 +65,7 @@
 	EfiFileLib
 	FastbootLib
 	UbsanLib
+        AesLib
 
 [Guids]
 	gEfiFileInfoGuid

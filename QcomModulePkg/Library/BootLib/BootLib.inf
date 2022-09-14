@@ -1,5 +1,5 @@
 #/*
-# * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+# * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
 # *
 # * Redistribution and use in source and binary forms, with or without
 # * modification, are permitted provided that the following conditions are
@@ -40,7 +40,7 @@
 	GCC:*_*_*_CC_FLAGS = $(LLVM_ENABLE_SAFESTACK) $(LLVM_SAFESTACK_USE_PTR) $(LLVM_SAFESTACK_COLORING)
 
 [BuildOptions.AARCH64]
-	GCC:*_*_*_CC_FLAGS = -O2 $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT) -Wno-asm-operand-widths
+	GCC:*_*_*_CC_FLAGS = -O2 $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT)
 	GCC:*_*_*_CC_FLAGS = $(UBSAN_UEFI_GCC_FLAG_UNDEFINED)
 	GCC:*_*_*_CC_FLAGS = $(UBSAN_UEFI_GCC_FLAG_ALIGNMENT)
 
@@ -67,8 +67,9 @@
 	PartialGoods.c
 	LECmdLine.c
 	HypervisorMvCalls.c
+	FdtRw.c
+	ThreadStack.c
 	EarlyEthernet.c
-	EarlyUsbInit.c
 
 [Packages]
 	ArmPkg/ArmPkg.dec
@@ -93,10 +94,10 @@
 	FdtLib
 	TimerLib
 	MemoryAllocationLib
-	UefiHiiServicesLib
 	StackCanary
 	AvbLib
 	UbsanLib
+	AesLib
 
 [Guids]
 	gEfiFileInfoGuid
@@ -151,6 +152,7 @@
 	gQcomScmProtocolGuid
 	gEfiNandPartiGuidProtocolGuid
 	gEfiDDRGetInfoProtocolGuid
+	gEfiKernelProtocolGuid
 
 [FixedPcd]
 	gArmTokenSpaceGuid.PcdSystemMemoryBase
@@ -164,6 +166,7 @@
 	gQcomTokenSpaceGuid.EnableDisplayMenu
 	gQcomTokenSpaceGuid.KernelLoadAddress32
 	gQcomTokenSpaceGuid.EnableMdtpSupport
+	gQcomTokenSpaceGuid.EnableNewNodeSearchFuc
 
 [Depex]
 	TRUE

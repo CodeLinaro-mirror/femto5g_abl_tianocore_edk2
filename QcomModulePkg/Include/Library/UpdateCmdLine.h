@@ -3,7 +3,7 @@
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2009-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -71,6 +71,7 @@ typedef struct UpdateCmdLineParamList {
   CONST CHAR8 *LogLevel;
   CONST CHAR8 *BootDeviceCmdLine;
   CONST CHAR8 *AndroidBootMode;
+  CONST CHAR8 *AndroidBootFstabSuffix;
   CHAR8 *BootDevBuf;
   CHAR8 *FfbmStr;
   CHAR8 *AndroidSlotSuffix;
@@ -80,31 +81,34 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *DtboIdxStr;
   CHAR8 *DtbIdxStr;
   CHAR8 *LEVerityCmdLine;
-  CHAR8 *CvmSystemPtnCmdLine;
+  CHAR8 *FstabSuffix;
+  UINT32 HeaderVersion;
+  CONST CHAR8 *SystemdSlotEnv;
+  CHAR8 *ResumeCmdLine;
   CHAR8 *EarlyIPv4CmdLine;
   CHAR8 *EarlyIPv6CmdLine;
   CHAR8 *EarlyEthMacCmdLine;
-  CHAR8 *EarlyServicesCmdLine;
-  CHAR8 *ModemPathCmdLine;
-  CHAR8 *UsbCompCmdLine;
-  CHAR8 *ResumeCmdLine;
+  CHAR8 *SilentBootModeCmdLine;
 } UpdateCmdLineParamList;
 
 EFI_STATUS
 UpdateCmdLine (CONST CHAR8 *CmdLine,
                CHAR8 *FfbmStr,
                BOOLEAN Recovery,
-	       BOOLEAN FlashlessBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
-               CHAR8 **FinalCmdLine);
+               CHAR8 **FinalCmdLine,
+               UINT32 HeaderVersion,
+               CHAR8 SilentMode);
 BOOLEAN
 TargetBatterySocOk (UINT32 *BatteryVoltage);
 
 UINT32
 GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot,
-	       BOOLEAN FlashlessBoot, BOOLEAN BootIntoRecovery,
-	       CHAR16 *ReqPartition, CHAR8 *Key);
+BOOLEAN BootIntoRecovery, CHAR16 *ReqPartition, CHAR8 *Key);
+
+EFI_STATUS
+TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus);
 
 UINT32
 GetResumeCmdLine(CHAR8 **ResumeCmdLine, CHAR16 *ReqPartition);

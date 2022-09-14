@@ -2,7 +2,7 @@
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2009-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -42,50 +42,23 @@
 #include <Library/PartitionTableUpdate.h>
 #include <Library/ShutdownServices.h>
 #include <Library/StackCanary.h>
+#include "Library/ThreadStack.h"
 #include <Library/HypervisorMvCalls.h>
+#include <Library/UpdateCmdLine.h>
 
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
 
-#if HIBERNATION_SUPPORT
-void BootIntoHibernationImage(BootInfo *Info);
+#if HIBERNATION_SUPPORT_INSECURE
+void BootIntoHibernationImage(BootInfo *Info, BOOLEAN *SetRotAndBootState);
 #endif
 
 STATIC BOOLEAN BootReasonAlarm = FALSE;
 STATIC BOOLEAN BootIntoFastboot = FALSE;
 STATIC BOOLEAN BootIntoRecovery = FALSE;
-UINT64 FlashlessBootImageAddr = 0;
-STATIC VOID* UnSafeStackPtr;
-
-STATIC EFI_STATUS __attribute__ ( (no_sanitize ("safe-stack")))
-AllocateUnSafeStackPtr (VOID)
-{
-
-  EFI_STATUS Status = EFI_SUCCESS;
-
-  UnSafeStackPtr = AllocateZeroPool (BOOT_LOADER_MAX_UNSAFE_STACK_SIZE);
-  if (UnSafeStackPtr == NULL) {
-    DEBUG ((EFI_D_ERROR, "Failed to Allocate memory for UnSafeStack \n"));
-    Status = EFI_OUT_OF_RESOURCES;
-    return Status;
-  }
-
-  UnSafeStackPtr += BOOT_LOADER_MAX_UNSAFE_STACK_SIZE;
-
-  return Status;
-}
-
-//This function is to return the Unsafestack ptr address
-VOID** __attribute__ ( (no_sanitize ("safe-stack")))
-__safestack_pointer_address (VOID)
-{
-
-  return (VOID**) &UnSafeStackPtr;
-}
 
 // This function is used to Deactivate MDTP by entering recovery UI
-
 STATIC EFI_STATUS MdtpDisable (VOID)
 {
   BOOLEAN MdtpActive = FALSE;
@@ -133,6 +106,25 @@ GetRebootReason (UINT32 *ResetReason)
   return Status;
 }
 
+BOOLEAN IsABRetryCountUpdateRequired (VOID)
+{
+  BOOLEAN BatteryStatus;
+
+  /* Check power off charging */
+  TargetPauseForBatteryCharge (&BatteryStatus);
+
+  /* Do not decrement bootable retry count in below states:
+     * fastboot, fastbootd, charger, recovery
+     */
+  if ((BatteryStatus &&
+       IsChargingScreenEnable ()) ||
+       BootIntoFastboot ||
+       BootIntoRecovery) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
 /**
   Linux Loader Application EntryPoint
 
@@ -151,11 +143,12 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
 
   UINT32 BootReason = NORMAL_MODE;
   UINT32 KeyPressed = SCAN_NULL;
+  /* SilentMode Boot */
+  CHAR8 SilentBootMode = NON_SILENT_MODE;
   /* MultiSlot Boot */
-  BOOLEAN MultiSlotBoot = FALSE;
-  /* Flashless Boot */
-  BOOLEAN FlashlessBoot = FALSE;
-  UINTN DataSize = sizeof (FlashlessBootImageAddr);
+  BOOLEAN MultiSlotBoot;
+ /* set ROT and BootSatte only once per boot*/
+  BOOLEAN SetRotAndBootState = FALSE;
 
   DEBUG ((EFI_D_INFO, "Loader Build Info: %a %a\n", __DATE__, __TIME__));
   DEBUG ((EFI_D_VERBOSE, "LinuxLoader Load Address to debug ABL: 0x%llx\n",
@@ -163,7 +156,8 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   DEBUG ((EFI_D_VERBOSE, "LinuxLoaderEntry Address: 0x%llx\n",
          (UINTN)LinuxLoaderEntry));
 
-  Status = AllocateUnSafeStackPtr ();
+  Status = InitThreadUnsafeStack ();
+
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to Allocate memory for Unsafe Stack: %r\n",
             Status));
@@ -173,15 +167,6 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   StackGuardChkSetup ();
 
   BootStatsSetTimeStamp (BS_BL_START);
-
-  Status = gRT->GetVariable ((CHAR16 *)L"BootImageAddress", &gQcomTokenSpaceGuid,
-				NULL, &DataSize, &FlashlessBootImageAddr);
-  if (Status == EFI_SUCCESS) {
-    FlashlessBoot = TRUE;
-    /* In flashless boot avoid all access to secondary storage during boot
-     */
-    goto flashless_boot;
-  }
 
   // Initialize verified boot & Read Device Info
   Status = DeviceInfoInit ();
@@ -262,6 +247,18 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
       goto stack_guard_update_default;
     }
     break;
+  case SILENT_MODE:
+    SilentBootMode = SILENT_MODE;
+    break;
+  case NON_SILENT_MODE:
+    SilentBootMode = NON_SILENT_MODE;
+    break;
+  case FORCED_SILENT:
+    SilentBootMode = FORCED_SILENT;
+    break;
+  case FORCED_NON_SILENT:
+    SilentBootMode = FORCED_NON_SILENT;
+    break;
   default:
     if (BootReason != NORMAL_MODE) {
       DEBUG ((EFI_D_ERROR,
@@ -275,7 +272,6 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   if (Status != EFI_SUCCESS)
     DEBUG ((EFI_D_VERBOSE, "RecoveryInit failed ignore: %r\n", Status));
 
-flashless_boot:
   /* Populate board data required for fastboot, dtb selection and cmd line */
   Status = BoardInit ();
   if (Status != EFI_SUCCESS) {
@@ -286,6 +282,7 @@ flashless_boot:
   DEBUG ((EFI_D_INFO, "KeyPress:%u, BootReason:%u\n", KeyPressed, BootReason));
   DEBUG ((EFI_D_INFO, "Fastboot=%d, Recovery:%d\n",
                                           BootIntoFastboot, BootIntoRecovery));
+  DEBUG ((EFI_D_INFO, "SilentBoot Mode:%u\n", SilentBootMode));
   if (!GetVmData ()) {
     DEBUG ((EFI_D_ERROR, "VM Hyp calls not present\n"));
   }
@@ -297,11 +294,11 @@ flashless_boot:
     Info.MultiSlotBoot = MultiSlotBoot;
     Info.BootIntoRecovery = BootIntoRecovery;
     Info.BootReasonAlarm = BootReasonAlarm;
-    Info.FlashlessBoot = FlashlessBoot;
-  #if HIBERNATION_SUPPORT
-    BootIntoHibernationImage(&Info);
+    Info.SilentBootMode = SilentBootMode;
+  #if HIBERNATION_SUPPORT_INSECURE
+    BootIntoHibernationImage(&Info, &SetRotAndBootState);
   #endif
-    Status = LoadImageAndAuth (&Info, FALSE);
+    Status = LoadImageAndAuth(&Info, FALSE, SetRotAndBootState);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
       goto fastboot;
@@ -311,10 +308,6 @@ flashless_boot:
   }
 
 fastboot:
-  if (FlashlessBoot) {
-    DEBUG ((EFI_D_INFO, "No fastboot support for flashless chipsets, Infinte loop\n"));
-    while(1);
-  }
   DEBUG ((EFI_D_INFO, "Launching fastboot\n"));
   Status = FastbootInitialize ();
   if (EFI_ERROR (Status)) {
@@ -325,5 +318,6 @@ fastboot:
 stack_guard_update_default:
   /*Update stack check guard with defualt value then return*/
   __stack_chk_guard = DEFAULT_STACK_CHK_GUARD;
+
   return Status;
 }

@@ -137,8 +137,6 @@ static void *ufdt_get_fixup_location(struct ufdt *tree, const char *fixup) {
    * dto_malloc a copy and split it up.
    */
   path = dto_strdup(fixup);
-  if (!path)
-	return NULL;
   prop_ptr = dto_strchr(path, ':');
   if (prop_ptr == NULL) {
     dto_error("Missing property part in '%s'\n", path);
@@ -651,12 +649,8 @@ struct fdt_header *ufdt_apply_overlay(struct fdt_header *main_fdt_header,
   struct ufdt *main_tree, *overlay_tree;
 
   main_tree = fdt_to_ufdt(main_fdt_header, main_fdt_size);
-  if(!main_tree)
-     return NULL;
 
   overlay_tree = fdt_to_ufdt(overlay_fdtp, overlay_size);
-  if(!overlay_tree)
-       return NULL;
 
   int err = ufdt_overlay_apply(main_tree, overlay_tree, overlay_size);
   if (err < 0) {
@@ -724,8 +718,6 @@ struct fdt_header *ufdt_apply_multi_overlay(struct fdt_header *main_fdt_header,
   }
 
   main_tree = fdt_to_ufdt((void *)main_fdt_header, main_fdt_size);
-  if(!main_tree)
-     return NULL;
 
   /* Apply overlay with first dts from the list, and iterate the loop from
      index 1 to avoid unnecessary rebuilding of phandle table
@@ -747,8 +739,6 @@ struct fdt_header *ufdt_apply_multi_overlay(struct fdt_header *main_fdt_header,
   while (overlay_dt_list != NULL) {
     overlay_tree = fdt_to_ufdt((void *)overlay_dt_list->address,
                                overlay_dt_list->size);
-    if(!overlay_tree)
-      return NULL;
     /* Rebuild the phandle_table for the combined tree.*/
     main_tree->phandle_table = build_phandle_table(main_tree);
 

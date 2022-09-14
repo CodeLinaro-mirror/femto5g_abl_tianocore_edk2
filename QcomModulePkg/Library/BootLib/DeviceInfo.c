@@ -33,19 +33,11 @@
 #include <Library/PartitionTableUpdate.h>
 #include <Library/Recovery.h>
 #include <Library/StackCanary.h>
-#include <Library/EarlyUsbInit.h>
 
 #define GOLDEN_SNAPSHOT_MAGIC 0x575757
 
 STATIC DeviceInfo DevInfo;
 STATIC BOOLEAN FirstReadDevInfo = TRUE;
-
-struct usb_composition *GetDevInfoUsbComp (VOID)
-{
-  struct usb_composition *DevInfoUsbCompPtr;
-  DevInfoUsbCompPtr = (struct usb_composition *)(&DevInfo.usb_comp);
-  return DevInfoUsbCompPtr;
-}
 
 BOOLEAN IsSnapshotGolden (VOID)
 {
@@ -391,49 +383,6 @@ GetUserKey (CHAR8 **UserKey, UINT32 *UserKeySize)
   *UserKey = DevInfo.user_public_key;
   *UserKeySize = DevInfo.user_public_key_length;
   return EFI_SUCCESS;
-}
-
-EFI_STATUS
-ClearDevInfoUsbCompositionPid (VOID)
-{
-  EFI_STATUS Status = EFI_SUCCESS;
-
-  if (FirstReadDevInfo) {
-    Status = EFI_NOT_STARTED;
-    DEBUG ((EFI_D_ERROR, "USB Composition DeviceInfo not initalized \n"));
-    return Status;
-  }
-  gBS->SetMem (DevInfo.usb_comp.magic, sizeof (DevInfo.usb_comp.magic), 0);
-  Status = ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Unable to Write Device Info: %r\n", Status));
-  }
-  return Status;
-}
-
-EFI_STATUS
-SetDevInfoUsbComposition (CHAR8 *Pid, UINTN PidSize)
-{
-  EFI_STATUS Status = EFI_SUCCESS;
-
-  if (FirstReadDevInfo) {
-    Status = EFI_NOT_STARTED;
-    DEBUG ((EFI_D_ERROR, "USB Composition DeviceInfo not initalized \n"));
-    return Status;
-  }
-
-  if (PidSize > ARRAY_SIZE (DevInfo.usb_comp.pid)) {
-    DEBUG ((EFI_D_ERROR, "Pid size:%d too large!\n", PidSize));
-    return EFI_OUT_OF_RESOURCES;
-  }
-
-  gBS->CopyMem (DevInfo.usb_comp.magic, USB_COMP_MAGIC, USB_COMP_MAGIC_SIZE);
-  gBS->CopyMem (DevInfo.usb_comp.pid, Pid, PidSize);
-  Status = ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Unable to Write Device Info: %r\n", Status));
-  }
-  return Status;
 }
 
 EFI_STATUS
