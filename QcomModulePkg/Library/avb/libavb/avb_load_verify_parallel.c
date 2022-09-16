@@ -317,7 +317,7 @@ INT32 PartitionLoad(VOID* Arg) {
 }
 
 INT32 PartitionVerify(VOID* Arg) {
-  AvbSlotVerifyResult Status;
+  AvbSlotVerifyResult Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
   uint64_t ImageOffset;
   uint64_t CurrentChunkSize;
   uint64_t SplitImageSize;
@@ -371,14 +371,14 @@ INT32 PartitionVerify(VOID* Arg) {
     }
     ThreadVerify->RemainImageSize -= ThreadVerify->SplitImageSize;
     ImageOffset += CurrentChunkSize;
+    if(Status != AVB_SLOT_VERIFY_RESULT_OK)
+        goto out;
   }
 
   /* Second stage */
   ThreadVerify->IsFinal = true;
   CurrentChunkSize = ThreadVerify->RemainImageSize;
   KernIntf->Sem->SemWait (SemLoadSecond);
-  if(Status != AVB_SLOT_VERIFY_RESULT_OK)
-     goto out;
 
   if(ThreadVerify->Sha256HashCheck == true)
   {
