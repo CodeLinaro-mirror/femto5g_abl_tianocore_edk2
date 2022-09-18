@@ -324,9 +324,6 @@ VOID DisplayFastbootMenu (VOID)
 
   if (IsEnableDisplayMenuFlagSupported ()) {
     OptionMenuInfo = &gMenuInfo;
-
-DEBUG ((EFI_D_INFO, "[%p]\n", OptionMenuInfo));
-
     DrawMenuInit ();
     OptionMenuInfo->LastMenuType = OptionMenuInfo->Info.MenuType;
 
