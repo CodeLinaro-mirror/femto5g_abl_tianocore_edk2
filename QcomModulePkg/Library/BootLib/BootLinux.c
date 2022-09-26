@@ -557,7 +557,6 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
         return EFI_BAD_BUFFER_SIZE;
       }
       SingleDtHdr = (BootParamlistPtr->ImageBuffer +
-                     BootParamlistPtr->PageSize +
                      BootParamlistPtr->DtbOffset);
 
       if (!fdt_check_header (SingleDtHdr)) {
@@ -2003,6 +2002,18 @@ BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 }
 
 BOOLEAN IsTargetAuto (VOID)
+{
+  return FALSE;
+}
+#endif
+
+#if HIBERNATION_SUPPORT
+BOOLEAN IsHibernationEnabled (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsHibernationEnabled (VOID)
 {
   return FALSE;
 }
