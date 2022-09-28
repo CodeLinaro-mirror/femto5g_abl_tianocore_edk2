@@ -64,9 +64,6 @@ GetIntegrityIMACmdline (CHAR8 *IntegrityIMACmdlinePtr)
 	if (0x1A2 != (BoardPlatformRawChipId () & 0x0000ffff)) {
 		return IMAEVMoff (IntegrityIMACmdlinePtr);
 	}
-	if (2 != BoardPlatformSubType ()) {
-		return IMAEVMoff (IntegrityIMACmdlinePtr);
-	}
 	if (100 != ((BoardTargetId () >> 8) & 0xFF)) {
 		return IMAEVMoff (IntegrityIMACmdlinePtr);
 	}
