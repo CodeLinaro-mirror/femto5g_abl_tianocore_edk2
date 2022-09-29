@@ -77,6 +77,9 @@ BUILD_CFLAGS = -MD -fshort-wchar -fno-strict-aliasing -fwrapv \
 -Wno-deprecated-declarations \
 -Wno-stringop-truncation \
 -Wno-unused-result -nostdlib -g
+ifeq ($(BUILD_NATIVE_AARCH64), true)
+BUILD_CFLAGS += -Wno-error="vla-parameter"
+endif
 endif
 BUILD_LFLAGS =
 BUILD_CXXFLAGS = -Wno-unused-result
