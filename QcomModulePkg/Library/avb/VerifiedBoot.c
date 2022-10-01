@@ -442,6 +442,27 @@ LoadPartitionImageHeader (BootInfo *Info, CHAR16 *PartName,
 }
 
 STATIC EFI_STATUS
+LoadBootImageHeader (BootInfo *Info,
+                          VOID **BootImageHdrBuffer,
+                          UINT32 *BootImageHdrSize)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  CHAR16 Pname[MAX_GPT_NAME_SIZE] = {0};
+
+  StrnCpyS (Pname, ARRAY_SIZE (Pname),
+            (CHAR16 *)L"boot", StrLen ((CHAR16 *)L"boot"));
+
+  if (Info->MultiSlotBoot) {
+    GUARD (StrnCatS (Pname, ARRAY_SIZE (Pname),
+                     GetCurrentSlotSuffix ().Suffix,
+                     StrLen (GetCurrentSlotSuffix ().Suffix)));
+  }
+
+  return LoadImageHeader (Pname, BootImageHdrBuffer, BootImageHdrSize);
+}
+
+
+STATIC EFI_STATUS
 LoadBootImageNoAuth (BootInfo *Info, UINT32 *PageSize, BOOLEAN *FastbootPath)
 {
   EFI_STATUS Status = EFI_SUCCESS;
@@ -710,7 +731,12 @@ LoadImageNoAuthWrapper (BootInfo *Info)
 
    if (!IsDynamicPartitionSupport () &&
         !IsRootCmdLineUpdated (Info)) {
-    SystemPathLen = GetSystemPath (&SystemPath, Info);
+    SystemPathLen = GetSystemPath (&SystemPath,
+                                   Info->MultiSlotBoot,
+                                   Info->BootIntoRecovery,
+                                   (CHAR16 *)L"system",
+                                   (CHAR8 *)"root",
+                                   Info->FlashlessBoot);
     if (SystemPathLen == 0 || SystemPath == NULL) {
       DEBUG ((EFI_D_ERROR, "GetSystemPath failed!\n"));
       return EFI_LOAD_ERROR;
@@ -773,7 +799,12 @@ LoadImageAndAuthVB1 (BootInfo *Info)
   }
 
   if (!IsRootCmdLineUpdated (Info)) {
-    SystemPathLen = GetSystemPath (&SystemPath, Info);
+    SystemPathLen = GetSystemPath (&SystemPath,
+                                   Info->MultiSlotBoot,
+                                   Info->BootIntoRecovery,
+                                   (CHAR16 *)L"system",
+                                   (CHAR8 *)"root",
+                                   Info->FlashlessBoot);
     if (SystemPathLen == 0 || SystemPath == NULL) {
       DEBUG ((EFI_D_ERROR, "GetSystemPath failed!\n"));
       return EFI_LOAD_ERROR;
@@ -1310,7 +1341,8 @@ IsValidPartition (Slot *Slot, CONST CHAR16 *Name)
 
 
 STATIC EFI_STATUS
-LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume)
+LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
+                        BOOLEAN SetRotAndBootState)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   AvbSlotVerifyResult Result;
@@ -1342,6 +1374,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume)
       AVB_HASHTREE_ERROR_MODE_MANAGED_RESTART_AND_EIO;
   CHAR8 Digest[AVB_SHA256_DIGEST_SIZE];
   BOOLEAN UpdateRollback = FALSE;
+  BOOLEAN UpdateRollbackIndex = FALSE;
 
   Info->BootState = RED;
   if (!HibernationResume) {
@@ -1449,6 +1482,26 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume)
     }
   } else {
     Slot CurrentSlot;
+    VOID *ImageHdrBuffer = NULL;
+    UINT32 ImageHdrSize = 0;
+
+    Status = LoadBootImageHeader (Info, &ImageHdrBuffer, &ImageHdrSize);
+
+    if (Status != EFI_SUCCESS ||
+        ImageHdrBuffer ==  NULL) {
+      DEBUG ((EFI_D_ERROR, "ERROR: Failed to load image header: %r\n", Status));
+      Info->BootState = RED;
+      goto out;
+    } else if (ImageHdrSize < sizeof (boot_img_hdr)) {
+      DEBUG ((EFI_D_ERROR,
+              "ERROR: Invalid image header size: %u\n", ImageHdrSize));
+      Info->BootState = RED;
+      Status = EFI_BAD_BUFFER_SIZE;
+      goto out;
+    }
+
+    Info->HeaderVersion = ((boot_img_hdr *)(ImageHdrBuffer))->header_version;
+    DEBUG ((EFI_D_VERBOSE, "Header version  %d\n", Info->HeaderVersion));
 
     if (!Info->NumLoadedImages) {
       AddRequestedPartition (RequestedPartitionAll, IMG_BOOT);
@@ -1464,7 +1517,14 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume)
         CurrentSlot = GetCurrentSlotSuffix ();
     }
 
-    if (IsValidPartition (&CurrentSlot, L"vendor_boot")) {
+    /* Load vendor boot in following conditions
+     * 1. In Case of header version 3
+     * 2. valid partititon.
+     */
+
+    if (IsValidPartition (&CurrentSlot, L"vendor_boot") &&
+       (Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE ||
+        Info->HeaderVersion == BOOT_HEADER_VERSION_ZERO)) {
       AddRequestedPartition (RequestedPartitionAll, IMG_VENDOR_BOOT);
       NumRequestedPartition += 1;
     } else {
@@ -1495,15 +1555,18 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume)
 
   if (AllowVerificationError && ResultShouldContinue (Result)) {
     DEBUG ((EFI_D_VERBOSE, "State: Unlocked, AvbSlotVerify returned "
-                         "%a, continue boot\n",
-            avb_slot_verify_result_to_string (Result)));
+                           "%a, continue boot\n",
+                           avb_slot_verify_result_to_string (Result)));
   } else if (Result != AVB_SLOT_VERIFY_RESULT_OK) {
     DEBUG ((EFI_D_ERROR, "ERROR: Device State %a, AvbSlotVerify returned %a\n",
-            AllowVerificationError ? "Unlocked" : "Locked",
-            avb_slot_verify_result_to_string (Result)));
+                          AllowVerificationError ? "Unlocked" : "Locked",
+                          avb_slot_verify_result_to_string (Result)));
     Status = EFI_LOAD_ERROR;
     Info->BootState = RED;
     goto out;
+  } else {
+    UpdateRollbackIndex = TRUE;
+    DEBUG ((EFI_D_INFO, "VB2: UpdateRollbackIndex flag set \n"));
   }
 
   for (UINTN ReqIndex = 0; ReqIndex < NumRequestedPartition; ReqIndex++) {
@@ -1548,6 +1611,36 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume)
   }
 
   DEBUG ((EFI_D_VERBOSE, "Total loaded partition %d\n", Info->NumLoadedImages));
+
+  if (UpdateRollbackIndex == TRUE) {
+
+    AvbIOResult AvbStatus = AVB_IO_RESULT_OK;
+    UINT64 CurrentValue;
+    UINT64 StoredValue;
+    UINT32 Idx;
+
+    for (Idx = 0; Idx < AVB_MAX_NUMBER_OF_ROLLBACK_INDEX_LOCATIONS; Idx++) {
+      CurrentValue = SlotData->rollback_indexes[Idx];
+      if (CurrentValue != 0) {
+        AvbStatus = Ops->read_rollback_index (Ops, Idx, &StoredValue);
+        if (AvbStatus == AVB_IO_RESULT_OK) {
+          if (StoredValue < CurrentValue) {
+            AvbStatus = Ops->write_rollback_index (Ops, Idx, CurrentValue);
+          }
+        }
+      }
+
+      if (AvbStatus == AVB_IO_RESULT_ERROR_OOM) {
+        Status = EFI_OUT_OF_RESOURCES;
+        goto out;
+      } else if (AvbStatus != AVB_IO_RESULT_OK) {
+        DEBUG ((EFI_D_ERROR, "Error getting rollback index for slot.\n"));
+        Status = EFI_DEVICE_ERROR;
+        goto out;
+      }
+    }
+    DEBUG ((EFI_D_INFO, "VB2: UpdateRollbackIndex done. \n"));
+  }
 
   VBData = (VB2Data *)avb_calloc (sizeof (VB2Data));
   if (VBData == NULL) {
@@ -1621,7 +1714,9 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume)
                                         &Data.SystemVersion,
                                         &Data.SystemSecurityLevel));
 
-  GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
+  if (!SetRotAndBootState) {
+      GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
+  }
 
   if (!HibernationResume) {
     ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
@@ -1874,18 +1969,24 @@ set_rot:
 
 skip_verification:
     if (!IsRootCmdLineUpdated (Info)) {
-      SystemPathLen = GetSystemPath (&SystemPath, Info);
-      if (SystemPathLen == 0 ||
-          SystemPath == NULL) {
-          return EFI_LOAD_ERROR;
-      }
-      GUARD (AppendVBCmdLine (Info, SystemPath));
+        SystemPathLen = GetSystemPath (&SystemPath,
+                                       Info->MultiSlotBoot,
+                                       Info->BootIntoRecovery,
+                                       (CHAR16 *)L"system",
+                                       (CHAR8 *)"root",
+                                       Info->FlashlessBoot);
+        if (SystemPathLen == 0 ||
+            SystemPath == NULL) {
+            return EFI_LOAD_ERROR;
+        }
+        GUARD (AppendVBCmdLine (Info, SystemPath));
     }
     return Status;
 }
 
 EFI_STATUS
-LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume)
+LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
+                        BOOLEAN SetRotAndBootState)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   BOOLEAN MdtpActive = FALSE;
@@ -2027,7 +2128,7 @@ get_ptn_name:
     Status = LoadImageAndAuthVB1 (Info);
     break;
   case AVB_2:
-    Status = LoadImageAndAuthVB2 (Info, HibernationResume);
+    Status = LoadImageAndAuthVB2 (Info, HibernationResume, SetRotAndBootState);
     break;
   case AVB_LE:
     Status = LoadImageAndAuthForLE (Info);

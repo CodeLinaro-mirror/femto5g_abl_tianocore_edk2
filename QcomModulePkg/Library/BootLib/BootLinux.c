@@ -2006,3 +2006,15 @@ BOOLEAN IsTargetAuto (VOID)
   return FALSE;
 }
 #endif
+
+#if HIBERNATION_SUPPORT_NO_AES
+BOOLEAN IsHibernationEnabled (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsHibernationEnabled (VOID)
+{
+  return FALSE;
+}
+#endif
