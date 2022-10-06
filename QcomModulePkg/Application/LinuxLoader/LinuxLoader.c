@@ -28,6 +28,40 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following
+ * license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * * Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *   contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*
  */
 
 #include "AutoGen.h"
@@ -104,6 +138,28 @@ GetRebootReason (UINT32 *ResetReason)
   if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION)
     RstReasonIf->ClearResetReason (RstReasonIf);
   return Status;
+}
+
+
+STATIC VOID
+SetDefaultAudioFw ()
+{
+  CHAR8 AudioFW[MAX_AUDIO_FW_LENGTH];
+  STATIC CHAR8* Src;
+  STATIC UINT32 Length;
+  EFI_STATUS Status;
+
+  Status = ReadAudioFrameWork (&Src, &Length);
+
+  if ((Status == EFI_SUCCESS) && (AsciiStrLen (Src) == 0) &&
+       (AsciiStrLen (AUDIO_FRAMEWORK) > 0)) {
+    AsciiStrnCpyS(AudioFW, MAX_AUDIO_FW_LENGTH, AUDIO_FRAMEWORK,
+                     AsciiStrLen (AUDIO_FRAMEWORK));
+
+    StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIO_FRAMEWORK));
+  } else
+     DEBUG ((EFI_D_ERROR, "TARGET_AUDIO_FRAMEWORK is NOT updated length =%d, %a\n",
+              Length, AUDIO_FRAMEWORK));
 }
 
 BOOLEAN IsABRetryCountUpdateRequired (VOID)
@@ -203,6 +259,8 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     DEBUG ((EFI_D_ERROR, "Error reading key status: %r\n", Status));
     goto stack_guard_update_default;
   }
+
+  SetDefaultAudioFw ();
 
   // check for reboot mode
   Status = GetRebootReason (&BootReason);
