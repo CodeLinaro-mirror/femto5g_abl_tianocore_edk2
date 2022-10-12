@@ -418,7 +418,9 @@ UpdatePartialGoodsNode (VOID *fdt)
   UINT32 PartialGoodsCpuValue[MAX_CPU_CLUSTER];
   EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol;
   EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 SkuIdx = 0;
 
+  SkuIdx = BoardSoftSkuId ();
   Status = gBS->LocateProtocol (&gEfiChipInfoProtocolGuid, NULL,
                                 (VOID **)&pChipInfoProtocol);
   if (EFI_ERROR (Status))
@@ -445,6 +447,11 @@ UpdatePartialGoodsNode (VOID *fdt)
   Status = ReadCpuPartialGoods (pChipInfoProtocol, PartialGoodsCpuValue);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_INFO, "No partial goods for cpu ss found.\n"));
+  }
+
+  if ((SkuIdx == 1) &&
+      (PartialGoodsCpuValue[0] == 0)) {
+        PartialGoodsCpuValue[0] = 0xc0;
   }
 
   for (i = 0; i < MAX_CPU_CLUSTER; i++) {
