@@ -1030,7 +1030,8 @@ BootLinux (BootInfo *Info)
                              BootParamlistPtr.DeviceTreeLoadAddr));
 
   if (BootParamlistPtr.ExtraCmdLine[0]) {
-    UINT32 FullCmdLen = BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE;
+    UINT32 FullCmdLen = BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE +
+                                VENDOR_BOOT_ARGS_SIZE;
     CHAR8* FullCmdLine = AllocateZeroPool (FullCmdLen);
 
     if (!FullCmdLine)
@@ -1042,7 +1043,7 @@ BootLinux (BootInfo *Info)
     BootParamlistPtr.CmdLine[FullCmdLen - 1] = '\0';
   }
   else {
-    BootParamlistPtr.CmdLine[BOOT_ARGS_SIZE - 1] = '\0';
+    BootParamlistPtr.CmdLine[BOOT_ARGS_SIZE + VENDOR_BOOT_ARGS_SIZE - 1] = '\0';
   }
 
   if (AsciiStrStr (BootParamlistPtr.CmdLine, "root=")) {
