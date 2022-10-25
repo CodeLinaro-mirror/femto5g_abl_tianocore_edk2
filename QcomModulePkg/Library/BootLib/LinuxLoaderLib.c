@@ -764,7 +764,7 @@ EFI_STATUS
 GetBootDevice (CHAR8 *BootDevBuf, UINT32 Len)
 {
   EFI_STATUS Status = EFI_SUCCESS;
-  UINTN BootDevAddr;
+  UINT64 BootDevAddr;
   UINTN DataSize = sizeof (BootDevAddr);
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
 
@@ -772,6 +772,8 @@ GetBootDevice (CHAR8 *BootDevBuf, UINT32 Len)
       gRT->GetVariable ((CHAR16 *)L"BootDeviceBaseAddr", &gQcomTokenSpaceGuid,
                         NULL, &DataSize, &BootDevAddr);
 
+  DEBUG((EFI_D_VERBOSE, "\n AMRIT : value of DataSize =%ld \n", DataSize ));
+  DEBUG((EFI_D_VERBOSE, "\n AMRIT : BootDevAddr =%x \n", BootDevAddr ));
   if (Status != EFI_SUCCESS) {
     DEBUG (
         (EFI_D_ERROR, "Failed to get Boot Device Base address, %r\n", Status));
