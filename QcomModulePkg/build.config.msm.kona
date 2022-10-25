@@ -1,5 +1,5 @@
 ################################################################################
-MSM_ARCH=khaje
+MSM_ARCH=kona
 BOOTLOADER_ARCH=AARCH64
 VERIFIED_BOOT_ENABLED=1
 AB_RETRYCOUNT_DISABLE=0

@@ -1,6 +1,8 @@
 ################################################################################
 ## Inheriting configs from ACK
-. ${ROOT_DIR}/common/build.config.common
+if [ -f "${ROOT_DIR}/common/build.config.common" ]; then
+    . "${ROOT_DIR}/common/build.config.common"
+fi
 
 PREBUILT_PYTHON_PATH=prebuilts/build-tools/path/linux-x86/python3
 
@@ -67,4 +69,7 @@ if [ -n "${TARGET_LINUX_BOOT_CPU_SELECTION}" ]; then
 fi
 if [ -n "${TARGET_LINUX_BOOT_CPU_ID}" ]; then
   MAKE_FLAGS+=("TARGET_LINUX_BOOT_CPU_ID=${TARGET_LINUX_BOOT_CPU_ID}")
+fi
+if [ -n "${HIBERNATION_SUPPORT_NO_AES}" ]; then
+  MAKE_FLAGS+=("HIBERNATION_SUPPORT_NO_AES=${HIBERNATION_SUPPORT_NO_AES}")
 fi

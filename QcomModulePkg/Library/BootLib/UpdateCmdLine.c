@@ -434,7 +434,7 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
   }
 
   if (!AsciiStrCmp ("EMMC", RootDevStr)) {
-    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %s=/dev/mmcblk0p%d", Key, Index);
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/mmcblk0p%d", Key, Index);
   } else if (!AsciiStrCmp ("NAND", RootDevStr)) {
     /* NAND is being treated as GPT partition, hence reduce the index by 1 as
      * PartitionIndex (0) should be ignored for correct mapping of partition.
@@ -1001,12 +1001,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
   InitializeListHead (BootConfigListHead);
 
-  if (!FlashlessBoot) {
-    Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "Error Finding board serial num: %x\n", Status));
-      return Status;
-    }
+  Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error Finding board serial num: %x\n", Status));
+    return Status;
   }
 
   if (CmdLine && CmdLine[0]) {
