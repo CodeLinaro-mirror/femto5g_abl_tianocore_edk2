@@ -141,6 +141,8 @@ STATIC CHAR8 *MemOff = " mem=";
 STATIC CONST CHAR8 *MemHpState = " memhp_default_state=online";
 STATIC CONST CHAR8 *MovableNode = " movable_node";
 
+STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
+
 LIST_ENTRY *BootConfigListHead = NULL;
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
@@ -586,6 +588,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     }
   }
 
+  if (Param->FlashlessBoot) {
+    Src = WarmResetArgs;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
   if ((Param->BootDevBuf) &&
       (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE)) {
     Src = Param->BootDeviceCmdLine;
@@ -1001,12 +1008,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
   InitializeListHead (BootConfigListHead);
 
-  if (!FlashlessBoot) {
-    Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "Error Finding board serial num: %x\n", Status));
-      return Status;
-    }
+  Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error Finding board serial num: %x\n", Status));
+    return Status;
   }
 
   if (CmdLine && CmdLine[0]) {
@@ -1345,6 +1350,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.MultiSlotBoot = MultiSlotBoot;
   Param.AlarmBoot = AlarmBoot;
   Param.MdtpActive = MdtpActive;
+  Param.FlashlessBoot = FlashlessBoot;
   Param.CmdLineLen = CmdLineLen;
   Param.HaveCmdLine = HaveCmdLine;
   Param.PauseAtBootUp = PauseAtBootUp;
