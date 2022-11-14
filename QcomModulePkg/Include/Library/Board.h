@@ -97,16 +97,22 @@ typedef enum {
 #define DDR_SHIFT      8
 
 #define MB             (1024 * 1024UL)
+#define DDR_128MB      (128 * MB)
 #define DDR_256MB      (256 * MB)
 #define DDR_512MB      (512 * MB)
 #define DDR_1024MB     (1024 * MB)
 #define DDR_2048MB     (2048 * MB)
+#define DDR_3072MB     (3072 * MB)
+#define DDR_4096MB     (4096 * MB)
 
 typedef enum {
   DDRTYPE_256MB = 1,
   DDRTYPE_512MB,
   DDRTYPE_1024MB,
   DDRTYPE_2048MB,
+  DDRTYPE_3072MB,
+  DDRTYPE_4096MB,
+  DDRTYPE_128MB,
 } DdrType;
 
 struct BoardInfo {
@@ -138,6 +144,7 @@ EFIChipInfoFoundryIdType BoardPlatformFoundryId (VOID);
 EFI_PLATFORMINFO_PLATFORM_TYPE BoardPlatformType (VOID);
 UINT32 BoardPlatformVersion (VOID);
 UINT32 BoardPlatformSubType (VOID);
+UINT32 BoardOEMVariantId (VOID);
 UINT32 BoardTargetId (VOID);
 VOID
 GetRootDeviceType (CHAR8 *StrDeviceType, UINT32 Len);

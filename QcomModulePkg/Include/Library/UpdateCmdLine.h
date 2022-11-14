@@ -98,6 +98,7 @@ typedef struct UpdateCmdLineParamList {
   BOOLEAN MultiSlotBoot;
   BOOLEAN AlarmBoot;
   BOOLEAN MdtpActive;
+  BOOLEAN FlashlessBoot;
   UINT32 CmdLineLen;
   UINT32 HaveCmdLine;
   UINT32 PauseAtBootUp;
@@ -132,6 +133,8 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *EarlyIPv4CmdLine;
   CHAR8 *EarlyIPv6CmdLine;
   CHAR8 *EarlyEthMacCmdLine;
+  CHAR8 *ResumeCmdLine;
+  CONST CHAR8 *SystemdSlotEnv;
 } UpdateCmdLineParamList;
 
 
@@ -153,7 +156,12 @@ BOOLEAN
 TargetBatterySocOk (UINT32 *BatteryVoltage);
 
 UINT32
-GetSystemPath (CHAR8 **SysPath, BootInfo *Info);
+GetSystemPath (CHAR8 **SysPath,
+               BOOLEAN MultiSlotBoot,
+               BOOLEAN BootIntoRecovery,
+               CHAR16 *ReqPartition,
+               CHAR8 *Key,
+               BOOLEAN FlashlessBoot);
 
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus);
@@ -168,4 +176,7 @@ AddtoBootConfigList (BOOLEAN BootConfigFlag,
                 LIST_ENTRY *list,
                 UINT32 ParamKeyLen,
                 UINT32 ParamValueLen);
+
+UINT32
+GetResumeCmdLine (CHAR8 **ResumeCmdLine, CHAR16 *ReqPartition);
 #endif
