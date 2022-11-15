@@ -98,6 +98,7 @@ typedef struct UpdateCmdLineParamList {
   BOOLEAN MultiSlotBoot;
   BOOLEAN AlarmBoot;
   BOOLEAN MdtpActive;
+  BOOLEAN FlashlessBoot;
   UINT32 CmdLineLen;
   UINT32 HaveCmdLine;
   UINT32 PauseAtBootUp;
@@ -133,6 +134,7 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *EarlyIPv6CmdLine;
   CHAR8 *EarlyEthMacCmdLine;
   CHAR8 *ResumeCmdLine;
+  CONST CHAR8 *SystemdSlotEnv;
 } UpdateCmdLineParamList;
 
 

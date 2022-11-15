@@ -627,20 +627,7 @@ BoardSerialNum (CHAR8 *StrSerialNum, UINT32 Len)
   MemCardType Type = EMMC;
 
   Type = CheckRootDeviceType ();
-  if (Type == UNKNOWN)
-    return EFI_NOT_FOUND;
-
-  Status = GetDeviceHandleInfo (HandleInfoList, MaxHandles, Type);
-  if (EFI_ERROR (Status)) {
-    return Status;
-  }
-
-  Status =
-      gBS->HandleProtocol (HandleInfoList[0].Handle,
-                           &gEfiMemCardInfoProtocolGuid, (VOID **)&CardInfo);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Error locating MemCardInfoProtocol:%x\n", Status));
-
+  if (Type == UNKNOWN) {
     Status = gBS->LocateProtocol (&gEfiChipInfoProtocolGuid, NULL,
                                   (VOID **)&ChipInfo);
     if (Status != EFI_SUCCESS) {
@@ -657,6 +644,20 @@ BoardSerialNum (CHAR8 *StrSerialNum, UINT32 Len)
 
     AsciiSPrint (StrSerialNum, Len, "%x", SerialNo);
     ToLower (StrSerialNum);
+    return Status;
+  };
+
+  Status = GetDeviceHandleInfo (HandleInfoList, MaxHandles, Type);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  Status =
+      gBS->HandleProtocol (HandleInfoList[0].Handle,
+                           &gEfiMemCardInfoProtocolGuid, (VOID **)&CardInfo);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error locating MemCardInfoProtocol:%x\n", Status));
+
     return Status;
   }
 
@@ -717,6 +718,11 @@ UINT32 BoardPlatformVersion (VOID)
 UINT32 BoardPlatformSubType (VOID)
 {
   return platform_board_info.PlatformInfo.subtype;
+}
+
+UINT32 BoardOEMVariantId (VOID)
+{
+  return platform_board_info.PlatformInfo.OEMVariantID;
 }
 
 BOOLEAN BoardPlatformFusion (VOID)
@@ -818,7 +824,9 @@ EFI_STATUS BoardDdrType (UINT32 *Type)
   DEBUG ((EFI_D_INFO, "Total DDR Size: 0x%016lx \n", DdrSize));
 
   *Type = 0;
-  if (DdrSize <= DDR_256MB) {
+  if (DdrSize <= DDR_128MB) {
+    *Type = DDRTYPE_128MB;
+  } else if (DdrSize <= DDR_256MB) {
     *Type = DDRTYPE_256MB;
   } else if (DdrSize <= DDR_512MB) {
     *Type = DDRTYPE_512MB;
