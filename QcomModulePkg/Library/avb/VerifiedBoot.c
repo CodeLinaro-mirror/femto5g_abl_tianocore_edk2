@@ -1626,7 +1626,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     if (!SecureDevice) {
       if (!TargetBuildVariantUser () ) {
         DEBUG ((EFI_D_INFO, "VB: verification skipped for debug builds\n"));
-        goto set_rot;
+        goto skip_verification;
       }
     }
 
@@ -1671,7 +1671,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
 
-set_rot:
+skip_verification:
     Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
                                                   &KeymasterEnabled);
     if (Status != EFI_SUCCESS) {
@@ -1702,7 +1702,6 @@ set_rot:
       }
     }
 
-skip_verification:
     if (!IsRootCmdLineUpdated (Info)) {
         SystemPathLen = GetSystemPath (&SystemPath,
                                        Info->MultiSlotBoot,
