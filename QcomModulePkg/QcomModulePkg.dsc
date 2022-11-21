@@ -195,6 +195,9 @@
   !if $(SUPPORT_DISABLE_NON_BOOTDEVICE)
       GCC:*_*_*_CC_FLAGS = -DSUPPORT_DISABLE_NON_BOOTDEVICE
   !endif
+  !if $(SUPPORT_MODEM_DISABLE)
+      GCC:*_*_*_CC_FLAGS = -DSUPPORT_MODEM_DISABLE
+  !endif
 
 [PcdsFixedAtBuild.common]
 
