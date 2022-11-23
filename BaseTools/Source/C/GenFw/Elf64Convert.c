@@ -792,6 +792,9 @@ WriteSections64 (
           case R_AARCH64_LD_PREL_LO19:
           case R_AARCH64_CALL26:
           case R_AARCH64_JUMP26:
+          case R_AARCH64_PREL64:
+          case R_AARCH64_PREL32:
+          case R_AARCH64_PREL16:
             //
             // The GCC toolchains (i.e., binutils) may corrupt section relative
             // relocations when emitting relocation sections into fully linked
@@ -880,20 +883,13 @@ WriteRelocations64 (
 
             switch (ELF_R_TYPE(Rel->r_info)) {
             case R_AARCH64_ADR_PREL_LO21:
-              break;
-
             case R_AARCH64_CONDBR19:
-              break;
-
             case R_AARCH64_LD_PREL_LO19:
-              break;
-
             case R_AARCH64_CALL26:
-              break;
-
             case R_AARCH64_JUMP26:
-              break;
-
+            case R_AARCH64_PREL64:
+            case R_AARCH64_PREL32:
+            case R_AARCH64_PREL16:
             case R_AARCH64_ADR_PREL_PG_HI21:
             case R_AARCH64_ADD_ABS_LO12_NC:
             case R_AARCH64_LDST8_ABS_LO12_NC:
