@@ -1278,11 +1278,11 @@ BootLinux (BootInfo *Info)
                   (VOID *)BootParamlistPtr.DeviceTreeLoadAddr, DT_SIZE_2MB,
                   (VOID *)StackCurrent, (UINTN)StackBase);
 
-  BootStatsSetTimeStamp (BS_KERNEL_ENTRY);
-
   if (IsVmEnabled ()) {
     DisableHypUartUsageForLogging ();
   }
+
+  BootStatsSetTimeStamp (BS_BL_END);
 
   //
   // Start the Linux Kernel
