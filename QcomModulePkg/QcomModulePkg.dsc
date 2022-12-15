@@ -133,6 +133,9 @@
   !if $(VERIFIED_BOOT_LE)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE
   !endif
+  !if $(SUPPORT_AB_BOOT_LXC)
+      GCC:*_*_*_CC_FLAGS = -DSUPPORT_AB_BOOT_LXC
+  !endif
   !if $(EARLY_ETH_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED
   !endif
@@ -149,6 +152,9 @@
   !endif
   !if $(TARGET_BOARD_TYPE_AUTO)
       GCC:*_*_*_CC_FLAGS = -DTARGET_BOARD_TYPE_AUTO
+  !endif
+  !if $(EARLY_ETH_AS_DLKM) == 1
+      GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_AS_DLKM
   !endif
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
