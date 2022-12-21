@@ -98,6 +98,7 @@ typedef struct UpdateCmdLineParamList {
   BOOLEAN MultiSlotBoot;
   BOOLEAN AlarmBoot;
   BOOLEAN MdtpActive;
+  BOOLEAN FlashlessBoot;
   UINT32 CmdLineLen;
   UINT32 HaveCmdLine;
   UINT32 PauseAtBootUp;
@@ -133,6 +134,8 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *EarlyIPv6CmdLine;
   CHAR8 *EarlyEthMacCmdLine;
   CHAR8 *ResumeCmdLine;
+  CONST CHAR8 *SystemdSlotEnv;
+  CHAR8 *SilentBootModeCmdLine;
 } UpdateCmdLineParamList;
 
 
@@ -149,7 +152,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                BOOLEAN FlashlessBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
-               UINT32 HeaderVersion);
+               UINT32 HeaderVersion,
+               CHAR8 SilentMode);
 BOOLEAN
 TargetBatterySocOk (UINT32 *BatteryVoltage);
 

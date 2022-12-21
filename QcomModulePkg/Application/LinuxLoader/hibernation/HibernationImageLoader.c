@@ -74,8 +74,8 @@
 #include <VerifiedBoot.h>
 #if HIBERNATION_SUPPORT_AES
 #include <Library/aes/aes_public.h>
-#endif
 #include <Protocol/EFIQseecom.h>
+#endif
 #include "KeymasterClient.h"
 
 #define BUG(Fmt, ...) {\
@@ -96,6 +96,11 @@ typedef struct FreeRanges {
 #if HIBERNATION_SUPPORT_AES
 static struct DecryptParam Dp;
 static CHAR8 *Authtags;
+
+#define QSEECOM_ALIGN_SIZE      0x40
+#define QSEECOM_ALIGN_MASK      (QSEECOM_ALIGN_SIZE - 1)
+#define QSEECOM_ALIGN(x)        \
+        ((x + QSEECOM_ALIGN_MASK) & (~QSEECOM_ALIGN_MASK))
 #endif
 
 /* Holds free memory ranges read from UEFI memory map */
@@ -647,7 +652,7 @@ static INT32 ReadSwapInfoStruct (VOID)
 {
         struct SwsuspInfo *Info;
 
-        BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
+        BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_START);
 
         Info = AllocateZeroPool (PAGE_SIZE);
         if (!Info) {
@@ -851,7 +856,7 @@ static INT32 ReadDataPages (UINT64 *KernelPfnIndexes,
                 }
         }
 
-        BootStatsSetTimeStamp (BS_KERNEL_LOAD_DONE);
+        BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_END);
 
         MBs = (NrCopyPages * PAGE_SIZE) / (1024 * 1024);
         if ((DiskReadMs == 0)
@@ -1185,6 +1190,44 @@ err:
         return Ret;
 }
 
+STATIC VOID
+SetLinuxBootCpu (UINT32 BootCpu)
+{
+  EFI_STATUS Status;
+  Status = gRT->SetVariable (L"DestinationCore",
+      &gQcomTokenSpaceGuid,
+      (EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_NON_VOLATILE |
+       EFI_VARIABLE_RUNTIME_ACCESS),
+       sizeof (UINT32),
+       (VOID*)(UINT32*)&BootCpu);
+
+  if (Status != EFI_SUCCESS) {
+       DEBUG ((EFI_D_ERROR, "Error: Failed to set Linux boot cpu:%d\n",
+                BootCpu));
+   } else if (Status == EFI_SUCCESS) {
+       DEBUG ((EFI_D_INFO, "Switching to physical CPU:%d for Booting Linux\n",
+                BootCpu));
+   }
+
+  return;
+}
+
+#ifdef LINUX_BOOT_CPU_SELECTION_ENABLED
+#define BootCpuId TARGET_LINUX_BOOT_CPU_ID
+STATIC BOOLEAN
+BootCpuSelectionEnabled (VOID)
+{
+  return TRUE;
+}
+#else
+#define BootCpuId 0
+STATIC BOOLEAN
+BootCpuSelectionEnabled (VOID)
+{
+  return FALSE;
+}
+#endif
+
 static VOID CopyBounceAndBootKernel ()
 {
         INT32 Status;
@@ -1211,9 +1254,15 @@ static VOID CopyBounceAndBootKernel ()
         gBS->CopyMem ((VOID*)RelocateAddress, (VOID*)&JumpToKernel, PAGE_SIZE);
         Ttbr0 = CopyPageTables ();
 
+        BootStatsSetTimeStamp (BS_BL_END);
+
         printf ("Disable UEFI Boot services\n");
         printf ("Kernel entry point = 0x%lx\n", CpuResume);
         printf ("Relocation code at = 0x%lx\n", RelocateAddress);
+
+        if (BootCpuSelectionEnabled ()) {
+          SetLinuxBootCpu (BootCpuId);
+        }
 
         /* Shut down UEFI boot services */
         Status = ShutdownUefiBootServices ();
@@ -1310,6 +1359,7 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
         INT32 Status;
         CmdReq Req = {0};
         CmdRsp Rsp = {0};
+        UINT32 ReqLen, RspLen;
 
         Status = gBS->LocateProtocol (&gQcomQseecomProtocolGuid, NULL,
                 (VOID **)&(TaHandle->QseeComProtocol));
@@ -1324,6 +1374,16 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
                 return -1;
         }
 
+        ReqLen = sizeof (CmdReq);
+        if (ReqLen & QSEECOM_ALIGN_MASK) {
+                ReqLen = QSEECOM_ALIGN (ReqLen);
+        }
+
+        RspLen = sizeof (CmdRsp);
+        if (RspLen & QSEECOM_ALIGN_MASK) {
+                RspLen = QSEECOM_ALIGN (RspLen);
+        }
+
         Req.Cmd = UNWRAP_KEY_CMD;
         Req.UnwrapkeyReq.WrappedKeySize = WRAPPED_KEY_SIZE;
         gBS->CopyMem ((VOID *)Req.UnwrapkeyReq.WrappedKeyBuffer,
@@ -1331,8 +1391,8 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
         Req.UnwrapkeyReq.CurrTime.Hour = 4;
         Status = TaHandle->QseeComProtocol->QseecomSendCmd (
                 TaHandle->QseeComProtocol, TaHandle->AppId,
-                        (UINT8 *)&Req, sizeof (Req),
-                        (UINT8 *)&Rsp, sizeof (Rsp));
+                        (UINT8 *)&Req, ReqLen,
+                        (UINT8 *)&Rsp, RspLen);
         if (Status) {
                 printf ("Error in conversion wrappeded key to unwrapped key\n");
                 return -1;
@@ -1390,6 +1450,8 @@ static INT32 InitAesDecrypt (VOID)
         if (InitTaAndGetKey (&TaHandle)) {
                 return -1;
         }
+
+        printf ("Hibernation: AES init done\n");
         return 0;
 }
 #else
