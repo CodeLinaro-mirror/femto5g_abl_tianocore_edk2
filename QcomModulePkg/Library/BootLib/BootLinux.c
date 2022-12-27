@@ -866,7 +866,8 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
     return EFI_INVALID_PARAMETER;
   }
 
-  if (Info->HasBootInitRamdisk) {
+  if ((Info->HasBootInitRamdisk) &&
+         (Info->HeaderVersion >= BOOT_HEADER_VERSION_FOUR)) {
     RamdiskImageBuffer = BootParamlistPtr->RamdiskBuffer;
   } else {
     RamdiskImageBuffer = BootParamlistPtr->ImageBuffer;
@@ -1159,6 +1160,7 @@ BootLinux (BootInfo *Info)
   BOOLEAN Recovery = FALSE;
   BOOLEAN AlarmBoot = FALSE;
   BOOLEAN FlashlessBoot = Info->FlashlessBoot;
+  CHAR8 SilentBootMode;
 
   LINUX_KERNEL LinuxKernel;
   LINUX_KERNEL32 LinuxKernel32;
@@ -1194,6 +1196,11 @@ BootLinux (BootInfo *Info)
   PartitionName = Info->Pname;
   Recovery = Info->BootIntoRecovery;
   AlarmBoot = Info->BootReasonAlarm;
+  SilentBootMode = Info->SilentBootMode;
+
+  if (SilentBootMode) {
+    DEBUG ((EFI_D_INFO, "Silent Mode value: %d\n", SilentBootMode));
+  }
 
   if (!FlashlessBoot) {
     if (!StrnCmp (PartitionName, (CONST CHAR16 *)L"boot",
@@ -1332,7 +1339,8 @@ BootLinux (BootInfo *Info)
 
   /*Offsets are the location of the images within the boot image*/
 
-  if (!Info->HasBootInitRamdisk) {
+ if ((!Info->HasBootInitRamdisk) ||
+         (Info->HeaderVersion < BOOT_HEADER_VERSION_FOUR)) {
     BootParamlistPtr.RamdiskOffset = ADD_OF (BootParamlistPtr.PageSize,
                                              BootParamlistPtr.KernelSizeActual);
     if (!BootParamlistPtr.RamdiskOffset) {
@@ -1341,7 +1349,7 @@ BootLinux (BootInfo *Info)
                 BootParamlistPtr.PageSize, BootParamlistPtr.KernelSizeActual));
       return EFI_BAD_BUFFER_SIZE;
     }
-  }
+ }
 
   DEBUG ((EFI_D_VERBOSE, "Kernel Load Address: 0x%x\n",
                                         BootParamlistPtr.KernelLoadAddr));
@@ -1377,8 +1385,8 @@ BootLinux (BootInfo *Info)
    * functions
    */
   Status = UpdateCmdLine (&BootParamlistPtr, FfbmStr, Recovery, FlashlessBoot,
-                    AlarmBoot, Info->VBCmdLine, Info->HeaderVersion);
-
+                    AlarmBoot, Info->VBCmdLine, Info->HeaderVersion,
+                    SilentBootMode);
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
     return Status;
@@ -1449,7 +1457,7 @@ BootLinux (BootInfo *Info)
                   (VOID *)BootParamlistPtr.DeviceTreeLoadAddr, DT_SIZE_2MB,
                   (VOID *)StackCurrent, (UINTN)StackBase);
 
-  BootStatsSetTimeStamp (BS_KERNEL_ENTRY);
+  BootStatsSetTimeStamp (BS_BL_END);
 
   if (IsVmEnabled ()) {
     DisableHypUartUsageForLogging ();
@@ -1881,9 +1889,9 @@ LoadImage (CHAR16 *Pname, VOID **ImageBuffer,
     return EFI_OUT_OF_RESOURCES;
   }
 
-  BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
+  BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_START);
   Status = LoadImageFromPartition (*ImageBuffer, &ImageSize, Pname);
-  BootStatsSetTimeStamp (BS_KERNEL_LOAD_DONE);
+  BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_END);
 
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Failed Kernel Size   : 0x%x\n", ImageSize));
