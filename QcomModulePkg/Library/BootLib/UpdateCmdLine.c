@@ -68,6 +68,7 @@
 #include <Library/PartitionTableUpdate.h>
 #include <Library/PrintLib.h>
 #include <Library/FdtRw.h>
+#include <Library/ShutdownServices.h>
 #include <LinuxLoaderLib.h>
 #include <Protocol/EFICardInfo.h>
 #include <Protocol/EFIChargerEx.h>
@@ -103,7 +104,18 @@ STATIC CONST CHAR8 *LogLevel = " quite";
 STATIC CONST CHAR8 *BatteryChgPause = " androidboot.mode=charger";
 STATIC CONST CHAR8 *MdtpActiveFlag = " mdtp";
 STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
+STATIC CHAR8 SystemdSlotEnv[] = " systemd.setenv=\"SLOT_SUFFIX=_a\"";
 STATIC CONST CHAR8 *NoPasr = " mem_offline.nopasr=1";
+/*Silent Boot Mode */
+STATIC CHAR8 *SilentBootEnbCmdLine =
+                           " silent_boot.mode=silent";
+STATIC CHAR8 *SilentBootDisCmdLine =
+                           " silent_boot.mode=nonsilent";
+STATIC CHAR8 *SilentBootForCmdLine =
+                           " silent_boot.mode=forcedsilent";
+STATIC CHAR8 *SilentBootNForCmdLine =
+                           " silent_boot.mode=forcednonsilent";
+
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
@@ -677,27 +689,35 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
 
   if (Param->MultiSlotBoot &&
      !IsBootDevImage ()) {
-     /* Slot suffix */
-    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
-      Src = Param->AndroidSlotSuffix;
-      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-    }
-
-    UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
-                          Param->SlotSuffixAscii);
-    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
-      Src = Param->SlotSuffixAscii;
-      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-    } else {
-      BootConfigFlag = IsAndroidBootParam (Param->AndroidSlotSuffix,
-                              AsciiStrLen (Param->AndroidSlotSuffix),
-                                       Param->HeaderVersion);
-      AddtoBootConfigList (BootConfigFlag, Param->AndroidSlotSuffix,
-                     Param->SlotSuffixAscii,
-                     BootConfigListHead,
-                     AsciiStrLen (Param->AndroidSlotSuffix),
-                     AsciiStrLen (Param->SlotSuffixAscii));
-    }
+        UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
+                              Param->SlotSuffixAscii);
+        if (IsLEVariant () &&
+          !IsLVBootslotEnabled ()) {
+          INT32 StrLen = 0;
+          StrLen = AsciiStrLen (SystemdSlotEnv);
+          SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
+          Src = Param->SystemdSlotEnv;
+          AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+        } else {
+          /* Slot suffix */
+          if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+                  Src = Param->AndroidSlotSuffix;
+                  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+          }
+          if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+                  Src = Param->SlotSuffixAscii;
+                  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+          } else {
+                  BootConfigFlag = IsAndroidBootParam (Param->AndroidSlotSuffix,
+                  AsciiStrLen (Param->AndroidSlotSuffix),
+                                  Param->HeaderVersion);
+                  AddtoBootConfigList (BootConfigFlag, Param->AndroidSlotSuffix,
+                                  Param->SlotSuffixAscii,
+                                  BootConfigListHead,
+                                  AsciiStrLen (Param->AndroidSlotSuffix),
+                                  AsciiStrLen (Param->SlotSuffixAscii));
+          }
+        }
   }
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
@@ -772,10 +792,16 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     Src = Param->EarlyIPv6CmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyEthMacCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (IsHibernationEnabled ()) {
     Src = Param->ResumeCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (Param->SilentBootModeCmdLine != NULL) {
+    Src = Param->SilentBootModeCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -866,9 +892,11 @@ BOOLEAN IsAndroidBootParam (CONST CHAR8 *param,
   if (ParamLen < 12) {
     return FALSE;
   }
+#if !SUPPORT_AB_BOOT_LXC
   if (HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
     return FALSE;
   }
+#endif
   if (AsciiStrStr (param, "androidboot.")) {
     return TRUE;
   }
@@ -973,7 +1001,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                BOOLEAN FlashlessBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
-               UINT32 HeaderVersion)
+               UINT32 HeaderVersion,
+               CHAR8 SilentMode)
 {
   EFI_STATUS Status;
   UINT32 CmdLineLen = 0;
@@ -1170,12 +1199,22 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
   if (MultiSlotBoot &&
      !IsBootDevImage ()) {
-    /* Add additional length for slot suffix */
-    ParamLen = AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
-    BootConfigFlag = IsAndroidBootParam (AndroidSlotSuffix,
-                               ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
-                                         BootConfigLen);
+       if (IsLEVariant () &&
+          !IsLVBootslotEnabled ()) {
+         ParamLen = AsciiStrLen (SystemdSlotEnv);
+         BootConfigFlag = IsAndroidBootParam (SystemdSlotEnv,
+                         ParamLen, HeaderVersion);
+         ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+         AddtoBootConfigList (BootConfigFlag, SystemdSlotEnv, NULL,
+                         BootConfigListHead, ParamLen, 0);
+       } else {
+         /* Add additional length for slot suffix */
+         ParamLen = AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
+         BootConfigFlag = IsAndroidBootParam (AndroidSlotSuffix,
+                         ParamLen, HeaderVersion);
+         ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+                         BootConfigLen);
+       }
   }
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
@@ -1330,6 +1369,20 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.MemOffAmt = NULL;
   }
 
+  if (SilentMode == SILENT_MODE) {
+    CmdLineLen += AsciiStrLen (SilentBootEnbCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootEnbCmdLine;
+  } else if (SilentMode == NON_SILENT_MODE) {
+    CmdLineLen += AsciiStrLen (SilentBootDisCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootDisCmdLine;
+  } else if (SilentMode == FORCED_SILENT) {
+    CmdLineLen += AsciiStrLen (SilentBootForCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootForCmdLine;
+  } else if (SilentMode == FORCED_NON_SILENT) {
+    CmdLineLen += AsciiStrLen (SilentBootNForCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootNForCmdLine;
+  }
+
   if (EarlyEthEnabled ()) {
     GetEarlyEthInfoFromPartition (IPv4AddrBufCmdLine,
                                  IPv6AddrBufCmdLine,
@@ -1378,6 +1431,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.DtbIdxStr = DtbIdxStr;
   Param.LEVerityCmdLine = LEVerityCmdLine;
   Param.HeaderVersion = HeaderVersion;
+  Param.SystemdSlotEnv = SystemdSlotEnv;
 
   if (EarlyEthEnabled ()) {
     Param.EarlyIPv4CmdLine = IPv4AddrBufCmdLine;
@@ -1411,3 +1465,15 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
 
   return EFI_SUCCESS;
 }
+
+#ifdef SUPPORT_AB_BOOT_LXC
+BOOLEAN IsLVBootslotEnabled (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsLVBootslotEnabled (VOID)
+{
+  return FALSE;
+}
+#endif

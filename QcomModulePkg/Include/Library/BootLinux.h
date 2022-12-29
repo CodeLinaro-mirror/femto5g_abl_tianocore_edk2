@@ -169,6 +169,7 @@ typedef struct BootInfo {
   BOOLEAN FlashlessBoot;
   BOOLEAN BootIntoRecovery;
   BOOLEAN BootReasonAlarm;
+  CHAR8 SilentBootMode;
   CHAR16 Pname[MAX_GPT_NAME_SIZE];
   CHAR16 BootableSlot[MAX_GPT_NAME_SIZE];
   ImageData Images[MAX_NUMBER_OF_LOADED_IMAGES];
@@ -285,4 +286,5 @@ BOOLEAN IsNANDSquashFsSupport (VOID);
 BOOLEAN IsEnableDisplayMenuFlagSupported (VOID);
 BOOLEAN IsTargetAuto (VOID);
 BOOLEAN IsHibernationEnabled (VOID);
+BOOLEAN IsLVBootslotEnabled (VOID);
 #endif
