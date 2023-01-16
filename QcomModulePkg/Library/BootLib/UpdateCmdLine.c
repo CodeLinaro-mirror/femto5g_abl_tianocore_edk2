@@ -33,7 +33,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -141,9 +141,8 @@ STATIC UINTN HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
 STATIC CHAR8 *AndroidBootDtbIdx = " androidboot.dtb_idx=";
 
-STATIC CHAR8 *AndroidBootForceNormalBoot =
-                                      " androidboot.force_normal_boot=";
-CHAR8 *BootForceNormalBoot = "0";
+STATIC CONST CHAR8 *AndroidBootForceNormalBoot =
+                                      " androidboot.force_normal_boot=1";
 STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
@@ -760,13 +759,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
       !Param->Recovery) ||
       (!Param->MultiSlotBoot &&
        !IsBuildUseRecoveryAsBoot ())) {
-    if (Param->HeaderVersion < BOOT_HEADER_VERSION_THREE) {
-      BootForceNormalBoot[0] = '1';
-    }
-    if (Param->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
+    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
       Src = AndroidBootForceNormalBoot;
-      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-      Src = BootForceNormalBoot;
       AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     }
   }
@@ -1300,11 +1294,6 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     }
   }
 
-  if (!IsRecoveryHasNoKernel () &&
-      !Recovery) {
-    *BootForceNormalBoot = '1';
-  }
-
   if (((IsBuildUseRecoveryAsBoot () ||
       IsRecoveryHasNoKernel ()) &&
       IsDynamicPartitionSupport () &&
@@ -1316,12 +1305,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                            ParamLen, HeaderVersion);
     ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
                                          BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, AndroidBootForceNormalBoot,
-                    BootForceNormalBoot,
-                    BootConfigListHead, ParamLen,
-                    AsciiStrLen (BootForceNormalBoot));
-    ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (BootForceNormalBoot),
-                   CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, AndroidBootForceNormalBoot, NULL,
+                    BootConfigListHead, ParamLen, 0);
   }
 
   ParamLen = AsciiStrLen (AndroidBootFstabSuffix);
