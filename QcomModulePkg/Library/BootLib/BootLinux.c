@@ -866,7 +866,8 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
     return EFI_INVALID_PARAMETER;
   }
 
-  if (Info->HasBootInitRamdisk) {
+  if ((Info->HasBootInitRamdisk) &&
+         (Info->HeaderVersion >= BOOT_HEADER_VERSION_FOUR)) {
     RamdiskImageBuffer = BootParamlistPtr->RamdiskBuffer;
   } else {
     RamdiskImageBuffer = BootParamlistPtr->ImageBuffer;
@@ -1338,7 +1339,8 @@ BootLinux (BootInfo *Info)
 
   /*Offsets are the location of the images within the boot image*/
 
-  if (!Info->HasBootInitRamdisk) {
+ if ((!Info->HasBootInitRamdisk) ||
+         (Info->HeaderVersion < BOOT_HEADER_VERSION_FOUR)) {
     BootParamlistPtr.RamdiskOffset = ADD_OF (BootParamlistPtr.PageSize,
                                              BootParamlistPtr.KernelSizeActual);
     if (!BootParamlistPtr.RamdiskOffset) {
@@ -1347,7 +1349,7 @@ BootLinux (BootInfo *Info)
                 BootParamlistPtr.PageSize, BootParamlistPtr.KernelSizeActual));
       return EFI_BAD_BUFFER_SIZE;
     }
-  }
+ }
 
   DEBUG ((EFI_D_VERBOSE, "Kernel Load Address: 0x%x\n",
                                         BootParamlistPtr.KernelLoadAddr));
@@ -1455,7 +1457,7 @@ BootLinux (BootInfo *Info)
                   (VOID *)BootParamlistPtr.DeviceTreeLoadAddr, DT_SIZE_2MB,
                   (VOID *)StackCurrent, (UINTN)StackBase);
 
-  BootStatsSetTimeStamp (BS_KERNEL_ENTRY);
+  BootStatsSetTimeStamp (BS_BL_END);
 
   if (IsVmEnabled ()) {
     DisableHypUartUsageForLogging ();
@@ -1887,9 +1889,9 @@ LoadImage (CHAR16 *Pname, VOID **ImageBuffer,
     return EFI_OUT_OF_RESOURCES;
   }
 
-  BootStatsSetTimeStamp (BS_KERNEL_LOAD_START);
+  BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_START);
   Status = LoadImageFromPartition (*ImageBuffer, &ImageSize, Pname);
-  BootStatsSetTimeStamp (BS_KERNEL_LOAD_DONE);
+  BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_END);
 
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Failed Kernel Size   : 0x%x\n", ImageSize));
