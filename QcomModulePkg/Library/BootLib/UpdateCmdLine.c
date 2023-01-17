@@ -68,6 +68,7 @@
 #include <Library/PartitionTableUpdate.h>
 #include <Library/PrintLib.h>
 #include <Library/FdtRw.h>
+#include <Library/ShutdownServices.h>
 #include <LinuxLoaderLib.h>
 #include <Protocol/EFICardInfo.h>
 #include <Protocol/EFIChargerEx.h>
@@ -105,6 +106,16 @@ STATIC CONST CHAR8 *MdtpActiveFlag = " mdtp";
 STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
 STATIC CHAR8 SystemdSlotEnv[] = " systemd.setenv=\"SLOT_SUFFIX=_a\"";
 STATIC CONST CHAR8 *NoPasr = " mem_offline.nopasr=1";
+/*Silent Boot Mode */
+STATIC CHAR8 *SilentBootEnbCmdLine =
+                           " silent_boot.mode=silent";
+STATIC CHAR8 *SilentBootDisCmdLine =
+                           " silent_boot.mode=nonsilent";
+STATIC CHAR8 *SilentBootForCmdLine =
+                           " silent_boot.mode=forcedsilent";
+STATIC CHAR8 *SilentBootNForCmdLine =
+                           " silent_boot.mode=forcednonsilent";
+
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
@@ -130,8 +141,9 @@ STATIC UINTN HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
 STATIC CHAR8 *AndroidBootDtbIdx = " androidboot.dtb_idx=";
 
-STATIC CONST CHAR8 *AndroidBootForceNormalBoot =
-                                      " androidboot.force_normal_boot=1";
+STATIC CHAR8 *AndroidBootForceNormalBoot =
+                                      " androidboot.force_normal_boot=";
+CHAR8 *BootForceNormalBoot = "0";
 STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
@@ -680,7 +692,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
      !IsBootDevImage ()) {
         UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
                               Param->SlotSuffixAscii);
-        if (IsLEVariant ()) {
+        if (IsLEVariant () &&
+          !IsLVBootslotEnabled ()) {
           INT32 StrLen = 0;
           StrLen = AsciiStrLen (SystemdSlotEnv);
           SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
@@ -747,8 +760,13 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
       !Param->Recovery) ||
       (!Param->MultiSlotBoot &&
        !IsBuildUseRecoveryAsBoot ())) {
-    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+    if (Param->HeaderVersion < BOOT_HEADER_VERSION_THREE) {
+      BootForceNormalBoot[0] = '1';
+    }
+    if (Param->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
       Src = AndroidBootForceNormalBoot;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      Src = BootForceNormalBoot;
       AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     }
   }
@@ -780,10 +798,16 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     Src = Param->EarlyIPv6CmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyEthMacCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (IsHibernationEnabled ()) {
     Src = Param->ResumeCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (Param->SilentBootModeCmdLine != NULL) {
+    Src = Param->SilentBootModeCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -983,7 +1007,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                BOOLEAN FlashlessBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
-               UINT32 HeaderVersion)
+               UINT32 HeaderVersion,
+               CHAR8 SilentMode)
 {
   EFI_STATUS Status;
   UINT32 CmdLineLen = 0;
@@ -1180,7 +1205,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
   if (MultiSlotBoot &&
      !IsBootDevImage ()) {
-       if (IsLEVariant ()) {
+       if (IsLEVariant () &&
+          !IsLVBootslotEnabled ()) {
          ParamLen = AsciiStrLen (SystemdSlotEnv);
          BootConfigFlag = IsAndroidBootParam (SystemdSlotEnv,
                          ParamLen, HeaderVersion);
@@ -1274,6 +1300,11 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     }
   }
 
+  if (!IsRecoveryHasNoKernel () &&
+      !Recovery) {
+    *BootForceNormalBoot = '1';
+  }
+
   if (((IsBuildUseRecoveryAsBoot () ||
       IsRecoveryHasNoKernel ()) &&
       IsDynamicPartitionSupport () &&
@@ -1285,8 +1316,12 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                            ParamLen, HeaderVersion);
     ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
                                          BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, AndroidBootForceNormalBoot, NULL,
-                    BootConfigListHead, ParamLen, 0);
+    AddtoBootConfigList (BootConfigFlag, AndroidBootForceNormalBoot,
+                    BootForceNormalBoot,
+                    BootConfigListHead, ParamLen,
+                    AsciiStrLen (BootForceNormalBoot));
+    ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (BootForceNormalBoot),
+                   CmdLineLen, BootConfigLen);
   }
 
   ParamLen = AsciiStrLen (AndroidBootFstabSuffix);
@@ -1347,6 +1382,20 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     }
   } else {
     Param.MemOffAmt = NULL;
+  }
+
+  if (SilentMode == SILENT_MODE) {
+    CmdLineLen += AsciiStrLen (SilentBootEnbCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootEnbCmdLine;
+  } else if (SilentMode == NON_SILENT_MODE) {
+    CmdLineLen += AsciiStrLen (SilentBootDisCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootDisCmdLine;
+  } else if (SilentMode == FORCED_SILENT) {
+    CmdLineLen += AsciiStrLen (SilentBootForCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootForCmdLine;
+  } else if (SilentMode == FORCED_NON_SILENT) {
+    CmdLineLen += AsciiStrLen (SilentBootNForCmdLine);
+    Param.SilentBootModeCmdLine = SilentBootNForCmdLine;
   }
 
   if (EarlyEthEnabled ()) {
@@ -1431,3 +1480,15 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
 
   return EFI_SUCCESS;
 }
+
+#ifdef SUPPORT_AB_BOOT_LXC
+BOOLEAN IsLVBootslotEnabled (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsLVBootslotEnabled (VOID)
+{
+  return FALSE;
+}
+#endif

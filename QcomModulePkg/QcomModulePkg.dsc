@@ -153,6 +153,9 @@
   !if $(TARGET_BOARD_TYPE_AUTO)
       GCC:*_*_*_CC_FLAGS = -DTARGET_BOARD_TYPE_AUTO
   !endif
+  !if $(EARLY_ETH_AS_DLKM) == 1
+      GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_AS_DLKM
+  !endif
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
@@ -163,6 +166,9 @@
   !endif
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
+  !endif
+  !if $(ENABLE_LV_ATOMIC_AB) == 1
+      GCC:*_*_*_CC_FLAGS = -DENABLE_LV_ATOMIC_AB
   !endif
   !if $(DISABLE_PARALLEL_DOWNLOAD_FLASH) == 1
       GCC:*_*_*_CC_FLAGS = -DDISABLE_PARALLEL_DOWNLOAD_FLASH

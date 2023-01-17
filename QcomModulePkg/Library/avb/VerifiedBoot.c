@@ -1434,6 +1434,12 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
 
   RequestedPartition = RequestedPartitionAll;
 
+  /* Get the header from info if boot already stored in it */
+  if (Info->Images[IMG_BOOT].ImageBuffer) {
+    Info->HeaderVersion = ((boot_img_hdr *)
+                          (Info->Images[IMG_BOOT].ImageBuffer))->header_version;
+  }
+
   if ( ( (!Info->MultiSlotBoot) ||
            IsDynamicPartitionSupport ()) &&
            (Info->BootIntoRecovery &&
@@ -1463,11 +1469,14 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
       Info->BootState = RED;
       goto out;
     }
-    BOOLEAN HeaderVersion = GetHeaderVersion (SlotData);
-    DEBUG ( (EFI_D_VERBOSE, "Recovery HeaderVersion %d \n", HeaderVersion));
 
-    if (HeaderVersion == BOOT_HEADER_VERSION_ZERO ||
-        HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
+    if (!Info->Images[IMG_BOOT].ImageBuffer) {
+      Info->HeaderVersion = GetHeaderVersion (SlotData);
+    }
+    DEBUG ((EFI_D_VERBOSE,
+                    "Recovery HeaderVersion %d \n", Info->HeaderVersion));
+
+    if (Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
        AddRequestedPartition (RequestedPartitionAll, IMG_DTBO);
        NumRequestedPartition += 1;
 
@@ -1486,22 +1495,24 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
     VOID *ImageHdrBuffer = NULL;
     UINT32 ImageHdrSize = 0;
 
-    Status = LoadBootImageHeader (Info, &ImageHdrBuffer, &ImageHdrSize);
+    if (!Info->Images[IMG_BOOT].ImageBuffer) {
+      Status = LoadBootImageHeader (Info, &ImageHdrBuffer, &ImageHdrSize);
 
-    if (Status != EFI_SUCCESS ||
-        ImageHdrBuffer ==  NULL) {
-      DEBUG ((EFI_D_ERROR, "ERROR: Failed to load image header: %r\n", Status));
-      Info->BootState = RED;
-      goto out;
-    } else if (ImageHdrSize < sizeof (boot_img_hdr)) {
-      DEBUG ((EFI_D_ERROR,
-              "ERROR: Invalid image header size: %u\n", ImageHdrSize));
-      Info->BootState = RED;
-      Status = EFI_BAD_BUFFER_SIZE;
-      goto out;
+      if (Status != EFI_SUCCESS ||
+          ImageHdrBuffer ==  NULL) {
+        DEBUG ((EFI_D_ERROR,
+                       "ERROR: Failed to load image header: %r\n", Status));
+        Info->BootState = RED;
+        goto out;
+      } else if (ImageHdrSize < sizeof (boot_img_hdr)) {
+        DEBUG ((EFI_D_ERROR,
+                "ERROR: Invalid image header size: %u\n", ImageHdrSize));
+        Info->BootState = RED;
+        Status = EFI_BAD_BUFFER_SIZE;
+        goto out;
+      }
+      Info->HeaderVersion = ((boot_img_hdr *)(ImageHdrBuffer))->header_version;
     }
-
-    Info->HeaderVersion = ((boot_img_hdr *)(ImageHdrBuffer))->header_version;
     DEBUG ((EFI_D_VERBOSE, "Header version  %d\n", Info->HeaderVersion));
 
     if (!Info->NumLoadedImages) {
@@ -1524,8 +1535,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
      */
 
     if (IsValidPartition (&CurrentSlot, L"vendor_boot") &&
-       (Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE ||
-        Info->HeaderVersion == BOOT_HEADER_VERSION_ZERO)) {
+       Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
       AddRequestedPartition (RequestedPartitionAll, IMG_VENDOR_BOOT);
       NumRequestedPartition += 1;
     } else {
@@ -1844,7 +1854,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     UINT32 SigSize = 0;
     CHAR8 *SystemPath = NULL;
     UINT32 SystemPathLen = 0;
-    BOOLEAN SecureDevice = FALSE;
     UINT32 PageSize = 0;
     KMRotAndBootStateForLE Data = {0};
     secasn1_data_type Modulus = {NULL};
@@ -1866,12 +1875,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
       GUARD (LoadImageNoAuth (Info));
     }
 
-    Status = IsSecureDevice (&SecureDevice);
-    if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
-        return Status;
-    }
-
     /* Locate QcomAsn1x509Protocol*/
     Status = gBS->LocateProtocol (&gEfiQcomASN1X509ProtocolGuid, NULL,
                                  (VOID **)&QcomAsn1X509Protocal);
@@ -1888,13 +1891,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         DEBUG ((EFI_D_ERROR, "VB: Error during "
                       "ASN1X509VerifyOEMCertificate: %r\n", Status));
         return Status;
-    }
-
-    if (!SecureDevice) {
-      if (!TargetBuildVariantUser () ) {
-        DEBUG ((EFI_D_INFO, "VB: verification skipped for debug builds\n"));
-        goto set_rot;
-      }
     }
 
     /* Initialize Verified Boot*/
@@ -1938,7 +1934,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
 
-set_rot:
     Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
                                                   &KeymasterEnabled);
     if (Status != EFI_SUCCESS) {
