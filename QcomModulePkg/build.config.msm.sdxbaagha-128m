@@ -1,5 +1,5 @@
 ################################################################################
-MSM_ARCH=sdxpinn
+MSM_ARCH=sdxbaagha-128m
 
 ################################################################################
-. ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxpinn.common
+. ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxbaagha.common
