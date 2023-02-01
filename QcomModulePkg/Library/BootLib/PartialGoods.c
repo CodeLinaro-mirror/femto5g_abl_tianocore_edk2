@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022, 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -429,20 +429,13 @@ FindNodeAndUpdateProperty (VOID *fdt,
   INT32 ParentOffset = 0;
   INT32 Ret = 0;
   UINT32 i;
+  CONST struct fdt_property *Prop = NULL;
+  INT32 PropLen = 0;
 
   for (i = 0; i < TableSz; i++, Table++) {
     if (!(Value & Table->Val))
       continue;
 
-    if (Table->Val == (BIT (EFICHIPINFO_PART_MODEM) |
-                       BIT (EFICHIPINFO_PART_WLAN) |
-                       BIT (EFICHIPINFO_PART_NAV))) {
-      if (!((Value & BIT (EFICHIPINFO_PART_MODEM)) &&
-            (Value & BIT (EFICHIPINFO_PART_WLAN)) &&
-            (Value & BIT (EFICHIPINFO_PART_NAV)))) {
-        continue;
-      }
-    }
 
     /* Find the parent node */
     ParentOffset = FdtPathOffset (fdt, Table->ParentNode);
@@ -460,6 +453,22 @@ FindNodeAndUpdateProperty (VOID *fdt,
       DEBUG ((EFI_D_INFO, "Subnode: %a is not present, ignore\n",
               SNode->SubNodeName));
       continue;
+    }
+
+    if (Table->Val == (BIT (EFICHIPINFO_PART_MODEM) |
+                       BIT (EFICHIPINFO_PART_WLAN) |
+                       BIT (EFICHIPINFO_PART_NAV))) {
+      Prop = fdt_get_property (fdt, SubNodeOffset, "legacy-wlan", &PropLen);
+      if (Prop) {
+        if (!((Value & BIT (EFICHIPINFO_PART_MODEM)) &&
+              (Value & BIT (EFICHIPINFO_PART_WLAN)) &&
+              (Value & BIT (EFICHIPINFO_PART_NAV))))
+          continue;
+      } else {
+        if (!((Value & BIT (EFICHIPINFO_PART_MODEM)) &&
+             (Value & BIT (EFICHIPINFO_PART_NAV))))
+          continue;
+      }
     }
 
      /* Add/Replace the property with Replace string value */
