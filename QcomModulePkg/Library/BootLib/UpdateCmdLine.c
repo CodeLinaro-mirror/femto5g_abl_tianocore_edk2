@@ -29,6 +29,11 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  **/
 
 #include <Library/BootLinux.h>
@@ -325,8 +330,13 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN FlashlessBoot,
 
   if (IsLEVariant () &&
       BootIntoRecovery) {
-    StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, (CONST CHAR16 *)L"recoveryfs",
+    if (IsRamdiskRecoveryfs ()) {
+        AsciiSPrint (*SysPath, MAX_PATH_SIZE, " rootfstype=ramfs root=/dev/ram0");
+        return AsciiStrLen (*SysPath);
+    } else {
+        StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, (CONST CHAR16 *)L"recoveryfs",
               StrLen ((CONST CHAR16 *)L"recoveryfs"));
+    }
   } else {
     StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, ReqPartition,
               StrLen (ReqPartition));

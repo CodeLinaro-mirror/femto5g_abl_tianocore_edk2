@@ -28,6 +28,10 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  */
 
 #include <Library/DeviceInfo.h>
@@ -155,6 +159,12 @@ UpdateBootParams (BootParamlist *BootParamlistPtr, BOOLEAN FlashlessBoot)
     } else {
          BootParamlistPtr->KernelLoadAddr += KERNEL_64BIT_LOAD_OFFSET;
     }
+
+#ifdef RAMDISK_RECOVERYFS
+   /* In Dual NAND feature recovery ramdisk image size is not fitting within the
+    * current kerner reserved size (0x3000000) so we are increasing this size. */
+    KernelSizeReserved = 0x3A00000;
+#endif
 
     BootParamlistPtr->KernelEndAddr = KernelLoadAddr + KernelSizeReserved;
   } else {
@@ -1453,6 +1463,18 @@ BOOLEAN IsSystemdBootslotEnabled (VOID)
 }
 #else
 BOOLEAN IsSystemdBootslotEnabled (VOID)
+{
+  return FALSE;
+}
+#endif
+
+#ifdef RAMDISK_RECOVERYFS
+BOOLEAN IsRamdiskRecoveryfs (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsRamdiskRecoveryfs (VOID)
 {
   return FALSE;
 }
