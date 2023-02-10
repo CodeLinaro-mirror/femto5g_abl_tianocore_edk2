@@ -192,6 +192,9 @@
       GCC:*_*_*_CC_FLAGS = -DLINUX_BOOT_CPU_SELECTION_ENABLED
       GCC:*_*_*_CC_FLAGS = -DTARGET_LINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID)
   !endif
+  !if $(EXTRA_TARGET_OPTFLAGS) != ""
+      GCC:*_*_*_ARCHCC_FLAGS = $(EXTRA_TARGET_OPTFLAGS)
+  !endif
 
 [PcdsFixedAtBuild.common]
 
