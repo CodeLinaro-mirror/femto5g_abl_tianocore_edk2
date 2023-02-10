@@ -83,6 +83,7 @@
 #include "LECmdLine.h"
 #include "EarlyEthernet.h"
 
+#define BOOT_CPU_PARAM_LEN 13
 #define SIZE_OF_DELIM 2
 #define PARAM_DELIM "\n"
 #define ADD_PARAM_LEN(BootConfigFlag, ParamLen, CmdLineL, BootConfigL) \
@@ -126,7 +127,11 @@ STATIC CHAR8 *SkipRamFs = " skip_initramfs";
 STATIC CHAR8 IPv4AddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IPv6AddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 MacEthAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
+STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
 /* Display command line related structures */
 #define MAX_DISPLAY_CMD_LINE 256
@@ -136,6 +141,11 @@ STATIC UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
 #define MAX_HW_FENCE_CMD_LINE 32
 STATIC CHAR8 HwFenceCmdLine[MAX_HW_FENCE_CMD_LINE];
 STATIC UINTN HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
+
+/* GPU command line related structures */
+#define MAX_GPU_CMD_LINE 256
+STATIC CHAR8 GpuCmdLine[MAX_GPU_CMD_LINE];
+STATIC UINTN GpuCmdLineLen = sizeof (GpuCmdLine);
 
 #define MAX_DTBO_IDX_STR 64
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
@@ -381,6 +391,21 @@ STATIC VOID GetHwFenceCmdline (VOID)
     DEBUG ((EFI_D_ERROR, "Unable to get hw fence Config, %r\n", Status));
   }
 }
+
+STATIC EFI_STATUS GetGpuCmdline (VOID)
+{
+  EFI_STATUS Status;
+
+  Status = gRT->GetVariable ((CHAR16 *)L"GpuConfiguration",
+                             &gQcomTokenSpaceGuid, NULL, &GpuCmdLineLen,
+                             GpuCmdLine);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Unable to get GPU Preempt Config, %r\n", Status));
+  }
+
+  return Status;
+}
+
 
 /*
  * Returns length = 0 when there is failure.
@@ -683,6 +708,9 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
   Src = Param->HwFenceCmdLine;
   AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
+  Src = Param->GpuCmdLine;
+  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+
   if (Param->MdtpActive) {
     Src = Param->MdtpActiveFlag;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
@@ -799,6 +827,12 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyEthMacCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyPhyAddrCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyIFaceCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlySpeedCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (IsHibernationEnabled ()) {
@@ -808,6 +842,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
 
   if (Param->SilentBootModeCmdLine != NULL) {
     Src = Param->SilentBootModeCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (BootCpuSelectionEnabled ()) {
+    Src = Param->BootCpuCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -1272,6 +1311,16 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   AddtoBootConfigList (BootConfigFlag, HwFenceCmdLine, NULL,
                    BootConfigListHead, ParamLen, 0);
 
+  if (EFI_SUCCESS == GetGpuCmdline ()) {
+      ParamLen = AsciiStrLen (GpuCmdLine);
+      BootConfigFlag = IsAndroidBootParam (GpuCmdLine,
+                              ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+                                          BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, GpuCmdLine, NULL,
+                        BootConfigListHead, ParamLen, 0);
+  }
+
   if (!IsLEVariant ()) {
     DtboIdx = GetDtboIdx ();
     if (DtboIdx != INVALID_PTN) {
@@ -1401,10 +1450,16 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   if (EarlyEthEnabled ()) {
     GetEarlyEthInfoFromPartition (IPv4AddrBufCmdLine,
                                  IPv6AddrBufCmdLine,
-                                 MacEthAddrBufCmdLine);
+                                 MacEthAddrBufCmdLine,
+                                 PhyAddrBufCmdLineCmdLine,
+                                 IFaceAddrBufCmdLine,
+                                 SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (PhyAddrBufCmdLineCmdLine);
+    CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
   }
 
   /* 1 extra byte for NULL */
@@ -1427,6 +1482,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.ChipBaseBand = ChipBaseBand;
   Param.DisplayCmdLine = DisplayCmdLine;
   Param.HwFenceCmdLine = HwFenceCmdLine;
+  Param.GpuCmdLine = GpuCmdLine;
   Param.CmdLine = CmdLine;
   Param.AlarmBootCmdLine = AlarmBootCmdLine;
   Param.MdtpActiveFlag = MdtpActiveFlag;
@@ -1452,10 +1508,26 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyIPv4CmdLine = IPv4AddrBufCmdLine;
     Param.EarlyIPv6CmdLine = IPv6AddrBufCmdLine;
     Param.EarlyEthMacCmdLine = MacEthAddrBufCmdLine;
+    Param.EarlyPhyAddrCmdLine = PhyAddrBufCmdLineCmdLine;
+    Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
+    Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
   }
 
   if (IsHibernationEnabled ()) {
     Param.ResumeCmdLine = ResumeCmdLine;
+  }
+
+  if (BootCpuSelectionEnabled ()) {
+    AsciiSPrint (BootCpuCmdLine, sizeof (BootCpuCmdLine), " boot_cpu=%d",
+                 BootCpuId);
+    ParamLen = AsciiStrLen (BootCpuCmdLine);
+    BootConfigFlag = IsAndroidBootParam (BootCpuCmdLine,
+                          ParamLen, HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                 CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, BootCpuCmdLine, NULL,
+                BootConfigListHead, ParamLen, 0);
+    Param.BootCpuCmdLine = BootCpuCmdLine;
   }
 
   Status = UpdateCmdLineParams (&Param, FinalCmdLine, BootParamlistPtr);
