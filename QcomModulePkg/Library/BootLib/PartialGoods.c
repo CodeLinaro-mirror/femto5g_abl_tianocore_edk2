@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022, 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -339,14 +339,12 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_MODEM),
      "/soc",
      {"qcom,mss", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_MODEM)
-     | BIT (EFICHIPINFO_PART_WLAN)
-     | BIT (EFICHIPINFO_PART_NAV)),
+    {BIT (EFICHIPINFO_PART_MODEM),
      "/soc",
      {"remoteproc-mss", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_WLAN),
      "/soc",
-     {"qcom,wpss", "status", "ok", "no"}},
+     {"qcom,mss", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_WLAN),
      "/soc",
      {"remoteproc-wpss", "status", "ok", "no"}},
@@ -383,6 +381,9 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_NPU),
      "/soc",
      {"qcom,npu", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_NAV),
+     "/soc",
+     {"qcom,mss", "status", "ok", "no"}},
 };
 
 STATIC EFI_STATUS
@@ -433,16 +434,6 @@ FindNodeAndUpdateProperty (VOID *fdt,
   for (i = 0; i < TableSz; i++, Table++) {
     if (!(Value & Table->Val))
       continue;
-
-    if (Table->Val == (BIT (EFICHIPINFO_PART_MODEM) |
-                       BIT (EFICHIPINFO_PART_WLAN) |
-                       BIT (EFICHIPINFO_PART_NAV))) {
-      if (!((Value & BIT (EFICHIPINFO_PART_MODEM)) &&
-            (Value & BIT (EFICHIPINFO_PART_WLAN)) &&
-            (Value & BIT (EFICHIPINFO_PART_NAV)))) {
-        continue;
-      }
-    }
 
     /* Find the parent node */
     ParentOffset = FdtPathOffset (fdt, Table->ParentNode);
