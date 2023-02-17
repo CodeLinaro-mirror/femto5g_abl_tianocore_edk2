@@ -1414,6 +1414,19 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
   }
 
+  if (BootCpuSelectionEnabled ()) {
+    AsciiSPrint (BootCpuCmdLine, sizeof (BootCpuCmdLine), " boot_cpu=%d",
+                 BootCpuId);
+    ParamLen = AsciiStrLen (BootCpuCmdLine);
+    BootConfigFlag = IsAndroidBootParam (BootCpuCmdLine,
+                          ParamLen, HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                 CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, BootCpuCmdLine, NULL,
+                BootConfigListHead, ParamLen, 0);
+    Param.BootCpuCmdLine = BootCpuCmdLine;
+  }
+
   /* 1 extra byte for NULL */
   CmdLineLen += 1;
 
@@ -1463,19 +1476,6 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
 
   if (IsHibernationEnabled ()) {
     Param.ResumeCmdLine = ResumeCmdLine;
-  }
-
-  if (BootCpuSelectionEnabled ()) {
-    AsciiSPrint (BootCpuCmdLine, sizeof (BootCpuCmdLine), " boot_cpu=%d",
-                 BootCpuId);
-    ParamLen = AsciiStrLen (BootCpuCmdLine);
-    BootConfigFlag = IsAndroidBootParam (BootCpuCmdLine,
-                          ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
-                 CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, BootCpuCmdLine, NULL,
-                BootConfigListHead, ParamLen, 0);
-    Param.BootCpuCmdLine = BootCpuCmdLine;
   }
 
   Status = UpdateCmdLineParams (&Param, FinalCmdLine, BootParamlistPtr);
