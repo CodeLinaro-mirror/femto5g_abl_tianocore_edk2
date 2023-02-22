@@ -29,7 +29,7 @@
  /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -474,7 +474,7 @@ LoadBootImageNoAuth (BootInfo *Info, UINT32 *PageSize, BOOLEAN *FastbootPath)
   BOOLEAN BootIntoRecovery = FALSE;
   VOID *RecoveryImageHdrBuffer = NULL;
   UINT32 RecoveryImageHdrSize = 0;
-  BOOLEAN BootImageLoaded;
+  BOOLEAN BootImageLoaded = FALSE;
   /* In case of flashless LE devices images are already loaded and verified
    * by previous bootloaders, so just fill the BootInfo structure with
    * required parameters
@@ -1854,8 +1854,8 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     UINT32 SigSize = 0;
     CHAR8 *SystemPath = NULL;
     UINT32 SystemPathLen = 0;
-    BOOLEAN SecureDevice = FALSE;
     UINT32 PageSize = 0;
+    BOOLEAN SecureDevice = FALSE;
     KMRotAndBootStateForLE Data = {0};
     secasn1_data_type Modulus = {NULL};
     secasn1_data_type PublicExp = {NULL};
@@ -1864,6 +1864,12 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     /*Load image*/
     GUARD (VBAllocateCmdLine (Info));
     GUARD (VBCommonInit (Info));
+
+    Status = IsSecureDevice (&SecureDevice);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
+        return Status;
+    }
 
     /* In case of flashless LE devices images are already loaded and verified
      * by previous bootloaders, so just fill the BootInfo structure with
@@ -1874,12 +1880,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
       goto skip_verification;
     } else {
       GUARD (LoadImageNoAuth (Info));
-    }
-
-    Status = IsSecureDevice (&SecureDevice);
-    if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
-        return Status;
     }
 
     /* Locate QcomAsn1x509Protocol*/
@@ -1898,13 +1898,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         DEBUG ((EFI_D_ERROR, "VB: Error during "
                       "ASN1X509VerifyOEMCertificate: %r\n", Status));
         return Status;
-    }
-
-    if (!SecureDevice) {
-      if (!TargetBuildVariantUser () ) {
-        DEBUG ((EFI_D_INFO, "VB: verification skipped for debug builds\n"));
-        goto set_rot;
-      }
     }
 
     /* Initialize Verified Boot*/
@@ -1944,11 +1937,24 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "VB: Error during "
                       "LEVBVerifyHashWithSignature: %r\n", Status));
+
+        /* There are build variants where boot image is not signed.
+         * Below check allows the device to bootup even if the
+         * authentication fails on a Non-secure device.
+         * Note: Root of Trust cannnot be set if image authentication fails
+         * or boot image is not signed.
+         */
+         if (!SecureDevice) {
+            if (!TargetBuildVariantUser () ) {
+                DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
+                                                    "debug builds\n"));
+                goto skip_verification;
+            }
+        }
         return Status;
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
 
-set_rot:
     Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
                                                   &KeymasterEnabled);
     if (Status != EFI_SUCCESS) {
