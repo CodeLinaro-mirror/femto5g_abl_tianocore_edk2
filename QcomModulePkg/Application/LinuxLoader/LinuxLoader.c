@@ -145,22 +145,47 @@ GetRebootReason (UINT32 *ResetReason)
   return Status;
 }
 
+
+STATIC VOID
+SetDefaultAudioFw ()
+{
+ CHAR8 AudioFW[MAX_AUDIO_FW_LENGTH];
+ STATIC CHAR8* Src;
+ STATIC CHAR8* AUDIOFRAMEWORK;
+ STATIC UINT32 Length;
+ EFI_STATUS Status;
+
+ AUDIOFRAMEWORK = GetAudioFw ();
+ Status = ReadAudioFrameWork (&Src, &Length);
+ if (Status == EFI_SUCCESS) {
+  if (AsciiStrLen (Src) == 0) {
+      if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
+        AsciiStrnCpyS (AudioFW, MAX_AUDIO_FW_LENGTH, AUDIOFRAMEWORK,
+        AsciiStrLen (AUDIOFRAMEWORK));
+        StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIOFRAMEWORK));
+   }
+  }
+ } else
+  DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NOT updated length =%d, %a\n",
+     Length, AUDIOFRAMEWORK));
+}
+
 BOOLEAN IsABRetryCountUpdateRequired (VOID)
 {
-  BOOLEAN BatteryStatus;
+ BOOLEAN BatteryStatus;
 
-  /* Check power off charging */
-  TargetPauseForBatteryCharge (&BatteryStatus);
+ /* Check power off charging */
+ TargetPauseForBatteryCharge (&BatteryStatus);
 
-  /* Do not decrement bootable retry count in below states:
-     * fastboot, fastbootd, charger, recovery
-     */
-  if ((BatteryStatus &&
-       IsChargingScreenEnable ()) ||
-       BootIntoFastboot ||
-       BootIntoRecovery) {
-    return FALSE;
-  }
+ /* Do not decrement bootable retry count in below states:
+ * fastboot, fastbootd, charger, recovery
+ */
+ if ((BatteryStatus &&
+ IsChargingScreenEnable ()) ||
+ BootIntoFastboot ||
+ BootIntoRecovery) {
+  return FALSE;
+ }
   return TRUE;
 }
 
@@ -257,6 +282,8 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     DEBUG ((EFI_D_ERROR, "Error reading key status: %r\n", Status));
     goto stack_guard_update_default;
   }
+
+  SetDefaultAudioFw ();
 
   // check for reboot mode
   Status = GetRebootReason (&BootReason);
