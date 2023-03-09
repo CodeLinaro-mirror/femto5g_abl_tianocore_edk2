@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -331,9 +331,6 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,msm-adsprpc-mem", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_AUDIO),
      "/soc",
-     {"qcom,msm_fastrpc", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_AUDIO),
-     "/soc",
      {"remoteproc-adsp", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_MODEM),
      "/soc",
@@ -352,19 +349,7 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,turing", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_COMP),
      "/soc",
-     {"qcom,msm-adsprpc-mem", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_COMP),
-     "/soc",
-     {"qcom,msm_fastrpc", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_COMP),
-     "/soc",
      {"remoteproc-cdsp", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_SENSORS),
-     "/soc",
-     {"qcom,msm-adsprpc-mem", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_SENSORS),
-     "/soc",
-     {"qcom,msm_fastrpc", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_SENSORS),
      "/soc",
      {"qcom,ssc", "status", "ok", "no"}},
@@ -472,14 +457,14 @@ ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
   UINT32 CpuCluster = 0;
   EFI_STATUS Status = EFI_SUCCESS;
 
-   /* Ensure to reset the Value before checking CPU part for defect */
+   /* Ensure to reset the Value before checking CPU subset */
   *Value = 0;
 
   Status =
-      pChipInfoProtocol->GetDefectiveCPUs (pChipInfoProtocol, CpuCluster,
+      pChipInfoProtocol->GetSubsetCPUs (pChipInfoProtocol, CpuCluster,
                                            Value);
   if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_VERBOSE, "Failed to get CPU defective[%d] part. %r\n",
+    DEBUG ((EFI_D_VERBOSE, "Failed to get subset[%d] CPU. %r\n",
             CpuCluster, Status));
   }
 
@@ -494,22 +479,22 @@ ReadMMPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
   UINT32 i;
   EFI_STATUS Status = EFI_SUCCESS;
-  UINT32 DefectVal;
+  UINT32 SubsetVal;
 
   *Value = 0;
   for (i = 1; i < EFICHIPINFO_NUM_PARTS; i++) {
-    /* Ensure to reset the Value before checking for defect Part*/
-    DefectVal = 0;
+    /* Ensure to reset the Value before checking for Part Subset*/
+    SubsetVal = 0;
 
     Status =
-        pChipInfoProtocol->GetDefectivePart (pChipInfoProtocol, i, &DefectVal);
+        pChipInfoProtocol->GetSubsetPart (pChipInfoProtocol, i, &SubsetVal);
     if (EFI_ERROR (Status)) {
-      DEBUG ((EFI_D_VERBOSE, "Failed to get MM defective[%d] part. %r\n", i,
+      DEBUG ((EFI_D_VERBOSE, "Failed to get MM subset[%d] part. %r\n", i,
               Status));
       continue;
     }
 
-    *Value |= (DefectVal << i);
+    *Value |= (SubsetVal << i);
   }
 
   if (Status == EFI_NOT_FOUND)
