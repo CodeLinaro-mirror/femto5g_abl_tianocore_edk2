@@ -3,3 +3,4 @@ MSM_ARCH=sdxbaagha-128m
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxbaagha.common
+VERIFIED_BOOT_LE=0
