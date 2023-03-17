@@ -476,6 +476,54 @@ FindNodeAndUpdateProperty (VOID *fdt,
   }
 }
 
+STATIC VOID
+FindCpuNodeAndUpdateStatus (VOID *fdt,
+                       UINT32 TableSz,
+                       struct PartialGoods *Table,
+                       UINT32 Value)
+{
+  struct SubNodeListNew *SNode = NULL;
+  INT32 SubNodeOffset = 0;
+  INT32 ParentOffset = 0;
+  INT32 Ret = 0;
+  UINT32 i;
+
+  for (i = 0; i < TableSz; i++, Table++) {
+    if (!(Value & Table->Val))
+      continue;
+
+    /* Find the parent node */
+    ParentOffset = FdtPathOffset (fdt, Table->ParentNode);
+    if (ParentOffset < 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to Get parent node: %a\terror: %d\n",
+              Table->ParentNode, ParentOffset));
+      continue;
+    }
+
+    /* Find the subnode */
+    SNode = &(Table->SubNode);
+    SubNodeOffset = fdt_subnode_offset (fdt, ParentOffset,
+                                      SNode->SubNodeName);
+    if (SubNodeOffset < 0) {
+      DEBUG ((EFI_D_INFO, "Subnode: %a is not present, ignore\n",
+              SNode->SubNodeName));
+      continue;
+    }
+
+    /* Replace the status property to fail */
+    Ret = FdtSetProp (fdt, SubNodeOffset, "status",
+                      (CONST VOID *)"fail",
+                      AsciiStrLen ("fail") + 1);
+    if (!Ret) {
+      DEBUG ((EFI_D_INFO, "CPU (%a) status updated\n",
+              SNode->SubNodeName));
+    } else {
+      DEBUG ((EFI_D_ERROR, "Failed to update CPU (%a) status: ret =%d \n",
+              SNode->SubNodeName, Ret));
+    }
+  }
+}
+
 STATIC EFI_STATUS
 ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
@@ -588,6 +636,10 @@ UpdatePartialGoodsNode (VOID *fdt)
   FindNodeAndUpdateProperty (fdt, NUM_OF_CPUS,
                              &PartialGoodsCpuType[PartialGoodsCPUTypeValue][0],
                              PartialGoodsCpuValue);
+
+  FindCpuNodeAndUpdateStatus (fdt, NUM_OF_CPUS,
+                              &PartialGoodsCpuType[PartialGoodsCPUTypeValue][0],
+                              PartialGoodsCpuValue);
 
   return EFI_SUCCESS;
 }
