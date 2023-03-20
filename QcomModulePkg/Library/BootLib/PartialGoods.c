@@ -30,43 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -284,6 +248,12 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,camera-flash1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
+     {"qcom,camera-flash2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,camera-flash3", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
      {"qcom,cam-icp", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
@@ -315,6 +285,126 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,camcc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,csid2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sync", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,rt-cdm0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,rt-cdm1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,rt-cdm2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,rt-cdm3", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,rt-cdm4", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,icp", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,ife2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,sfe0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,jpegenc0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,jpegdma0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,sfe1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-res-mgr", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,actuator0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,actuator1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,actuator2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,actuator3", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,actuator4", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,actuator", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom3", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom4", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom5", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom6", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom7", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor3", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor3", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor4", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor5", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor6", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor7", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,ois0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,mdss_mdp", "status", "ok", "no"}},
@@ -368,19 +458,18 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,msm-adsprpc-mem", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_AUDIO),
      "/soc",
-     {"qcom,msm_fastrpc", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_AUDIO),
-     "/soc",
      {"remoteproc-adsp", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_MODEM),
      "/soc",
      {"qcom,mss", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_MODEM),
+    {(BIT (EFICHIPINFO_PART_MODEM)
+     | BIT (EFICHIPINFO_PART_WLAN)
+     | BIT (EFICHIPINFO_PART_NAV)),
      "/soc",
      {"remoteproc-mss", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_WLAN),
      "/soc",
-     {"qcom,mss", "status", "ok", "no"}},
+     {"qcom,wpss", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_WLAN),
      "/soc",
      {"remoteproc-wpss", "status", "ok", "no"}},
@@ -389,19 +478,7 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,turing", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_COMP),
      "/soc",
-     {"qcom,msm-adsprpc-mem", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_COMP),
-     "/soc",
-     {"qcom,msm_fastrpc", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_COMP),
-     "/soc",
      {"remoteproc-cdsp", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_SENSORS),
-     "/soc",
-     {"qcom,msm-adsprpc-mem", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_SENSORS),
-     "/soc",
-     {"qcom,msm_fastrpc", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_SENSORS),
      "/soc",
      {"qcom,ssc", "status", "ok", "no"}},
@@ -417,9 +494,6 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_NPU),
      "/soc",
      {"qcom,npu", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_NAV),
-     "/soc",
-     {"qcom,mss", "status", "ok", "no"}},
 };
 
 STATIC EFI_STATUS
@@ -466,6 +540,8 @@ FindNodeAndUpdateProperty (VOID *fdt,
   INT32 ParentOffset = 0;
   INT32 Ret = 0;
   UINT32 i;
+  CONST struct fdt_property *Prop = NULL;
+  INT32 PropLen = 0;
 
   for (i = 0; i < TableSz; i++, Table++) {
     if (!(Value & Table->Val))
@@ -487,6 +563,22 @@ FindNodeAndUpdateProperty (VOID *fdt,
       DEBUG ((EFI_D_INFO, "Subnode: %a is not present, ignore\n",
               SNode->SubNodeName));
       continue;
+    }
+
+    if (Table->Val == (BIT (EFICHIPINFO_PART_MODEM) |
+                       BIT (EFICHIPINFO_PART_WLAN) |
+                       BIT (EFICHIPINFO_PART_NAV))) {
+      Prop = fdt_get_property (fdt, SubNodeOffset, "legacy-wlan", &PropLen);
+      if (Prop) {
+        if (!((Value & BIT (EFICHIPINFO_PART_MODEM)) &&
+              (Value & BIT (EFICHIPINFO_PART_WLAN)) &&
+              (Value & BIT (EFICHIPINFO_PART_NAV))))
+          continue;
+      } else {
+        if (!((Value & BIT (EFICHIPINFO_PART_MODEM)) &&
+             (Value & BIT (EFICHIPINFO_PART_NAV))))
+          continue;
+      }
     }
 
      /* Add/Replace the property with Replace string value */
