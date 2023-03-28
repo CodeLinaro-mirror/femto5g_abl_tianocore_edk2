@@ -912,6 +912,9 @@ IsCertHashFoundInDatabase (
       goto Done;
     }
 
+    FreePool (HashCtx);
+    HashCtx = NULL;
+
     SiglistHeaderSize = sizeof (EFI_SIGNATURE_LIST) + DbxList->SignatureHeaderSize;
     CertHash          = (EFI_SIGNATURE_DATA *) ((UINT8 *) DbxList + SiglistHeaderSize);
     CertHashCount     = (DbxList->SignatureListSize - SiglistHeaderSize) / DbxList->SignatureSize;
