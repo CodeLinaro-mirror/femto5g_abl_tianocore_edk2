@@ -1567,6 +1567,8 @@ DxeImageVerificationHandler (
   UINT8                                *AuthData;
   UINTN                                AuthDataSize;
   EFI_IMAGE_DATA_DIRECTORY             *SecDataDir;
+  UINT32                               SecDataDirEnd;
+  UINT32                               SecDataDirLeft;
   UINT32                               OffSet;
   CHAR16                               *NameStr;
 
@@ -1757,12 +1759,14 @@ DxeImageVerificationHandler (
   // "Attribute Certificate Table".
   // The first certificate starts at offset (SecDataDir->VirtualAddress) from the start of the file.
   //
+  SecDataDirEnd = SecDataDir->VirtualAddress + SecDataDir->Size;
   for (OffSet = SecDataDir->VirtualAddress;
-       OffSet < (SecDataDir->VirtualAddress + SecDataDir->Size);
+       OffSet < SecDataDirEnd;
        OffSet += (WinCertificate->dwLength + ALIGN_SIZE (WinCertificate->dwLength))) {
     WinCertificate = (WIN_CERTIFICATE *) (mImageBase + OffSet);
-    if ((SecDataDir->VirtualAddress + SecDataDir->Size - OffSet) <= sizeof (WIN_CERTIFICATE) ||
-        (SecDataDir->VirtualAddress + SecDataDir->Size - OffSet) < WinCertificate->dwLength) {
+    SecDataDirLeft = SecDataDirEnd - OffSet;
+    if (SecDataDirLeft <= sizeof (WIN_CERTIFICATE) ||
+        SecDataDirLeft < WinCertificate->dwLength) {
       break;
     }
 
@@ -1837,7 +1841,7 @@ DxeImageVerificationHandler (
     }
   }
 
-  if (OffSet != (SecDataDir->VirtualAddress + SecDataDir->Size)) {
+  if (OffSet != SecDataDirEnd) {
     //
     // The Size in Certificate Table or the attribute certicate table is corrupted.
     //
