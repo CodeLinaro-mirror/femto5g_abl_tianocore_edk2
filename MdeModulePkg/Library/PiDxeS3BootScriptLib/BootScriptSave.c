@@ -909,6 +909,14 @@ S3BootScriptSaveIoWrite (
   EFI_BOOT_SCRIPT_IO_WRITE  ScriptIoWrite;
 
   WidthInByte = (UINT8) (0x01 << (Width & 0x03));
+
+  //
+  // Truncation check
+  //
+  if ((Count > MAX_UINT8) ||
+      (WidthInByte * Count > MAX_UINT8 - sizeof (EFI_BOOT_SCRIPT_IO_WRITE))) {
+    return RETURN_OUT_OF_RESOURCES;
+  }
   Length = (UINT8)(sizeof (EFI_BOOT_SCRIPT_IO_WRITE) + (WidthInByte * Count));
   
   Script = S3BootScriptGetEntryAddAddress (Length);
@@ -1005,6 +1013,14 @@ S3BootScriptSaveMemWrite (
   EFI_BOOT_SCRIPT_MEM_WRITE  ScriptMemWrite;
   
   WidthInByte = (UINT8) (0x01 << (Width & 0x03));
+
+  //
+  // Truncation check
+  //
+  if ((Count > MAX_UINT8) ||
+      (WidthInByte * Count > MAX_UINT8 - sizeof (EFI_BOOT_SCRIPT_MEM_WRITE))) {
+    return RETURN_OUT_OF_RESOURCES;
+  }
   Length = (UINT8)(sizeof (EFI_BOOT_SCRIPT_MEM_WRITE) + (WidthInByte * Count));
   
   Script = S3BootScriptGetEntryAddAddress (Length);
@@ -1109,6 +1125,14 @@ S3BootScriptSavePciCfgWrite (
   }
 
   WidthInByte = (UINT8) (0x01 << (Width & 0x03));
+
+  //
+  // Truncation check
+  //
+  if ((Count > MAX_UINT8) ||
+      (WidthInByte * Count > MAX_UINT8 - sizeof (EFI_BOOT_SCRIPT_PCI_CONFIG_WRITE))) {
+    return RETURN_OUT_OF_RESOURCES;
+  }
   Length = (UINT8)(sizeof (EFI_BOOT_SCRIPT_PCI_CONFIG_WRITE) + (WidthInByte * Count));
   
   Script = S3BootScriptGetEntryAddAddress (Length);
@@ -1228,6 +1252,14 @@ S3BootScriptSavePciCfg2Write (
   }
 
   WidthInByte = (UINT8) (0x01 << (Width & 0x03));
+
+  //
+  // Truncation check
+  //
+  if ((Count > MAX_UINT8) ||
+      (WidthInByte * Count > MAX_UINT8 - sizeof (EFI_BOOT_SCRIPT_PCI_CONFIG2_WRITE))) {
+    return RETURN_OUT_OF_RESOURCES;
+  }
   Length = (UINT8)(sizeof (EFI_BOOT_SCRIPT_PCI_CONFIG2_WRITE) + (WidthInByte * Count));
   
   Script = S3BootScriptGetEntryAddAddress (Length);
@@ -1454,6 +1486,12 @@ S3BootScriptSaveSmbusExecute (
     return Status;
   }
 
+  //
+  // Truncation check
+  //
+  if (BufferLength > MAX_UINT8 - sizeof (EFI_BOOT_SCRIPT_SMBUS_EXECUTE)) {
+    return RETURN_OUT_OF_RESOURCES;
+  }
   DataSize = (UINT8)(sizeof (EFI_BOOT_SCRIPT_SMBUS_EXECUTE) + BufferLength);
   
   Script = S3BootScriptGetEntryAddAddress (DataSize);
@@ -1641,6 +1679,12 @@ S3BootScriptSaveInformation (
   UINT8                 *Script;
   EFI_BOOT_SCRIPT_INFORMATION  ScriptInformation;
 
+  //
+  // Truncation check
+  //
+  if (InformationLength > MAX_UINT8 - sizeof (EFI_BOOT_SCRIPT_INFORMATION)) {
+    return RETURN_OUT_OF_RESOURCES;
+  }
   Length = (UINT8)(sizeof (EFI_BOOT_SCRIPT_INFORMATION) + InformationLength);
 
   Script = S3BootScriptGetEntryAddAddress (Length);
@@ -2100,7 +2144,13 @@ S3BootScriptLabelInternal (
   UINT8                 Length;
   UINT8                 *Script;
   EFI_BOOT_SCRIPT_INFORMATION  ScriptInformation;
- 
+
+  //
+  // Truncation check
+  //
+  if (InformationLength > MAX_UINT8 - sizeof (EFI_BOOT_SCRIPT_INFORMATION)) {
+    return RETURN_OUT_OF_RESOURCES;
+  }
   Length = (UINT8)(sizeof (EFI_BOOT_SCRIPT_INFORMATION) + InformationLength);
   
   Script = S3BootScriptGetEntryAddAddress (Length);
