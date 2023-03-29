@@ -833,7 +833,7 @@ AddImageExeInfo (
 
 **/
 EFI_STATUS
-IsCertHashFoundInDatabase (
+IsCertHashFoundInDbx (
   IN  UINT8               *Certificate,
   IN  UINTN               CertSize,
   IN  EFI_SIGNATURE_LIST  *SignatureList,
@@ -1358,7 +1358,7 @@ IsForbiddenByDbx (
     CertSize = (UINTN) ReadUnaligned32 ((UINT32 *)CertPtr);
     Cert     = (UINT8 *)CertPtr + sizeof (UINT32);
 
-    Status = IsCertHashFoundInDatabase (Cert, CertSize, (EFI_SIGNATURE_LIST *)Data, DataSize, &RevocationTime, &IsFound);
+    Status = IsCertHashFoundInDbx (Cert, CertSize, (EFI_SIGNATURE_LIST *)Data, DataSize, &RevocationTime, &IsFound);
     if (EFI_ERROR (Status)) {
       //
       // Error in searching dbx. Consider it as 'found'. RevocationTime might
@@ -1529,7 +1529,7 @@ IsAllowedByDb (
               goto Done;
             }
 
-            Status = IsCertHashFoundInDatabase (RootCert, RootCertSize, (EFI_SIGNATURE_LIST *)DbxData, DbxDataSize, &RevocationTime, &IsFound);
+            Status = IsCertHashFoundInDbx (RootCert, RootCertSize, (EFI_SIGNATURE_LIST *)DbxData, DbxDataSize, &RevocationTime, &IsFound);
             if (EFI_ERROR (Status)) {
               //
               // Error in searching dbx. Consider it as 'found'. RevocationTime might
