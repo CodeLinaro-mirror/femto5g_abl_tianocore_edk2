@@ -1397,18 +1397,18 @@ BootLinux (BootInfo *Info)
     }
  }
 
-  DEBUG ((EFI_D_ERROR, "Kernel Load Address: 0x%x\n",
+  DEBUG ((EFI_D_VERBOSE, "Kernel Load Address: 0x%x\n",
                                         BootParamlistPtr.KernelLoadAddr));
-  DEBUG ((EFI_D_ERROR, "Kernel Size Actual: 0x%x\n",
+  DEBUG ((EFI_D_VERBOSE, "Kernel Size Actual: 0x%x\n",
                                       BootParamlistPtr.KernelSizeActual));
-  DEBUG ((EFI_D_ERROR, "Second Size Actual: 0x%x\n", SecondSizeActual));
-  DEBUG ((EFI_D_ERROR, "Ramdisk Load Address: 0x%x\n",
+  DEBUG ((EFI_D_VERBOSE, "Second Size Actual: 0x%x\n", SecondSizeActual));
+  DEBUG ((EFI_D_VERBOSE, "Ramdisk Load Address: 0x%x\n",
                                        BootParamlistPtr.RamdiskLoadAddr));
-  DEBUG ((EFI_D_ERROR, "Ramdisk Size Actual: 0x%x\n", RamdiskSizeActual));
-  DEBUG ((EFI_D_ERROR, "Ramdisk Offset: 0x%x\n",
+  DEBUG ((EFI_D_VERBOSE, "Ramdisk Size Actual: 0x%x\n", RamdiskSizeActual));
+  DEBUG ((EFI_D_VERBOSE, "Ramdisk Offset: 0x%x\n",
                                        BootParamlistPtr.RamdiskOffset));
   DEBUG (
-      (EFI_D_ERROR, "Device Tree Load Address: 0x%x\n",
+      (EFI_D_VERBOSE, "Device Tree Load Address: 0x%x\n",
                              BootParamlistPtr.DeviceTreeLoadAddr));
 
   if (AsciiStrStr (BootParamlistPtr.CmdLine, "root=")) {
