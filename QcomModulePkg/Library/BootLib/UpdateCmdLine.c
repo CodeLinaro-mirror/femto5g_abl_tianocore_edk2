@@ -1448,7 +1448,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   }
 
   GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
-  if (AudioFWLen) {
+  if (AsciiStrLen (AudioFrameWork)) {
      ParamLen = AsciiStrLen (AndroidBootAudioFW);
      BootConfigFlag = IsAndroidBootParam (AndroidBootAudioFW,
      ParamLen, HeaderVersion);
