@@ -121,6 +121,7 @@ DeviceTreeCompatible (VOID *dtb,
   const char *plat_prop = NULL;
   const char *board_prop = NULL;
   const char *pmic_prop = NULL;
+  const char *softsku_prop = NULL;
   char *model = NULL;
   struct dt_entry *dt_entry_array = NULL;
   struct board_id *board_data = NULL;
@@ -131,6 +132,7 @@ DeviceTreeCompatible (VOID *dtb,
   int len_plat_id;
   int min_plat_id_len = 0;
   int len_pmic_id;
+  int len_softsku_id;
   UINT32 dtb_ver;
   UINT64 NumEntries = 0;
   UINT64 i;
@@ -138,6 +140,7 @@ DeviceTreeCompatible (VOID *dtb,
   UINT32 msm_data_count;
   UINT32 board_data_count;
   UINT32 pmic_data_count;
+  UINT32 softsku_id;
   BOOLEAN Result = FALSE;
   static UINT32 DtbCount;
 
@@ -301,6 +304,15 @@ DeviceTreeCompatible (VOID *dtb,
       goto Exit;
     }
 
+    softsku_prop = (const char *)fdt_getprop (dtb, root_offset, "qcom,softsku-id", &len_softsku_id);
+    if (!softsku_prop || len_softsku_id <= 0) {
+      DEBUG ((EFI_D_INFO, "Failed to find softsku id\n"));
+      softsku_id = 0;
+    } else {
+      softsku_id = fdt32_to_cpu (((struct softsku_id *)softsku_prop)->SkuId);
+      DEBUG ((EFI_D_INFO, "softsku id is %u\n", softsku_id));
+    }
+
     /* If we have '<X>; <Y>; <Z>' as platform data & '<A>; <B>; <C>' as board
      * data.
      * Then dt entry should look like
@@ -318,6 +330,7 @@ DeviceTreeCompatible (VOID *dtb,
             dt_entry_array[k].soc_rev = platform_data[i].soc_rev;
             dt_entry_array[k].variant_id = board_data[j].variant_id;
             dt_entry_array[k].board_hw_subtype = board_data[j].platform_subtype;
+            dt_entry_array[k].SkuId = softsku_id;
             dt_entry_array[k].pmic_rev[0] = pmic_data[n].pmic_version[0];
             dt_entry_array[k].pmic_rev[1] = pmic_data[n].pmic_version[1];
             dt_entry_array[k].pmic_rev[2] = pmic_data[n].pmic_version[2];
@@ -333,6 +346,7 @@ DeviceTreeCompatible (VOID *dtb,
           dt_entry_array[k].soc_rev = platform_data[i].soc_rev;
           dt_entry_array[k].variant_id = board_data[j].variant_id;
           dt_entry_array[k].board_hw_subtype = board_data[j].platform_subtype;
+          dt_entry_array[k].SkuId = softsku_id;
           dt_entry_array[k].pmic_rev[0] = BoardPmicTarget (0);
           dt_entry_array[k].pmic_rev[1] = BoardPmicTarget (1);
           dt_entry_array[k].pmic_rev[2] = BoardPmicTarget (2);
