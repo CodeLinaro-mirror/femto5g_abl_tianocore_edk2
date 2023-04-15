@@ -31,7 +31,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 - 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -77,6 +77,13 @@
 #define MAX_NAME_SIZE      56
 #define MAX_VALUE_SIZE     32
 #define MAX_ENTRY_SIZE     8
+#define MAX_AUDIO_FW_LENGTH 16
+
+#ifdef HIBERNATION_SWAP_PARTITION_NAME
+#define SWAP_PARTITION_NAME     HIBERNATION_SWAP_PARTITION_NAME
+#else
+#define SWAP_PARTITION_NAME     L"swap_a"
+#endif
 
 enum unlock_type {
   UNLOCK = 0,
@@ -104,6 +111,7 @@ typedef struct device_info {
   UINT64 rollback_index[MAX_VB_PARTITIONS];
   persistent_value_type  persistent_value[MAX_ENTRY_SIZE];
   UINTN GoldenSnapshot;
+  CHAR8 AudioFramework[MAX_AUDIO_FW_LENGTH];
 } DeviceInfo;
 
 struct verified_boot_verity_mode {
@@ -139,4 +147,8 @@ EFI_STATUS WritePersistentValue (CONST UINT8 *Name, UINTN NameSize,
 
 EFI_STATUS
 SetSnapshotGolden (UINTN Val);
+EFI_STATUS
+StoreAudioFrameWork (CONST CHAR8 *CmdLine, UINT32 CmdLineLen);
+EFI_STATUS
+ReadAudioFrameWork (CHAR8 **CmdLine, UINT32 *CmdLineLen);
 #endif

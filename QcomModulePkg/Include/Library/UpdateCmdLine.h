@@ -137,10 +137,13 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *EarlyPhyAddrCmdLine;
   CHAR8 *EarlyIFaceCmdLine;
   CHAR8 *EarlySpeedCmdLine;
+  CHAR8 *UsbCompCmdLine;
   CHAR8 *ResumeCmdLine;
   CONST CHAR8 *SystemdSlotEnv;
   CHAR8 *SilentBootModeCmdLine;
   CHAR8 *BootCpuCmdLine;
+  CHAR8 *AudioFrameWork;
+  CHAR8 *ModemPathCmdLine;
 } UpdateCmdLineParamList;
 
 
@@ -169,6 +172,13 @@ GetSystemPath (CHAR8 **SysPath,
                CHAR16 *ReqPartition,
                CHAR8 *Key,
                BOOLEAN FlashlessBoot);
+
+UINT32
+GetSystemPathByPname (CHAR8 **SysPath,
+                      BOOLEAN MultiSlotBoot,
+                      BOOLEAN BootIntoRecovery,
+                      CHAR16 *ReqPartition,
+                      CHAR8 *Key);
 
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus);
