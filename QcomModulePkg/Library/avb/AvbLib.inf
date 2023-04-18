@@ -27,6 +27,12 @@
 # * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #*/
 
+#/*
+# * Changes from Qualcomm Innovation Center are provided under the following license:
+# *
+# * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+# * SPDX-License-Identifier: BSD-3-Clause-Clear
+#*/
 
 [Defines]
 	INF_VERSION                    = 0x00010005
@@ -62,6 +68,7 @@
    libavb/avb_vbmeta_image.c
    libavb/avb_version.c
    libavb/avb_ops.c
+   libavb/avb_load_verify_parallel.c
    VerifiedBoot.c
    KeymasterClient.c
    Hash2Client.c
@@ -94,6 +101,7 @@
 
 [Protocols]
 	gQcomQseecomProtocolGuid
+	gEfiSPSSProtocolGuid
 	gEfiPartitionRecordGuid
 	gEfiHash2ProtocolGuid
 	gEfiHashAlgorithmSha256Guid
