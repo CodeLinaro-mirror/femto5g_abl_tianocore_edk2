@@ -32,7 +32,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -130,6 +130,8 @@ STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
 STATIC CHAR8 *FstabSuffixDefault = "default";
+#define MAX_SOFTSKU_IDX_STR 23
+STATIC CHAR8 *SoftSkuIdxStr = " socinfo.softsku_idx=";
 
 /* Memory offline arguments */
 STATIC CHAR8 *MemOff = " mem=";
@@ -752,6 +754,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
+  if (Param->SoftSkuStr != NULL) {
+    Src = Param->SoftSkuStr;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
   return EFI_SUCCESS;
 }
 CHAR8* RemoveSpace (CHAR8* param, UINT32 ParamLen)
@@ -982,6 +989,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
 
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
   InitializeListHead (BootConfigListHead);
+  CHAR8 SoftSkuStr[MAX_SOFTSKU_IDX_STR] = "\0";
+  INT32 SkuIdx = 0;
 
   Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
   if (Status != EFI_SUCCESS) {
@@ -1298,6 +1307,12 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
     Param.MemOffAmt = NULL;
   }
 
+  SkuIdx = BoardSoftSkuId ();
+  if (SkuIdx) {
+      AsciiSPrint (SoftSkuStr, sizeof (SoftSkuStr),
+                   "%a%d", SoftSkuIdxStr , SkuIdx);
+      CmdLineLen += AsciiStrLen (SoftSkuStr);
+  }
   /* 1 extra byte for NULL */
   CmdLineLen += 1;
 
@@ -1337,6 +1352,7 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   Param.LEVerityCmdLine = LEVerityCmdLine;
   Param.HeaderVersion = HeaderVersion;
   Param.SystemdSlotEnv = SystemdSlotEnv;
+  Param.SoftSkuStr = SoftSkuStr;
 
   if (IsHibernationEnabled()) {
     Param.ResumeCmdLine = ResumeCmdLine;
