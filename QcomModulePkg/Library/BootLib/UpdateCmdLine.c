@@ -75,6 +75,7 @@
 #include <Protocol/EFIChipInfoTypes.h>
 #include <Protocol/EFIPmicPon.h>
 #include <Protocol/Print2.h>
+#include <Library/EarlyUsbInit.h>
 
 #include "AutoGen.h"
 #include "DeviceInfo.h"
@@ -540,9 +541,9 @@ GetResumeCmdLine (CHAR8 **ResumeCmdLine, CHAR16 *ReqPartition)
   BOOLEAN MultiSlotBoot;
   UINT32 Len = 0;
 
-  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"swap_a");
+  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)SWAP_PARTITION_NAME);
   Len = GetSystemPath (ResumeCmdLine, MultiSlotBoot, FALSE,
-                (CHAR16 *)L"swap_a", (CHAR8 *)"resume", FALSE);
+                (CHAR16 *)SWAP_PARTITION_NAME, (CHAR8 *)"resume", FALSE);
   if (Len == 0) {
      DEBUG ((EFI_D_ERROR, "GetSystemPath failed\n"));
      return 0;
@@ -642,6 +643,7 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   UINT64 *MemTable;
   INT32 PropLen;
   EFI_STATUS Status;
+  UINT64 UpdRamPartitionSize = 0;
 
   if (IsLEVariant ()) {
     goto Unsupported;
@@ -651,6 +653,13 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Error getting DDR size %r\n", Status));
     return Status;
+  }
+
+  if (UpdRamPartitionsAvail) {
+    for (i =0; i < NumUpdPartitions; i++) {
+      UpdRamPartitionSize += UpdatedRamPartitions[i].AvailableLength;
+    }
+    DdrSize = UpdRamPartitionSize;
   }
 
   MemLimit = DdrSize;
@@ -882,12 +891,12 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if (((IsBuildUseRecoveryAsBoot () ||
-      IsRecoveryHasNoKernel ()) &&
-      IsDynamicPartitionSupport () &&
-      !Param->Recovery) ||
-      (!Param->MultiSlotBoot &&
-       !IsBuildUseRecoveryAsBoot ())) {
+  if (!Param->Recovery &&
+      (((IsBuildUseRecoveryAsBoot () ||
+         IsRecoveryHasNoKernel ()) &&
+         IsDynamicPartitionSupport ()) ||
+         (!Param->MultiSlotBoot &&
+         !IsBuildUseRecoveryAsBoot ()))) {
     if (Param->HeaderVersion < BOOT_HEADER_VERSION_THREE) {
       BootForceNormalBoot = '1';
     }
@@ -932,6 +941,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     Src = Param->EarlyIFaceCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlySpeedCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (EarlyUsbInitEnabled ()) {
+    Src = Param->UsbCompCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -1021,6 +1035,9 @@ AddtoBootConfigList (BOOLEAN BootConfigFlag,
   NewNode = (struct BootConfigParamNode *)
                AllocateBootConfigNode (ParamKeyLen + SIZE_OF_DELIM +
                SIZE_OF_DELIM + ParamValueLen);
+  if (!NewNode) {
+    return;
+  }
   gBS->CopyMem (NewNode->param, (CHAR8*)ParamKey, ParamKeyLen);
   if (ParamValue) {
     gBS->CopyMem (&NewNode->param[ParamKeyLen], (CHAR8*)ParamValue,
@@ -1179,6 +1196,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
   CHAR8 MemOffAmt[MEM_OFF_SIZE];
   BOOLEAN BootConfigFlag = FALSE;
+  CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
 
   CONST CHAR8 *CmdLine = BootParamlistPtr->CmdLine;
   CHAR8 **FinalCmdLine = &BootParamlistPtr->FinalCmdLine;
@@ -1590,6 +1608,11 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
   }
 
+  if (EarlyUsbInitEnabled ()) {
+    GetEarlyUsbCmdlineParam (UsbCompositionCmdline);
+    CmdLineLen += AsciiStrLen (UsbCompositionCmdline);
+  }
+
   if (BootCpuSelectionEnabled ()) {
     AsciiSPrint (BootCpuCmdLine, sizeof (BootCpuCmdLine), " boot_cpu=%d",
                  BootCpuId);
@@ -1607,7 +1630,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CmdLineLen += 1;
 
   if (IsHibernationEnabled ()) {
-    CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, (CHAR16 *)L"swap_a");
+    CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, 
+                    (CHAR16 *)SWAP_PARTITION_NAME);
   }
 
   Param.Recovery = Recovery;
@@ -1653,6 +1677,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyPhyAddrCmdLine = PhyAddrBufCmdLineCmdLine;
     Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
+  }
+
+  if (EarlyUsbInitEnabled ()) {
+    Param.UsbCompCmdLine = UsbCompositionCmdline;
   }
 
   if (IsHibernationEnabled ()) {

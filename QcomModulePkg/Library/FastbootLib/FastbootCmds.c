@@ -49,7 +49,7 @@ found at
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -1070,6 +1070,57 @@ FastbootUpdateAttr (CONST CHAR16 *SlotSuffix)
   }
 }
 
+#ifdef NAND_UBI_VOLUME_FLASHING_ENABLED
+/* UBI Volume flashing */
+STATIC
+EFI_STATUS
+HandleUbiVolFlash (
+  IN CHAR16  *VolumeName,
+  IN UINT32 VolumeMaxSize,
+  IN VOID   *Image,
+  IN UINT64   Size)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 UbiPageSize;
+  UINT32 UbiBlockSize;
+  EFI_UBI_FLASHER_PROTOCOL *Ubi;
+  UBI_FLASHER_HANDLE UbiFlasherHandle;
+  CHAR8 VolumeNameAscii[MAX_GPT_NAME_SIZE] = {'\0'};
+
+  Status = gBS->LocateProtocol (&gEfiUbiFlasherProtocolGuid,
+                                NULL,
+                                (VOID **) &Ubi);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "UBI Volume flashing not supported\n"));
+    return Status;
+  }
+
+  UnicodeStrToAsciiStr (VolumeName, VolumeNameAscii);
+  Status = Ubi->UbiFlasherOpen (VolumeNameAscii,
+                                &UbiFlasherHandle,
+                                &UbiPageSize,
+                                &UbiBlockSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to open UBI volume\n"));
+    return Status;
+  }
+
+  /* Note: sparse image is not supported for ubi volume flashing */
+  Status = Ubi->UbiFlasherWrite (UbiFlasherHandle, 1, Image, Size);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to write UBI volume\n"));
+  }
+
+  Status = Ubi->UbiFlasherClose (UbiFlasherHandle);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to close UBI volume\n"));
+    return Status;
+  }
+
+  return Status;
+}
+#endif
+
 /* Raw Image flashing */
 STATIC
 EFI_STATUS
@@ -1085,7 +1136,15 @@ HandleRawImgFlash (IN CHAR16 *PartitionName,
   CHAR16 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
   BOOLEAN MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
   BOOLEAN HasSlot = FALSE;
+#ifdef NAND_UBI_VOLUME_FLASHING_ENABLED
+  CHAR16 OrigPartitionName[MAX_GPT_NAME_SIZE];
 
+  /* The MultiSlot logic may not be applicable for all volumes, thus we need
+   * to retain the original partition name for volume flashing.
+  */
+  StrnCpyS (OrigPartitionName, PartitionMaxSize,
+                PartitionName, PartitionMaxSize);
+#endif
   /* For multislot boot the partition may not support a/b slots.
    * Look for default partition, if it does not exist then try for a/b
    */
@@ -1094,8 +1153,15 @@ HandleRawImgFlash (IN CHAR16 *PartitionName,
                                    MAX_SLOT_SUFFIX_SZ);
 
   Status = PartitionGetInfo (PartitionName, &BlockIo, &Handle);
-  if (Status != EFI_SUCCESS)
+  if (Status != EFI_SUCCESS) {
+#ifdef NAND_UBI_VOLUME_FLASHING_ENABLED
+    DEBUG ((EFI_D_ERROR, "[%s] Partition Not Found - trying volume\n",
+            OrigPartitionName));
+    Status = HandleUbiVolFlash (OrigPartitionName,
+            ARRAY_SIZE (OrigPartitionName), Image, Size);
+#endif
     return Status;
+  }
   if (!BlockIo) {
     DEBUG ((EFI_D_ERROR, "BlockIo for %a is corrupted\n", PartitionName));
     return EFI_VOLUME_CORRUPTED;
@@ -2495,12 +2561,33 @@ VOID InitMultiThreadEnv ()
           "InitMultiThreadEnv successfully, will use thread to flash \n"));
 }
 
+STATIC VOID GetBufferSize (UINT64 *MaxBufferSize, UINT64 *MinBufferSize)
+{
+  EFI_STATUS Status;
+  UINT64 DdrSize = 0;
+
+  Status = GetDdrSize (&DdrSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Error getting DDR Type %r\n", Status));
+    return;
+  }
+
+  if (DdrSize <= DDR_128MB) {
+    /* 35MB */
+    *MaxBufferSize = 36700160;
+    /* 16MB */
+    *MinBufferSize = 16777216;
+  }
+}
+
 EFI_STATUS
 FastbootCmdsInit (VOID)
 {
   EFI_STATUS Status;
   EFI_EVENT mFatalSendErrorEvent;
   CHAR8 *FastBootBuffer;
+  UINT64 MaxBufferSize = MAX_BUFFER_SIZE;
+  UINT64 MinBufferSize = MIN_BUFFER_SIZE;
 
   mDataBuffer = NULL;
   mUsbDataBuffer = NULL;
@@ -2524,6 +2611,9 @@ FastbootCmdsInit (VOID)
     return Status;
   }
 
+  /* Get the Max/Min download size for low memory */
+  GetBufferSize (&MaxBufferSize, &MinBufferSize);
+
   /* Allocate buffer used to store images passed by the download command */
   GetMaxAllocatableMemory (&MaxDownLoadSize);
   if (!MaxDownLoadSize) {
@@ -2535,7 +2625,7 @@ FastbootCmdsInit (VOID)
     // Try allocating 3/4th of free memory available.
     MaxDownLoadSize = EFI_FREE_MEM_DIVISOR (MaxDownLoadSize);
     MaxDownLoadSize = LOCAL_ROUND_TO_PAGE (MaxDownLoadSize, EFI_PAGE_SIZE);
-    if (MaxDownLoadSize < MIN_BUFFER_SIZE) {
+    if (MaxDownLoadSize < MinBufferSize) {
       DEBUG ((EFI_D_ERROR,
         "ERROR: Allocation fail for minimim buffer for fastboot\n"));
       return EFI_OUT_OF_RESOURCES;
@@ -2543,8 +2633,8 @@ FastbootCmdsInit (VOID)
 
     /* If available buffer on target is more than max buffer size,
        we limit this to max buffer buffer size we support */
-    if (MaxDownLoadSize > MAX_BUFFER_SIZE) {
-      MaxDownLoadSize = MAX_BUFFER_SIZE;
+    if (MaxDownLoadSize > MaxBufferSize) {
+      MaxDownLoadSize = MaxBufferSize;
     }
 
     Status =
@@ -2945,7 +3035,13 @@ is_display_supported ( VOID )
    return 1;
 }
 
-#ifndef TARGET_BOARD_TYPE_AUTO
+#if TARGET_BOARD_TYPE_AUTO
+STATIC VOID
+RebootDeviceRecovery ( VOID )
+{
+
+}
+#else
 STATIC VOID
 RebootDeviceRecovery ( VOID )
 {
@@ -2953,12 +3049,6 @@ RebootDeviceRecovery ( VOID )
       !IsEnableDisplayMenuFlagSupported ()) {
      RebootDevice (RECOVERY_MODE);
    }
-
-}
-#else
-STATIC VOID
-RebootDeviceRecovery ( VOID )
-{
 
 }
 #endif
