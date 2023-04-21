@@ -71,7 +71,6 @@
 #include "avb_load_verify_parallel.h"
 
 
-
 /* Maximum number of partitions that can be loaded with avb_slot_verify(). */
 #define MAX_NUMBER_OF_LOADED_PARTITIONS 32
 
@@ -423,7 +422,7 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
    if (image_buf == NULL) {
       ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
       goto out;
-   } 
+   }
 
 #if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
   if ((avb_strncmp ("boot", part_name, 4) == 0)) {

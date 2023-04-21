@@ -322,6 +322,7 @@ TimerStackHandler (IN EFI_EVENT Event, IN VOID *Context)
 
   //Timer use one thread in abl, so only need to allocate unsafestack once.
   AllocateUnSafeStackPtr (TimerThread);
+
   return;
 }
 
@@ -372,6 +373,7 @@ TimerStackInit (VOID)
     StartStackTimer ();
 
     DEBUG ((EFI_D_VERBOSE, "Create TimerStackEvent: %r\n", Status));
+
   }
   return Status;
 }

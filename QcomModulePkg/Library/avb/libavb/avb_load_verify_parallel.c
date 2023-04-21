@@ -120,6 +120,7 @@ static AvbSlotVerifyResult VerifyPartitionSha256 (
       Ret = AVB_SLOT_VERIFY_RESULT_OK;
       goto out;
   }
+
 out:
   return Ret;
 }
@@ -161,6 +162,7 @@ static AvbSlotVerifyResult VerifyPartitionSha512 (
       Ret = AVB_SLOT_VERIFY_RESULT_OK;
       goto out;
   }
+
 out:
   return Ret;
 }
@@ -174,6 +176,7 @@ static AvbSlotVerifyResult Load_partition_to_verify (
   AvbIOResult IoRet;
   AvbSlotVerifyResult Ret = AVB_SLOT_VERIFY_RESULT_OK;
   size_t PartNumRead = 0;
+
   IoRet = ops->read_from_partition (
       ops, part_name, Offset, ImageSize, (image_buf + Offset), &PartNumRead);
   if (IoRet == AVB_IO_RESULT_ERROR_OOM) {
@@ -189,6 +192,7 @@ static AvbSlotVerifyResult Load_partition_to_verify (
     Ret = AVB_SLOT_VERIFY_RESULT_ERROR_IO;
     goto out;
   }
+
 out:
   return Ret;
 }
@@ -239,7 +243,6 @@ INT32 BootPartitionLoad (VOID* Arg)
           ThreadBootLoad->image_buf,
           SplitImageSize );
 
-
   KernIntf->Sem->SemPost (SemLoadSecond, FALSE);
 
   ThreadBootLoad->Status = Status;
@@ -268,12 +271,11 @@ INT32 BootPartitionVerify (VOID* Arg)
     Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
     goto out;
   }
+
   if (ThreadBootVerify->Sha256HashCheck == true) {
     Sha256Ctx = (AvbSHA256Ctx*) ThreadBootVerify->HashCtx;
     Sha512Ctx = NULL;
-  }
-  else
-  {
+  } else {
     Sha256Ctx = NULL;
     Sha512Ctx = (AvbSHA512Ctx*) ThreadBootVerify->HashCtx;
   }
@@ -283,17 +285,15 @@ INT32 BootPartitionVerify (VOID* Arg)
   KernIntf->Sem->SemWait (SemLoadFirst);
 
   if (ThreadBootVerify->Sha256HashCheck == true) {
-  Status = VerifyPartitionSha256 (Sha256Ctx,
+    Status = VerifyPartitionSha256 (Sha256Ctx,
                                   ThreadBootVerify->part_name,
                                   ThreadBootVerify->DescDigest,
                                   ThreadBootVerify->DescDigestLen,
                                   ThreadBootVerify->image_buf,
                                   SplitImageSize,
                                   ThreadBootVerify->IsFinal);
-  }
-  else
-  {
-  Status = VerifyPartitionSha512 (Sha512Ctx,
+  } else {
+   Status = VerifyPartitionSha512 (Sha512Ctx,
                                   ThreadBootVerify->part_name,
                                   ThreadBootVerify->DescDigest,
                                   ThreadBootVerify->DescDigestLen,
@@ -308,8 +308,6 @@ INT32 BootPartitionVerify (VOID* Arg)
   ImageOffset = ImageOffset + SplitImageSize;
 
   KernIntf->Sem->SemWait (SemLoadSecond);
-
-
 
   if (Status != AVB_SLOT_VERIFY_RESULT_OK) {
     goto out;
@@ -541,7 +539,7 @@ AvbSlotVerifyResult LoadAndVerifyBootHashPartition (
   /*Free and assign NUL to ThreadLoadVerifyInfo_1*/
   gBS->FreePool (ThreadLoadInfo);
   gBS->FreePool (ThreadVerifyInfo);
+
 out:
   return Status;
-
 }

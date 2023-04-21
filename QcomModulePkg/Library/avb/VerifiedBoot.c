@@ -1248,9 +1248,25 @@ static EFI_STATUS GetOsVerAndSecPactchLevel (AvbSlotVerifyData *SlotData,
   CONST CHAR8 *PropValPtr  = NULL;
   UINTN PropValSize = 0;
   UINT32 OsVersionRaw;
+  size_t Index;
 
-  PropValPtr = avb_property_lookup (SlotData->vbmeta_images[0].vbmeta_data,
-                                    SlotData->vbmeta_images[0].vbmeta_size,
+  /* Check if boot image is chained parttion.
+   */
+
+  for (Index = 1; Index < SlotData->num_vbmeta_images; Index++) {
+    if (avb_strcmp (SlotData->vbmeta_images[Index].partition_name, "boot")
+        == 0 ) {
+        break;
+      }
+  }
+
+  if (Index >= SlotData->num_vbmeta_images) {
+    /* Extract os_version and security_patch from vbmeta instead */
+    Index = 0;
+  }
+
+  PropValPtr = avb_property_lookup (SlotData->vbmeta_images[Index].vbmeta_data,
+                                    SlotData->vbmeta_images[Index].vbmeta_size,
                                     "com.android.build.boot.os_version",
                                     0,
                                     &PropValSize);
@@ -1267,8 +1283,8 @@ static EFI_STATUS GetOsVerAndSecPactchLevel (AvbSlotVerifyData *SlotData,
   }
 
   PropValPtr = NULL;
-  PropValPtr = avb_property_lookup (SlotData->vbmeta_images[0].vbmeta_data,
-                                    SlotData->vbmeta_images[0].vbmeta_size,
+  PropValPtr = avb_property_lookup (SlotData->vbmeta_images[Index].vbmeta_data,
+                                    SlotData->vbmeta_images[Index].vbmeta_size,
                                     "com.android.build.boot.security_patch",
                                     0,
                                     &PropValSize);
@@ -1752,7 +1768,7 @@ out:
     }
     Info->BootState = RED;
     if (Info->MultiSlotBoot) {
-      HandleActiveSlotUnbootable ();
+      HandleActiveSlotUnbootable (FALSE);
       /* HandleActiveSlotUnbootable should have swapped slots and
        * reboot the device. If no bootable slot found, enter fastboot
        */
@@ -1855,6 +1871,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     CHAR8 *SystemPath = NULL;
     UINT32 SystemPathLen = 0;
     UINT32 PageSize = 0;
+    BOOLEAN SecureDevice = FALSE;
     KMRotAndBootStateForLE Data = {0};
     secasn1_data_type Modulus = {NULL};
     secasn1_data_type PublicExp = {NULL};
@@ -1863,6 +1880,12 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     /*Load image*/
     GUARD (VBAllocateCmdLine (Info));
     GUARD (VBCommonInit (Info));
+
+    Status = IsSecureDevice (&SecureDevice);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
+        return Status;
+    }
 
     /* In case of flashless LE devices images are already loaded and verified
      * by previous bootloaders, so just fill the BootInfo structure with
@@ -1930,6 +1953,20 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "VB: Error during "
                       "LEVBVerifyHashWithSignature: %r\n", Status));
+
+        /* There are build variants where boot image is not signed.
+         * Below check allows the device to bootup even if the
+         * authentication fails on a Non-secure device.
+         * Note: Root of Trust cannnot be set if image authentication fails
+         * or boot image is not signed.
+         */
+         if (!SecureDevice) {
+            if (!TargetBuildVariantUser () ) {
+                DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
+                                                    "debug builds\n"));
+                goto skip_verification;
+            }
+        }
         return Status;
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
