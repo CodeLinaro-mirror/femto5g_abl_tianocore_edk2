@@ -477,7 +477,7 @@ FindNodeAndUpdateProperty (VOID *fdt,
 }
 
 STATIC VOID
-FindCpuNodeAndUpdateStatus (VOID *fdt,
+FindCpuNodeAndUpdateName (VOID *fdt,
                        UINT32 TableSz,
                        struct PartialGoods *Table,
                        UINT32 Value)
@@ -487,6 +487,7 @@ FindCpuNodeAndUpdateStatus (VOID *fdt,
   INT32 ParentOffset = 0;
   INT32 Ret = 0;
   UINT32 i;
+  CHAR8 NewName[20];
 
   for (i = 0; i < TableSz; i++, Table++) {
     if (!(Value & Table->Val))
@@ -510,15 +511,22 @@ FindCpuNodeAndUpdateStatus (VOID *fdt,
       continue;
     }
 
-    /* Replace the status property to fail */
-    Ret = FdtSetProp (fdt, SubNodeOffset, "status",
-                      (CONST VOID *)"fail",
-                      AsciiStrLen ("fail") + 1);
+    /* Replace the device_type property to nil value */
+    Ret = FdtSetProp (fdt, SubNodeOffset, "device_type",
+                      (CONST VOID *)"nil",
+                      AsciiStrLen ("nil") + 1);
+
+    AsciiStrnCpyS (NewName, sizeof (NewName), "nil@", AsciiStrLen ("nil@"));
+    AsciiStrnCatS (NewName, sizeof (NewName), SNode->SubNodeName + 4,
+                   AsciiStrLen (SNode->SubNodeName) - 4);
+
+     /* Update the node name to nil*/
+    Ret = fdt_set_name (fdt, SubNodeOffset, NewName);
     if (!Ret) {
-      DEBUG ((EFI_D_INFO, "CPU (%a) status updated\n",
+      DEBUG ((EFI_D_INFO, "CPU (%a) name updated\n",
               SNode->SubNodeName));
     } else {
-      DEBUG ((EFI_D_ERROR, "Failed to update CPU (%a) status: ret =%d \n",
+      DEBUG ((EFI_D_ERROR, "Failed to update CPU (%a) name: ret =%d \n",
               SNode->SubNodeName, Ret));
     }
   }
@@ -637,9 +645,9 @@ UpdatePartialGoodsNode (VOID *fdt)
                              &PartialGoodsCpuType[PartialGoodsCPUTypeValue][0],
                              PartialGoodsCpuValue);
 
-  FindCpuNodeAndUpdateStatus (fdt, NUM_OF_CPUS,
-                              &PartialGoodsCpuType[PartialGoodsCPUTypeValue][0],
-                              PartialGoodsCpuValue);
+  FindCpuNodeAndUpdateName (fdt, NUM_OF_CPUS,
+                             &PartialGoodsCpuType[PartialGoodsCPUTypeValue][0],
+                             PartialGoodsCpuValue);
 
   return EFI_SUCCESS;
 }
