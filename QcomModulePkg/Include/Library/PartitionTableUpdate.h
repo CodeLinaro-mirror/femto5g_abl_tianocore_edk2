@@ -106,6 +106,11 @@ typedef enum {
 
 #define PARTITION_ENTRY_SIZE 128
 #define PART_ATT_READONLY_OFFSET 60
+
+/* misc_boot cookie*/
+#define A_BOOT_RECOVERY 0xAA
+#define B_BOOT_RECOVERY 0xBB
+
 /*
 The attributes like Priority, Active bit,
 Max retry count, Success bit and Unabootable bits will be

@@ -561,7 +561,9 @@ STATIC EFI_STATUS GetMultiSlotPartsList (VOID)
       continue;
 
     for (j = i + 1; j < PartitionCount; j++) {
-      if (!PtnEntries[j].PartEntry.PartitionName[0])
+      if (!PtnEntries[j].PartEntry.PartitionName[0] ||
+          IsSubStrPresentAtLast (PtnEntries[j].PartEntry.PartitionName,
+                                 (CONST CHAR16 *)L"_r"))
         continue;
       Len = StrLen (SearchString);
       PtnLen = StrLen (PtnEntries[j].PartEntry.PartitionName);
@@ -1481,6 +1483,163 @@ AtomicABEnabled (VOID)
 #endif
 
 STATIC EFI_STATUS
+ReadMisc_boot (Slot *BootableSlot)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 BlkSz;
+  UINT32 Idx = 0;
+  UINTN MaxGptPartEntrySzBytes;
+  HandleInfo BlockIoHandle[MAX_HANDLEINF_LST_SIZE];
+  CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
+  UINT32 MaxHandles = MAX_HANDLEINF_LST_SIZE;
+  EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
+  UINT8 *Buffer = NULL;
+
+  CHAR16 PtrName[] = {L"misc_boot"};
+  Slot Slots[] = {{L"_a"}, {L"_b"}};
+
+  GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
+  if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC"))) {
+    Status = GetStorageHandle (NO_LUN, BlockIoHandle, &MaxHandles);
+    if (EFI_ERROR (Status) ||
+        MaxHandles == 0) {
+      DEBUG ((EFI_D_ERROR, "ReadMisc_boot: Failed to get storage handle\n"));
+      return Status;
+    }
+  } else {
+    DEBUG ((EFI_D_INFO, "ReadMisc_boot: misc_boot only supported on EMMC\n"));
+    return GetActiveSlot (BootableSlot);
+  }
+
+  BlockIo = BlockIoHandle[0].BlkIo;
+  if (BlockIo == NULL) {
+    DEBUG ((EFI_D_ERROR, "ReadMisc_boot: BlockIo is NULL\n"));
+    return EFI_DEVICE_ERROR;
+  }
+  BlkSz = BlockIo->Media->BlockSize;
+
+  for (Idx = 0; Idx < PartitionCount; Idx++) {
+    if (StrnCmp (PtnEntries[Idx].PartEntry.PartitionName,
+                PtrName, StrLen (PtrName)) == 0) {
+
+      DEBUG ((EFI_D_INFO, "Find %s Partiton.\n",
+                           PtnEntries[Idx].PartEntry.PartitionName));
+      MaxGptPartEntrySzBytes = BlkSz;
+      Buffer = AllocateZeroPool (MaxGptPartEntrySzBytes);
+
+      if (!Buffer) {
+        Status = EFI_OUT_OF_RESOURCES;
+        goto Exit;
+      }
+
+      Status = BlockIo->ReadBlocks (BlockIo, BlockIo->Media->MediaId,
+                                    PtnEntries[Idx].PartEntry.StartingLBA,
+                                    MaxGptPartEntrySzBytes, Buffer);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR, "Unable to read the misc_boot cookie.\n"));
+        goto Exit;
+      }
+
+      /* misc_boot cookie is 0xAA or empty, slot should be ActiveSlot */
+      if ((Buffer[0] == A_BOOT_RECOVERY) ||
+          (Buffer[0] == 0)) {
+        Status = GetActiveSlot (BootableSlot);
+        if (EFI_ERROR (Status)) {
+          goto Exit;
+        }
+        DEBUG ((EFI_D_INFO, "misc_boot cookie = %02x, Boot Slot is %s\n",
+                              Buffer[0], BootableSlot->Suffix));
+
+        /* misc_boot cookie is 0xBB, slot should be InActiveSlot */
+      } else if (Buffer[0] == B_BOOT_RECOVERY) {
+        Status = GetActiveSlot (BootableSlot);
+        if (EFI_ERROR (Status)) {
+          goto Exit;
+        }
+        /* Determine the inactive slot and set BootableSlot to it.
+         * NOTE: SetActiveSlot (which writes partition table) is intentionally
+         * called here to persist the slot switch triggered by misc_boot cookie.
+         */
+        if (StrnCmp (BootableSlot->Suffix, Slots[0].Suffix,
+                         StrLen (Slots[0].Suffix)) == 0) {
+          Status = StrnCpyS (BootableSlot->Suffix,
+                        ARRAY_SIZE (BootableSlot->Suffix),
+                        Slots[1].Suffix, StrLen (Slots[1].Suffix));
+          if (EFI_ERROR (Status)) {
+            goto Exit;
+          }
+          Status = SetActiveSlot (&Slots[1], FALSE);
+          if (EFI_ERROR (Status)) {
+            goto Exit;
+          }
+
+        } else if (StrnCmp (BootableSlot->Suffix, Slots[1].Suffix,
+                        StrLen (Slots[1].Suffix)) == 0) {
+          Status = StrnCpyS (BootableSlot->Suffix,
+                        ARRAY_SIZE (BootableSlot->Suffix),
+                        Slots[0].Suffix, StrLen (Slots[0].Suffix));
+          if (EFI_ERROR (Status)) {
+            goto Exit;
+          }
+          Status = SetActiveSlot (&Slots[0], FALSE);
+          if (EFI_ERROR (Status)) {
+            goto Exit;
+          }
+
+        } else {
+          DEBUG ((EFI_D_ERROR,
+                  "ReadMisc_boot: Unexpected active slot suffix %s\n",
+                  BootableSlot->Suffix));
+          Status = EFI_DEVICE_ERROR;
+          goto Exit;
+        }
+
+        DEBUG ((EFI_D_INFO, "misc_boot cookie = %02x, Boot Slot is %s\n",
+                        Buffer[0], BootableSlot->Suffix));
+        Buffer[0] = 0;
+        Status = BlockIo->WriteBlocks (BlockIo, BlockIo->Media->MediaId,
+                                    PtnEntries[Idx].PartEntry.StartingLBA,
+                                    MaxGptPartEntrySzBytes, Buffer);
+        if (EFI_ERROR (Status)) {
+          DEBUG ((EFI_D_ERROR, "Unable to clear the misc_boot cookie.\n"));
+          goto Exit;
+        }
+
+        Status = BlockIo->FlushBlocks (BlockIo);
+        if (EFI_ERROR (Status)) {
+            DEBUG ((EFI_D_ERROR,
+                  "ReadMisc_boot: FlushBlocks failed: %r\n",
+                  Status));
+            goto Exit;
+        }
+        DEBUG ((EFI_D_INFO, "Erase misc_boot cookie is OK.\n"));
+      } else {
+        DEBUG ((EFI_D_WARN,
+              "ReadMisc_boot: Unknown cookie value 0x%02x,"
+              "defaulting to active slot.\n",
+              Buffer[0]));
+        Status = GetActiveSlot (BootableSlot);
+      }
+      break;
+    }
+  }
+
+  /* If misc_boot partition was not found, use active slot */
+  if (IsSuffixEmpty (BootableSlot)) {
+    DEBUG ((EFI_D_INFO, "No misc_boot Partition found, using active slot.\n"));
+    Status = GetActiveSlot (BootableSlot);
+  }
+
+Exit:
+  if (Buffer) {
+    FreePool (Buffer);
+  }
+
+  return Status;
+
+}
+
+STATIC EFI_STATUS
 GetActiveSlot (Slot *ActiveSlot)
 {
   EFI_STATUS Status = EFI_SUCCESS;
@@ -1856,7 +2015,10 @@ FindBootableSlot (Slot *BootableSlot)
     return EFI_INVALID_PARAMETER;
   }
 
-  GUARD (GetActiveSlot (BootableSlot));
+  /* Per misc_boot cookie to switch boot slot.
+   * Compatible misc_boot partition don't exist.
+  */
+  GUARD (ReadMisc_boot (BootableSlot));
 
 #ifdef AUTO_VIRT_ABL
   return Status;
