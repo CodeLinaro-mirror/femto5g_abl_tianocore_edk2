@@ -27,6 +27,44 @@ OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************/
 
+/*
+ *  Changes from Qualcomm Innovation Center are provided under the following
+ *  license:
+ *
+ *  Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights
+ *  reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted (subject to the limitations in the
+ *  disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *        contributors may be used to endorse or promote products derived
+ *        from this software without specific prior written permission.
+ *
+ *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ *  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /*===========================================================================
                      INCLUDE FILES FOR MODULE
 ===========================================================================*/
@@ -43,7 +81,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define true 1
 #endif
 
-#ifndef flase
+#ifndef false
 #define false 0
 #endif
 
@@ -96,6 +134,9 @@ typedef struct AES_GCM_ARMV8_ctx_s
 #define UC_EXPORT_API                    __attribute__((visibility("default")))
 UC_LOCAL_API int aes_v8_set_encrypt_key(const uint8_t *user_key, const int bits, AES_KEY *key);
 UC_LOCAL_API void aes_v8_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+UC_LOCAL_API void aes_v8_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out,
+                                              size_t blocks, const void *key,
+                                              const uint8_t ivec[16]);
 #endif
 
 AES_GCM_ARMV8_CTX gAesGcmArmV8Ctx;
@@ -180,7 +221,8 @@ sw_crypto_errno_enum_type AES_GCM_ARMV8_Cipherdata(AES_GCM_ARMV8_CTX *c,
              UC_E_FAILURE);
   } else {
     DEBUG ((EFI_D_VERBOSE,"decrypting %s:%d \n", __func__, __LINE__));
-    UC_GUARD(0 == (ret = CRYPTO_gcm128_decrypt(c->ctx, ibuf, obuf, isz)),
+    UC_GUARD(0 == (ret = CRYPTO_gcm128_decrypt_ctr32(c->ctx, ibuf, obuf, isz,
+             aes_v8_ctr32_encrypt_blocks)),
              UC_E_FAILURE);
   }
   DEBUG ((EFI_D_VERBOSE,"end : %s:%d \n", __func__, __LINE__));

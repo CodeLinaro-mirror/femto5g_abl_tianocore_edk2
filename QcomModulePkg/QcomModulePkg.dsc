@@ -30,7 +30,7 @@
 #/*
 # *  Changes from Qualcomm Innovation Center are provided under the following license:
 # *
-# *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+# *  Copyright (c) 2022 - 2023 Qualcomm Innovation Center, Inc. All rights reserved.
 # *
 # *  Redistribution and use in source and binary forms, with or without
 # *  modification, are permitted (subject to the limitations in the
@@ -150,6 +150,10 @@
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_AES
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT_AES
   !endif
+  !if $(HIBERNATION_SWAP_PARTITION_NAME)
+      GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
+      GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
+  !endif
   !if $(AB_RETRYCOUNT_DISABLE)
       GCC:*_*_*_CC_FLAGS = -DAB_RETRYCOUNT_DISABLE
   !endif
@@ -158,6 +162,9 @@
   !endif
   !if $(EARLY_ETH_AS_DLKM) == 1
       GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_AS_DLKM
+  !endif
+  !if $(BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL) == 1
+      GCC:*_*_*_CC_FLAGS = -DBOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
   !endif
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
@@ -202,6 +209,18 @@
   !endif
   !if $(KERNEL_SIZE_RESERVED)
       GCC:*_*_*_CC_FLAGS = -DKERNEL_SIZE_RESERVED=$(KERNEL_SIZE_RESERVED)
+  !endif
+  !if $(DISABLE_KERNEL_PROTOCOL)
+      GCC:*_*_*_CC_FLAGS = -DDISABLE_KERNEL_PROTOCOL=$(DISABLE_KERNEL_PROTOCOL)
+  !endif
+  !if $(NAND_UBI_VOLUME_FLASHING_ENABLED)
+      GCC:*_*_*_CC_FLAGS = -DNAND_UBI_VOLUME_FLASHING_ENABLED
+  !endif
+  !if $(TARGET_SUPPORTS_EARLY_USB_INIT)
+      GCC:*_*_*_CC_FLAGS = -DTARGET_SUPPORTS_EARLY_USB_INIT
+  !endif
+  !if $(TARGET_SUPPORTS_EARLY_USB_INIT)
+      GCC:*_*_*_PP_FLAGS = -DTARGET_SUPPORTS_EARLY_USB_INIT
   !endif
 
 [PcdsFixedAtBuild.common]

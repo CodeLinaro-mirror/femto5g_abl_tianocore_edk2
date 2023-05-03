@@ -99,6 +99,7 @@ typedef struct UpdateCmdLineParamList {
   BOOLEAN AlarmBoot;
   BOOLEAN MdtpActive;
   BOOLEAN FlashlessBoot;
+  BOOLEAN NetworkBoot;
   UINT32 CmdLineLen;
   UINT32 HaveCmdLine;
   UINT32 PauseAtBootUp;
@@ -137,6 +138,7 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *EarlyPhyAddrCmdLine;
   CHAR8 *EarlyIFaceCmdLine;
   CHAR8 *EarlySpeedCmdLine;
+  CHAR8 *UsbCompCmdLine;
   CHAR8 *ResumeCmdLine;
   CONST CHAR8 *SystemdSlotEnv;
   CHAR8 *SilentBootModeCmdLine;
@@ -157,6 +159,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                CHAR8 *FfbmStr,
                BOOLEAN Recovery,
                BOOLEAN FlashlessBoot,
+               BOOLEAN NetworkBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
                UINT32 HeaderVersion,
@@ -170,7 +173,8 @@ GetSystemPath (CHAR8 **SysPath,
                BOOLEAN BootIntoRecovery,
                CHAR16 *ReqPartition,
                CHAR8 *Key,
-               BOOLEAN FlashlessBoot);
+               BOOLEAN FlashlessBoot,
+               BOOLEAN NetworkBoot);
 
 UINT32
 GetSystemPathByPname (CHAR8 **SysPath,

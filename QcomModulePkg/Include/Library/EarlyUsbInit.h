@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2020 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -27,34 +26,31 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef __THREADSTACK_H__
-#define __THREADSTACK_H__
-
-#include "list.h"
-#include <Protocol/EFIKernelInterface.h>
-
-/* Stack address will change frequently, we need record the top adderss and
- * free it at suitable place.
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear.
  */
-typedef struct _THREAD_STACK_ENTRY {
-  Thread                      *Thread;
-  VOID                        *StackBottom;
-  VOID                        *StackTop;
-}THREAD_STACK_ENTRY;
 
-typedef struct _THREAD_LIST_TABLE {
-  struct list_node Node;
-  struct _THREAD_STACK_ENTRY   *ThreadStackEntry;
-}THREAD_STACK_NODE;
+#ifndef __EARLY_USB_INIT__
+#define __EARLY_USB_INIT__
 
-EFI_STATUS __attribute__ ( (no_sanitize ("safe-stack")))
-AllocateUnSafeStackPtr (Thread* CurrentThread);
-VOID** __attribute__ ( (no_sanitize ("safe-stack")))
-__safestack_pointer_address (VOID);
-VOID ThreadStackNodeRemove (Thread* CurrentThread);
-VOID ThreadStackReleaseCb (VOID * Arg);
-EFI_STATUS InitThreadUnsafeStack (VOID);
-VOID DeInitThreadUnsafeStack (VOID);
-EFI_STATUS EFIAPI TimerStackInit (VOID);
-VOID CloseStackTimer (VOID);
+#define ___packed __attribute__((packed))
+
+#define USB_COMPOSITION_PARTITION_NAME L"usb_qti"
+
+#define USB_PID_SZ     5
+#define BOARD_PRODUCT_ID_SZ     32
+
+#define USB_COMP_MAGIC     "USB_COMP!"
+#define USB_COMP_MAGIC_SIZE     10
+#define COMPOSITION_CMDLINE_LEN     96
+#define USB_COMPOSITION_INFO_MAX     128
+extern CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN];
+
+
+BOOLEAN EarlyUsbInitEnabled (VOID) ;
+BOOLEAN IsUsbQtiPartitionPresent (VOID);
+VOID GetEarlyUsbCmdlineParam (CHAR8 *UsbCompositionCmdlinePtr);
 #endif
