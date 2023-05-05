@@ -2007,16 +2007,22 @@ FindBootableSlot (Slot *BootableSlot)
   UINT64 Unbootable = 0;
   UINT64 BootSuccess = 0;
   UINT64 RetryCount = 0;
+  CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
 
   if (BootableSlot == NULL) {
     DEBUG ((EFI_D_ERROR, "FindBootableSlot: input parameter invalid\n"));
     return EFI_INVALID_PARAMETER;
   }
 
-  /* Per misc_boot cookie to switch boot slot.
-   * Compatible misc_boot partition don't exist.
-  */
-  GUARD (ReadMisc_boot (BootableSlot));
+  GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
+  if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC"))) {
+    /* Per misc_boot cookie to switch boot slot.
+     * Compatible misc_boot partition don't exist.
+     */
+    GUARD (ReadMisc_boot (BootableSlot));
+  } else {
+    GUARD (GetActiveSlot (BootableSlot));
+  }
 
 #ifdef AUTO_VIRT_ABL
   return Status;
