@@ -847,11 +847,11 @@ OutofUpdateRankChannel:
   }
 
   /* Update fstab node */
-  DEBUG ((EFI_D_VERBOSE, "Start DT fstab node update: %lu ms\n",
+  /*DEBUG ((EFI_D_VERBOSE, "Start DT fstab node update: %lu ms\n",
           GetTimerCountms ()));
   UpdateFstabNode (fdt);
   DEBUG ((EFI_D_VERBOSE, "End DT fstab node update: %lu ms\n",
-          GetTimerCountms ()));
+          GetTimerCountms ()));*/
 
   /* Check partial goods*/
   if (FixedPcdGetBool (EnablePartialGoods)) {

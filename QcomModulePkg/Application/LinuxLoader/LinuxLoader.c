@@ -310,12 +310,13 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
       goto fastboot;
     }
-
+    /*
     Status = WaitForDisplayCompletion ();
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Failed to wait for display completion: %r\n",
                   Status));
-    }
+    }*/
+
     BootLinux (&Info);
   }
 
