@@ -92,6 +92,9 @@
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
 STATIC BOOLEAN RecoveryHasNoKernel = FALSE;
+RamPartitionEntry UpdatedRamPartitions[NUM_NOMAP_REGIONS];
+UINT32 NumUpdPartitions;
+BOOLEAN UpdRamPartitionsAvail = FALSE;
 
 STATIC VOID
 SetLinuxBootCpu (UINT32 BootCpu)
@@ -1209,6 +1212,7 @@ BootLinux (BootInfo *Info)
   BOOLEAN Recovery = FALSE;
   BOOLEAN AlarmBoot = FALSE;
   BOOLEAN FlashlessBoot;
+  BOOLEAN NetworkBoot;
   CHAR8 SilentBootMode;
 
   LINUX_KERNEL LinuxKernel;
@@ -1227,16 +1231,18 @@ BootLinux (BootInfo *Info)
   UINTN DataSize;
   EFI_KERNEL_PROTOCOL *KernIntf = NULL;
   Thread *ThreadNum;
-#endif
   VOID *StackBase = NULL;
   VOID **StackCurrent = NULL;
+#endif
+
+  RamPartitionEntry *RamPartitions = NULL;
+  UINT32 NumPartitions = 0;
 
   if (Info == NULL) {
     DEBUG ((EFI_D_ERROR, "BootLinux: invalid parameter Info\n"));
     return EFI_INVALID_PARAMETER;
   }
 
-  FlashlessBoot = Info->FlashlessBoot;
 
   if (IsVmEnabled ()) {
     Status = CheckAndSetVmData (&BootParamlistPtr);
@@ -1250,12 +1256,15 @@ BootLinux (BootInfo *Info)
   Recovery = Info->BootIntoRecovery;
   AlarmBoot = Info->BootReasonAlarm;
   SilentBootMode = Info->SilentBootMode;
+  FlashlessBoot = Info->FlashlessBoot;
+  NetworkBoot = Info->NetworkBoot;
 
   if (SilentBootMode) {
     DEBUG ((EFI_D_INFO, "Silent Mode value: %d\n", SilentBootMode));
   }
 
-  if (!FlashlessBoot) {
+  if (!FlashlessBoot &&
+      !NetworkBoot) {
     if (!StrnCmp (PartitionName, (CONST CHAR16 *)L"boot",
                   StrLen ((CONST CHAR16 *)L"boot"))) {
       Status = GetFfbmCommand (FfbmStr, FFBM_MODE_BUF_SIZE);
@@ -1432,14 +1441,34 @@ BootLinux (BootInfo *Info)
    */
   GetQrksKernelStartAddress ();
 
+  if (IsCarveoutRemovalEnabled ((VOID *)BootParamlistPtr.DeviceTreeLoadAddr)) {
+    Status = ReadRamPartitions (&RamPartitions, &NumPartitions);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_ERROR, "Error returned from ReadRamPartitions %r\n",
+              Status));
+      return Status;
+    }
+
+    Status = GetUpdatedRamPartitions (
+                            (VOID *)BootParamlistPtr.DeviceTreeLoadAddr,
+                            RamPartitions, NumPartitions,
+                            UpdatedRamPartitions, &NumUpdPartitions);
+    if (Status == EFI_SUCCESS) {
+      UpdRamPartitionsAvail = TRUE;
+    } else {
+      DEBUG ((EFI_D_ERROR, "Failed to update RAM Partitions Status:%r\r\n",
+              Status));
+    }
+  }
+
   /* Updates the command line from boot image, appends device serial no.,
    * baseband information, etc.
    * Called before ShutdownUefiBootServices as it uses some boot service
    * functions
    */
   Status = UpdateCmdLine (&BootParamlistPtr, FfbmStr, Recovery, FlashlessBoot,
-                    AlarmBoot, Info->VBCmdLine, Info->HeaderVersion,
-                    SilentBootMode);
+                          NetworkBoot, AlarmBoot, Info->VBCmdLine,
+                          Info->HeaderVersion, SilentBootMode);
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
     return Status;
@@ -2151,7 +2180,7 @@ BOOLEAN IsHibernationEnabled (VOID)
 
   GetPartitionCount (&PtnCount);
 
-  PtnIdx = GetPartitionIndex ((CHAR16 *)L"swap_a");
+  PtnIdx = GetPartitionIndex ((CHAR16 *)SWAP_PARTITION_NAME);
 
   if (PtnIdx < PtnCount &&
       PtnIdx != INVALID_PTN) {

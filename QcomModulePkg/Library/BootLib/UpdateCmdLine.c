@@ -432,7 +432,8 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
  */
 UINT32
 GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
-                CHAR16 *ReqPartition, CHAR8 *Key, BOOLEAN FlashlessBoot)
+                CHAR16 *ReqPartition, CHAR8 *Key, BOOLEAN FlashlessBoot,
+                BOOLEAN NetworkBoot)
 {
   INT32 Index;
   UINT32 Lun;
@@ -447,10 +448,11 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
     return 0;
   }
 
-  if (FlashlessBoot) {
-     AsciiSPrint (*SysPath, MAX_PATH_SIZE,
-                     " rootfstype=squashfs root=/dev/ram0");
-     return AsciiStrLen (*SysPath);
+  if (FlashlessBoot ||
+      NetworkBoot) {
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+                 " rootfstype=squashfs root=/dev/ram0");
+    return AsciiStrLen (*SysPath);
   }
 
   if (ReqPartition == NULL ||
@@ -541,9 +543,9 @@ GetResumeCmdLine (CHAR8 **ResumeCmdLine, CHAR16 *ReqPartition)
   BOOLEAN MultiSlotBoot;
   UINT32 Len = 0;
 
-  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"swap_a");
+  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)SWAP_PARTITION_NAME);
   Len = GetSystemPath (ResumeCmdLine, MultiSlotBoot, FALSE,
-                (CHAR16 *)L"swap_a", (CHAR8 *)"resume", FALSE);
+                (CHAR16 *)SWAP_PARTITION_NAME, (CHAR8 *)"resume", FALSE, FALSE);
   if (Len == 0) {
      DEBUG ((EFI_D_ERROR, "GetSystemPath failed\n"));
      return 0;
@@ -643,6 +645,7 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   UINT64 *MemTable;
   INT32 PropLen;
   EFI_STATUS Status;
+  UINT64 UpdRamPartitionSize = 0;
 
   if (IsLEVariant ()) {
     goto Unsupported;
@@ -652,6 +655,13 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Error getting DDR size %r\n", Status));
     return Status;
+  }
+
+  if (UpdRamPartitionsAvail) {
+    for (i =0; i < NumUpdPartitions; i++) {
+      UpdRamPartitionSize += UpdatedRamPartitions[i].AvailableLength;
+    }
+    DdrSize = UpdRamPartitionSize;
   }
 
   MemLimit = DdrSize;
@@ -730,6 +740,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
   if (Param->FlashlessBoot) {
     Src = WarmResetArgs;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  } else if (Param->NetworkBoot) {
+    Src = WarmResetArgs;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    AsciiStrCatS (Dst, MaxCmdLineLen,
+                  " androidboot.fstab_suffix=network_boot");
   }
 
   if ((Param->BootDevBuf) &&
@@ -883,12 +898,12 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if (((IsBuildUseRecoveryAsBoot () ||
-      IsRecoveryHasNoKernel ()) &&
-      IsDynamicPartitionSupport () &&
-      !Param->Recovery) ||
-      (!Param->MultiSlotBoot &&
-       !IsBuildUseRecoveryAsBoot ())) {
+  if (!Param->Recovery &&
+      (((IsBuildUseRecoveryAsBoot () ||
+         IsRecoveryHasNoKernel ()) &&
+         IsDynamicPartitionSupport ()) ||
+         (!Param->MultiSlotBoot &&
+         !IsBuildUseRecoveryAsBoot ()))) {
     if (Param->HeaderVersion < BOOT_HEADER_VERSION_THREE) {
       BootForceNormalBoot = '1';
     }
@@ -1160,6 +1175,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                CHAR8 *FfbmStr,
                BOOLEAN Recovery,
                BOOLEAN FlashlessBoot,
+               BOOLEAN NetworkBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
                UINT32 HeaderVersion,
@@ -1440,7 +1456,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   }
 
   GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
-  if (AudioFWLen) {
+  if (AsciiStrLen (AudioFrameWork)) {
      ParamLen = AsciiStrLen (AndroidBootAudioFW);
      BootConfigFlag = IsAndroidBootParam (AndroidBootAudioFW,
      ParamLen, HeaderVersion);
@@ -1622,7 +1638,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CmdLineLen += 1;
 
   if (IsHibernationEnabled ()) {
-    CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, (CHAR16 *)L"swap_a");
+    CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, 
+                    (CHAR16 *)SWAP_PARTITION_NAME);
   }
 
   Param.Recovery = Recovery;
@@ -1630,6 +1647,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.AlarmBoot = AlarmBoot;
   Param.MdtpActive = MdtpActive;
   Param.FlashlessBoot = FlashlessBoot;
+  Param.NetworkBoot = NetworkBoot;
   Param.CmdLineLen = CmdLineLen;
   Param.HaveCmdLine = HaveCmdLine;
   Param.PauseAtBootUp = PauseAtBootUp;
