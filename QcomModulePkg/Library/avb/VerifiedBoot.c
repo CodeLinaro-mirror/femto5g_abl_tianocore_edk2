@@ -79,11 +79,15 @@ STATIC CONST CHAR8 *DmVerityCmd = " root=/dev/dm-0 dm=\"system none ro,0 1 "
                                     "android-verity";
 STATIC CONST CHAR8 *Space = " ";
 extern UINT64 FlashlessBootImageAddr;
+extern UINT64 NetworkBootImageAddr;
 
 STATIC BOOLEAN KeymasterEnabled = TRUE;
 
 #define MAX_NUM_REQ_PARTITION    8
 #define MAX_PROPERTY_SIZE        10
+
+#define DUMMY_PUBLIC_KEY_MOD_LEN 256
+#define DUMMY_PUBLIC_KEY_EXP_LEN 1
 
 static CHAR8 *avb_verify_partition_name[] = {
      "boot",
@@ -354,7 +358,11 @@ LocateImageNoAuth (BootInfo *Info, UINT32 *PageSize)
   EFI_STATUS Status = EFI_SUCCESS;
   UINT32 ImageHdrSize = BOOT_IMG_MAX_PAGE_SIZE;
 
-  Info->Images[0].ImageBuffer = (VOID *)FlashlessBootImageAddr;
+  if (Info->FlashlessBoot) {
+    Info->Images[0].ImageBuffer = (VOID *)FlashlessBootImageAddr;
+  } else if (Info->NetworkBoot) {
+    Info->Images[0].ImageBuffer = (VOID *)NetworkBootImageAddr;
+  }
   Status = CheckImageHeader (Info->Images[0].ImageBuffer, ImageHdrSize,
                              NULL, 0, (UINT32 *)&(Info->Images[0].ImageSize),
                              PageSize, FALSE, NULL);
@@ -479,7 +487,8 @@ LoadBootImageNoAuth (BootInfo *Info, UINT32 *PageSize, BOOLEAN *FastbootPath)
    * by previous bootloaders, so just fill the BootInfo structure with
    * required parameters
    */
-  if (Info->FlashlessBoot) {
+  if (Info->FlashlessBoot ||
+      Info->NetworkBoot) {
     GUARD (LocateImageNoAuth (Info, PageSize));
     goto SkipImageVerification;
   }
@@ -737,7 +746,8 @@ LoadImageNoAuthWrapper (BootInfo *Info)
                                    Info->BootIntoRecovery,
                                    (CHAR16 *)L"system",
                                    (CHAR8 *)"root",
-                                   Info->FlashlessBoot);
+                                   Info->FlashlessBoot,
+                                   Info->NetworkBoot);
     if (SystemPathLen == 0 || SystemPath == NULL) {
       DEBUG ((EFI_D_ERROR, "GetSystemPath failed!\n"));
       return EFI_LOAD_ERROR;
@@ -805,7 +815,8 @@ LoadImageAndAuthVB1 (BootInfo *Info)
                                    Info->BootIntoRecovery,
                                    (CHAR16 *)L"system",
                                    (CHAR8 *)"root",
-                                   Info->FlashlessBoot);
+                                   Info->FlashlessBoot,
+                                   Info->NetworkBoot);
     if (SystemPathLen == 0 || SystemPath == NULL) {
       DEBUG ((EFI_D_ERROR, "GetSystemPath failed!\n"));
       return EFI_LOAD_ERROR;
@@ -1894,6 +1905,8 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     if (Info->FlashlessBoot) {
       GUARD (LocateImageNoAuth (Info, &PageSize));
       goto skip_verification;
+    } else if (Info->NetworkBoot) {
+      GUARD (LocateImageNoAuth (Info, &PageSize));
     } else {
       GUARD (LoadImageNoAuth (Info));
     }
@@ -1905,6 +1918,15 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         DEBUG ((EFI_D_ERROR, "VB: Error LocateProtocol "
                       "gEfiQcomASN1X509ProtocolGuid: %r\n", Status));
         return Status;
+    }
+
+    /* Check if LoadKeymasterFlag is enabled or not */
+    Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                  &KeymasterEnabled);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n",
+                                                                  Status));
+      return Status;
     }
 
     /* Read OEM certificate from the embedded header file */
@@ -1957,27 +1979,35 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         /* There are build variants where boot image is not signed.
          * Below check allows the device to bootup even if the
          * authentication fails on a Non-secure device.
-         * Note: Root of Trust cannnot be set if image authentication fails
-         * or boot image is not signed.
+         * Note: Dummy Root of Trust will be set if image
+         * authentication fails or boot image is not signed.
          */
          if (!SecureDevice) {
             if (!TargetBuildVariantUser () ) {
                 DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
                                                     "debug builds\n"));
+                if (KeymasterEnabled) {
+                    Data.PublicKeyModLength = DUMMY_PUBLIC_KEY_MOD_LEN;
+                    Data.PublicKeyMod = avb_calloc (DUMMY_PUBLIC_KEY_MOD_LEN);
+                    Data.PublicKeyExpLength = DUMMY_PUBLIC_KEY_EXP_LEN;
+                    Data.PublicKeyExp = avb_calloc (DUMMY_PUBLIC_KEY_EXP_LEN);
+                    if (Data.PublicKeyMod != NULL &&
+                            Data.PublicKeyExp != NULL) {
+                        Status = KeyMasterSetRotForLE (&Data);
+                        if (Status != EFI_SUCCESS) {
+                            DEBUG ((EFI_D_ERROR, "KeyMasterSetRotForLE failed "
+                                                            "%r\n", Status));
+                            return Status;
+                        }
+                        DEBUG ((EFI_D_INFO, "VB: Dummy ROT set\n"));
+                    }
+                }
                 goto skip_verification;
             }
         }
         return Status;
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
-
-    Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
-                                                  &KeymasterEnabled);
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n",
-                                                                  Status));
-      return Status;
-    }
 
     if (KeymasterEnabled) {
       /* Set Rot & Boot State*/
@@ -2008,7 +2038,8 @@ skip_verification:
                                        Info->BootIntoRecovery,
                                        (CHAR16 *)L"system",
                                        (CHAR8 *)"root",
-                                       Info->FlashlessBoot);
+                                       Info->FlashlessBoot,
+                                       Info->NetworkBoot);
         if (SystemPathLen == 0 ||
             SystemPath == NULL) {
             return EFI_LOAD_ERROR;
@@ -2023,6 +2054,14 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
                         BOOLEAN SetRotAndBootState)
 {
   EFI_STATUS Status = EFI_SUCCESS;
+
+#if HIBERNATION_SUPPORT_NO_AES
+  if ((AVB_LE == GetAVBVersion ()) &&
+       HibernationResume) {
+      return Status;
+  }
+#endif
+
   BOOLEAN MdtpActive = FALSE;
   QCOM_MDTP_PROTOCOL *MdtpProtocol;
   UINT32 AVBVersion = NO_AVB;
@@ -2038,7 +2077,8 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
     return EFI_INVALID_PARAMETER;
   }
 
-  if (Info->FlashlessBoot) {
+  if (Info->FlashlessBoot ||
+      Info->NetworkBoot) {
     goto get_ptn_name;
   }
 
