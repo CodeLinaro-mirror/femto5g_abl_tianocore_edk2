@@ -942,7 +942,6 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
   SparseImgData.BlockCountFactor = (sparse_header->blk_sz) /
                                    (SparseImgData.BlockIo->Media->BlockSize);
 
-#if 0
   DEBUG ((EFI_D_VERBOSE, "=== Sparse Image Header ===\n"));
   DEBUG ((EFI_D_VERBOSE, "magic: 0x%x\n", sparse_header->magic));
   DEBUG (
@@ -954,7 +953,7 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
   DEBUG ((EFI_D_VERBOSE, "blk_sz: %d\n", sparse_header->blk_sz));
   DEBUG ((EFI_D_VERBOSE, "total_blks: %d\n", sparse_header->total_blks));
   DEBUG ((EFI_D_VERBOSE, "total_chunks: %d\n", sparse_header->total_chunks));
-#endif
+
   /* Start processing the chunks */
   for (SparseImgData.Chunk = 0;
        SparseImgData.Chunk < sparse_header->total_chunks;
@@ -982,12 +981,10 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
       return EFI_BAD_BUFFER_SIZE;
     }
 
-#if 0
     DEBUG ((EFI_D_VERBOSE, "=== Chunk Header ===\n"));
     DEBUG ((EFI_D_VERBOSE, "chunk_type: 0x%x\n", chunk_header->chunk_type));
     DEBUG ((EFI_D_VERBOSE, "chunk_data_sz: 0x%x\n", chunk_header->chunk_sz));
     DEBUG ((EFI_D_VERBOSE, "total_size: 0x%x\n", chunk_header->total_sz));
-#endif
 
     if (sparse_header->chunk_hdr_sz != sizeof (chunk_header_t)) {
       DEBUG ((EFI_D_ERROR, "chunk header size mismatch\n"));
