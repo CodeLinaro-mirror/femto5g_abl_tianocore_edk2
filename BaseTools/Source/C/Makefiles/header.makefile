@@ -70,12 +70,11 @@ BUILD_OPTFLAGS = -O2 $(EXTRA_OPTFLAGS)
 ifeq ($(DARWIN),Darwin)
 # assume clang or clang compatible flags on OS X
 BUILD_CFLAGS = -MD -fshort-wchar -fno-strict-aliasing -Wall -Werror \
--Wno-deprecated-declarations -Wno-stringop-truncation -Wno-self-assign -Wno-unused-result -nostdlib -g
+-Wno-deprecated-declarations -Wno-self-assign -Wno-unused-result -nostdlib -g
 else
 BUILD_CFLAGS = -MD -fshort-wchar -fno-strict-aliasing -fwrapv \
 -fno-delete-null-pointer-checks -Wall -Werror \
 -Wno-deprecated-declarations \
--Wno-stringop-truncation \
 -Wno-unused-result -nostdlib -g
 endif
 BUILD_LFLAGS =
