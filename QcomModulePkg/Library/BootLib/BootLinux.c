@@ -74,7 +74,9 @@
 #include <Library/Rtic.h>
 #include <Protocol/EFIMdtp.h>
 #include <Protocol/EFIScmModeSwitch.h>
+#include <Protocol/EFIRmVm.h>
 #include <libufdt_sysdeps.h>
+#include <FastbootLib/FastbootCmds.h>
 #include "AutoGen.h"
 #include "BootImage.h"
 #include "BootLinux.h"
@@ -87,6 +89,9 @@
 #ifndef DISABLE_KERNEL_PROTOCOL
 #include <Protocol/EFIKernelInterface.h>
 #endif
+
+#define HLOS_VMID   3
+#define RM_VMID     255
 
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
@@ -196,11 +201,32 @@ QueryEarlyServiceBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
 }
 #endif
 
+STATIC BOOLEAN
+QueryPvmFwParams (UINT64 *PvmFwLoadAddr, UINT64 *PvmFwSizeReserved)
+{
+  EFI_STATUS Status;
+  EFI_STATUS SizeStatus;
+  UINTN DataSize = 0;
+
+  DataSize = sizeof (*PvmFwLoadAddr);
+  Status = gRT->GetVariable ((CHAR16 *)L"PvmFwBaseAddr", &gQcomTokenSpaceGuid,
+                          NULL, &DataSize, PvmFwLoadAddr);
+
+  DataSize = sizeof (*PvmFwSizeReserved);
+  SizeStatus = gRT->GetVariable ((CHAR16 *)L"PvmFwSize", &gQcomTokenSpaceGuid,
+                              NULL, &DataSize, PvmFwSizeReserved);
+
+  return (Status == EFI_SUCCESS &&
+          SizeStatus == EFI_SUCCESS);
+}
+
 STATIC EFI_STATUS
 UpdateBootParams (BootParamlist *BootParamlistPtr)
 {
   UINT64 KernelSizeReserved;
   UINT64 KernelLoadAddr;
+  UINT64 PvmFwSizeReserved;
+  UINT64 PvmFwLoadAddr;
   Kernel64Hdr *Kptr = NULL;
   UINT64 KernelLoadAddr_new = 0;
   UINT64 KernelSizeReserved_new = 0;
@@ -301,6 +327,14 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
                       BootParamlistPtr->KernelLoadAddr) {
     DEBUG ((EFI_D_ERROR, "Not Enough space left to load kernel image\n"));
     return EFI_BUFFER_TOO_SMALL;
+  }
+
+  if (QueryPvmFwParams (&PvmFwLoadAddr, &PvmFwSizeReserved)) {
+    BootParamlistPtr->PvmFwLoadAddr = PvmFwLoadAddr;
+    if (BootParamlistPtr->PvmFwSize > PvmFwSizeReserved) {
+      DEBUG ((EFI_D_ERROR, "Not enough space left to load pvmfw\n"));
+      return EFI_BUFFER_TOO_SMALL;
+    }
   }
 
   return EFI_SUCCESS;
@@ -893,6 +927,84 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr)
 }
 
 STATIC EFI_STATUS
+RmRegisterPvmFwRegion (BootInfo *Info, BootParamlist *BootParamlistPtr)
+{
+  RmVmProtocol *RmVmProtocol = NULL;
+  RmMemAcl *PvmFwAclDesc = NULL;
+  RmMemSgl *PvmFwSglDesc = NULL;
+  UINT32 PvmFwMemHandle = 0;
+  UINT64 PvmFwLoadAddr;
+  UINT32 PvmFwSize;
+  EFI_STATUS  Status;
+
+  PvmFwLoadAddr = BootParamlistPtr->PvmFwLoadAddr;
+  PvmFwSize = BootParamlistPtr->PvmFwSize;
+
+  Status = gBS->LocateProtocol (&gEfiRmVmProtocolGuid,
+                                NULL,
+                                (VOID**)&RmVmProtocol);
+  if (Status != EFI_SUCCESS)  {
+    DEBUG ((EFI_D_ERROR, "RmVmProtocol not found: %r\n", Status));
+    return Status;
+  }
+
+  PvmFwAclDesc = AllocateZeroPool (MAX_RPC_BUFF_SIZE_BYTES);
+  if (PvmFwAclDesc == NULL) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate PvmFwAclDesc: %r\n", Status));
+    return Status;
+  }
+
+  PvmFwSglDesc = AllocateZeroPool (MAX_RPC_BUFF_SIZE_BYTES);
+  if (PvmFwSglDesc == NULL) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate PvmFwSglDesc: %r\n", Status));
+    return Status;
+  }
+
+  PvmFwAclDesc->AclEntriesCount = 1;
+  PvmFwAclDesc->AclEntries[0].Vmid = RM_VMID;
+  PvmFwAclDesc->AclEntries[0].Rights = (RM_ACL_PERM_READ|
+                                        RM_ACL_PERM_WRITE|
+                                        RM_ACL_PERM_EXEC);
+
+  PvmFwSglDesc->SglEntriesCount = 1;
+  PvmFwSglDesc->SglEntries[0].BaseAddr = PvmFwLoadAddr;
+  PvmFwSglDesc->SglEntries[0].Size = PvmFwSize;
+
+  Status = RmVmProtocol->MemDonate (RmVmProtocol,
+                                    RM_MEM_TYPE_NORMAL_MEMORY,
+                                    0,
+                                    0,
+                                    PvmFwAclDesc,
+                                    PvmFwSglDesc,
+                                    NULL,
+                                    HLOS_VMID,
+                                    RM_VMID,
+                                    &PvmFwMemHandle);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "pvmfw memory donation failed Status: %r\n", Status));
+    return Status;
+  }
+
+  Status = RmVmProtocol->FwSetVmFirmware (RmVmProtocol,
+                                    RM_VM_AUTH_ANDROID_PVM,
+                                    PvmFwMemHandle,
+                                    0,
+                                    PvmFwSize);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "SetVmFirmware failed Status: %r\n", Status));
+    return Status;
+  }
+
+  Status = RmVmProtocol->SetFwMilestone (RmVmProtocol);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "SetFwMilestone failed Status: %r\n", Status));
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
+
+STATIC EFI_STATUS
 LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
 {
   EFI_STATUS Status;
@@ -901,6 +1013,7 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   UINT64 RamdiskLoadAddrCopy = 0;
   UINT32 TotalRamdiskSize;
   UINT64 End = 0;
+  UINT64 PvmFwLoadAddr = 0;
   UINT32 VRamdiskSizePageAligned =
     LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
     BootParamlistPtr->PageSize);
@@ -973,6 +1086,27 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                 BootParamlistPtr->RamdiskSize);
 
   RamdiskLoadAddr +=BootParamlistPtr->RamdiskSize;
+  PvmFwLoadAddr = BootParamlistPtr->PvmFwLoadAddr;
+
+  /* Write pvmfw to golden region and register
+   * pvmfw region with RM.
+   */
+  if (Info->HasPvmFw &&
+      BootParamlistPtr->PvmFwSize >= 0 &&
+      PvmFwLoadAddr != 0) {
+    gBS->CopyMem ((CHAR8 *)PvmFwLoadAddr,
+                  BootParamlistPtr->PvmFwBuffer +
+                  /* Skip boot image header */
+                  BOOT_IMG_MAX_PAGE_SIZE,
+                  BootParamlistPtr->PvmFwSize);
+    DEBUG ((EFI_D_VERBOSE, "Copied pvmfw into golden region\n"));
+
+    Status = RmRegisterPvmFwRegion (Info, BootParamlistPtr);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR,
+             "Failed to register pvmfw region with RM: %r\n", Status));
+    }
+  }
 
   if (BootParamlistPtr->BootingWith32BitKernel) {
     if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
@@ -1229,9 +1363,9 @@ BootLinux (BootInfo *Info)
   UINTN DataSize;
   EFI_KERNEL_PROTOCOL *KernIntf = NULL;
   Thread *ThreadNum;
-#endif
   VOID *StackBase = NULL;
   VOID **StackCurrent = NULL;
+#endif
 
   RamPartitionEntry *RamPartitions = NULL;
   UINT32 NumPartitions = 0;
@@ -1360,6 +1494,23 @@ BootLinux (BootInfo *Info)
     }
   }
 
+  BootParamlistPtr.PvmFwBuffer = NULL;
+  if (Info->HasPvmFw) {
+    Status = GetImage (Info,
+                      &BootParamlistPtr.PvmFwBuffer,
+                      (UINTN *)&BootParamlistPtr.PvmFwSize,
+                      "pvmfw");
+
+    if (Status ||
+        BootParamlistPtr.PvmFwSize <= 0) {
+        DEBUG ((EFI_D_ERROR, "ERROR: BootLinux: Get pvmfw Image failed!\n"));
+        return EFI_LOAD_ERROR;
+    } else {
+        DEBUG ((EFI_D_VERBOSE, "pvmfw size fetched from partition = 0x%x\n",
+               BootParamlistPtr.PvmFwSize));
+    }
+  }
+
   // Retrive Base Memory Address from Ram Partition Table
   Status = BaseMem (&BootParamlistPtr.BaseMemory);
   if (Status != EFI_SUCCESS) {
@@ -1419,6 +1570,10 @@ BootLinux (BootInfo *Info)
   DEBUG ((EFI_D_VERBOSE, "Ramdisk Size Actual: 0x%x\n", RamdiskSizeActual));
   DEBUG ((EFI_D_VERBOSE, "Ramdisk Offset: 0x%x\n",
                                        BootParamlistPtr.RamdiskOffset));
+  if (Info->HasPvmFw) {
+        DEBUG ((EFI_D_VERBOSE, "PvmFw Load Address: 0x%x\n",
+                        BootParamlistPtr.PvmFwLoadAddr));
+  }
   DEBUG (
       (EFI_D_VERBOSE, "Device Tree Load Address: 0x%x\n",
                              BootParamlistPtr.DeviceTreeLoadAddr));
@@ -1967,10 +2122,16 @@ LoadImage (CHAR16 *Pname, VOID **ImageBuffer,
     return EFI_BAD_BUFFER_SIZE;
   }
 
-  *ImageBuffer = AllocatePages (ALIGN_PAGES (ImageSize, ALIGNMENT_MASK_4KB));
+  /* In case of fastboot continue command, data buffer are already allocated
+   * and checked by fastboot, so just use this buffer for image buffer.
+   */
+  *ImageBuffer = FastbootDloadBuffer ();
   if (!*ImageBuffer) {
-    DEBUG ((EFI_D_ERROR, "No resources available for ImageBuffer\n"));
-    return EFI_OUT_OF_RESOURCES;
+    *ImageBuffer = AllocatePages (ALIGN_PAGES (ImageSize, ALIGNMENT_MASK_4KB));
+    if (!*ImageBuffer) {
+      DEBUG ((EFI_D_ERROR, "No resources available for ImageBuffer\n"));
+      return EFI_OUT_OF_RESOURCES;
+    }
   }
 
   BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_START);
@@ -2169,7 +2330,7 @@ BOOLEAN IsHibernationEnabled (VOID)
 
   GetPartitionCount (&PtnCount);
 
-  PtnIdx = GetPartitionIndex ((CHAR16 *)L"swap_a");
+  PtnIdx = GetPartitionIndex ((CHAR16 *)SWAP_PARTITION_NAME);
 
   if (PtnIdx < PtnCount &&
       PtnIdx != INVALID_PTN) {

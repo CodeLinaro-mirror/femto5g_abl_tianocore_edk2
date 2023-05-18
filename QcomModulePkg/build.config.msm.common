@@ -6,7 +6,7 @@ fi
 
 PREBUILT_PYTHON_PATH=prebuilts/build-tools/path/linux-x86/python3
 
-if [ "${MSM_ARCH}" = "pineapple" ] || [ "${MSM_ARCH}" = "gen3auto" ] || [ "${MSM_ARCH}" = "blair" ]; then
+if [ "${MSM_ARCH}" = "pineapple" ] || [ "${MSM_ARCH}" = "gen4auto" ] || [ "${MSM_ARCH}" = "gen3auto" ] || [ "${MSM_ARCH}" = "blair" ]; then
 CLANG_VERSION=r458507
 CLANG_PREBUILT_BIN=prebuilts/clang/host/linux-x86/clang-${CLANG_VERSION}/bin
 fi
@@ -35,6 +35,9 @@ if [ -n "${TARGET_SUPPORTS_EARLY_USB_INIT}" ]; then
 fi
 if [ -n "${HIBERNATION_SUPPORT}" ]; then
   MAKE_FLAGS+=("HIBERNATION_SUPPORT=${HIBERNATION_SUPPORT}")
+fi
+if [ -n "${HIBERNATION_PARTITION_NAME}" ]; then
+  MAKE_FLAGS+=("HIBERNATION_PARTITION_NAME=${HIBERNATION_PARTITION_NAME}")
 fi
 if [ -n "${AB_RETRYCOUNT_DISABLE}" ]; then
   MAKE_FLAGS+=("AB_RETRYCOUNT_DISABLE=${AB_RETRYCOUNT_DISABLE}")
