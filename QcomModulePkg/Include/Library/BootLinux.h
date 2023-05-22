@@ -118,6 +118,7 @@
 #define DECOMPRESS_SIZE_FACTOR 8
 #define ALIGNMENT_MASK_4KB 4096
 #define MAX_NUMBER_OF_LOADED_IMAGES 32
+#define PVMFW_CONFIG_MAX_BLOBS 2
 /* Size of the header that is used in case the boot image has
  * a uncompressed kernel + appended dtb */
 #define PATCHED_KERNEL_HEADER_SIZE 20
@@ -164,6 +165,7 @@ typedef enum {
         IMG_RECOVERY,
         IMG_VENDOR_BOOT,
         IMG_INIT_BOOT,
+        IMG_PVMFW,
         IMG_MAX
 } img_type;
 
@@ -191,6 +193,8 @@ typedef struct BootInfo {
   VOID *VBData;
   UINT32 HeaderVersion;
   BOOLEAN HasBootInitRamdisk;
+  BOOLEAN HasPvmFw;
+  UINT32 PvmFwRawSize;
 } BootInfo;
 
 typedef struct BootLinuxParamlist {
@@ -215,6 +219,7 @@ typedef struct BootLinuxParamlist {
   UINT64 KernelEndAddr;
   UINT64 RamdiskLoadAddr;
   UINT64 DeviceTreeLoadAddr;
+  UINT64 PvmFwLoadAddr;
   UINT64 *HypDtboBaseAddr;
   UINT32 NumHypDtbos;
 
@@ -240,6 +245,7 @@ typedef struct BootLinuxParamlist {
   //Kernel size rounded off based on the page size
   UINT32 KernelSizeActual;
   UINT32 FinalBootConfigLen;
+  UINT32 PvmFwSize;
 
   CHAR8 *FinalCmdLine;
   CHAR8 *FinalBootConfig;
@@ -251,7 +257,21 @@ typedef struct BootLinuxParamlist {
    * with init_boot partition
    */
   VOID *RamdiskBuffer;
+  VOID *PvmFwBuffer;
 } BootParamlist;
+
+typedef struct {
+  uint32_t Offset;
+  uint32_t Size;
+} PvmFwConfigEntry;
+
+typedef struct {
+  uint32_t Magic;
+  uint32_t Version;
+  uint32_t TotalSize;
+  uint32_t Flags;
+  PvmFwConfigEntry Entries[PVMFW_CONFIG_MAX_BLOBS];
+} PvmFwConfigHeader;
 
 extern RamPartitionEntry UpdatedRamPartitions[NUM_NOMAP_REGIONS];
 extern UINT32 NumUpdPartitions;
