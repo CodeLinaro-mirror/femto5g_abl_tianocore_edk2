@@ -1227,8 +1227,7 @@ BootLinux (BootInfo *Info)
 
   /* Free the boot logo blt buffer before starting kernel */
   FreeBootLogoBltBuffer ();
-  if (BootParamlistPtr.BootingWith32BitKernel &&
-      sizeof (UINTN) != 4) {
+  if (BootParamlistPtr.BootingWith32BitKernel) {
     Status = gBS->LocateProtocol (&gQcomScmModeSwithProtocolGuid, NULL,
                                   (VOID **)&pQcomScmModeSwitchProtocol);
     if (!EFI_ERROR (Status))
