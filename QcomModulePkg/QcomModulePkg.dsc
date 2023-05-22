@@ -193,6 +193,9 @@
   !if $(RW_ROOTFS)
       GCC:*_*_*_CC_FLAGS = -DRW_ROOTFS
   !endif
+  !if $(DISABLE_KERNEL_PROTOCOL)
+      GCC:*_*_*_CC_FLAGS = -DDISABLE_KERNEL_PROTOCOL=$(DISABLE_KERNEL_PROTOCOL)
+  !endif
 
 [PcdsFixedAtBuild.common]
 
