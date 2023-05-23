@@ -30,7 +30,7 @@
 #/*
 #  * Changes from Qualcomm Innovation Center are provided under the following
 #  * license:
-#  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+#  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
 #  *
 #  * Redistribution and use in source and binary forms, with or without
 #  * modification, are permitted (subject to the limitations in the disclaimer
@@ -125,12 +125,6 @@
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO
   GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\"
 
-  !if $(VERIFIED_BOOT)
-      GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT
-  !endif
-  !if $(VERIFIED_BOOT_2)
-      GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_2
-  !endif
   !if $(VERIFIED_BOOT_LE)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE
   !endif

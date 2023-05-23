@@ -24,6 +24,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 
 #ifndef _VERIFIEDBOOTMENU_H_
@@ -31,7 +35,6 @@
 
 #include <DrawUI.h>
 
-#if VERIFIED_BOOT || VERIFIED_BOOT_2
 EFI_STATUS
 DisplayVerifiedBootMenu (DISPLAY_MENU_TYPE Type);
 EFI_STATUS
@@ -41,28 +44,4 @@ VerifiedBootMenuShowScreen (OPTION_MENU_INFO *OptionMenuInfo,
                             DISPLAY_MENU_TYPE Type);
 EFI_STATUS
 VerifiedBootMenuUpdateShowScreen (OPTION_MENU_INFO *OptionMenuInfo);
-#else
-STATIC inline EFI_STATUS
-DisplayVerifiedBootMenu (DISPLAY_MENU_TYPE Type)
-{
-  return EFI_UNSUPPORTED;
-}
-STATIC inline EFI_STATUS
-VerifiedBootOptionMenuShowScreen (OPTION_MENU_INFO *OptionMenuInfo)
-{
-  return EFI_UNSUPPORTED;
-}
-STATIC inline EFI_STATUS
-VerifiedBootMenuShowScreen (OPTION_MENU_INFO *OptionMenuInfo,
-                            DISPLAY_MENU_TYPE Type)
-{
-  return EFI_UNSUPPORTED;
-}
-STATIC inline EFI_STATUS
-VerifiedBootMenuUpdateShowScreen (OPTION_MENU_INFO *OptionMenuInfo)
-{
-  return EFI_UNSUPPORTED;
-}
-#endif
-
 #endif
