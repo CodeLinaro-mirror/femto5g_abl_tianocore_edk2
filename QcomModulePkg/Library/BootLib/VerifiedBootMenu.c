@@ -24,6 +24,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
@@ -41,7 +45,6 @@
 #include <Protocol/EFIVerifiedBoot.h>
 #include <Uefi.h>
 
-#if VERIFIED_BOOT || VERIFIED_BOOT_2
 #define FINGERPRINT_LINE_LEN 16
 #define FINGERPRINT_FORMATED_LINE_LEN FINGERPRINT_LINE_LEN + 5
 #define VERIFIED_BOOT_OPTION_NUM 5
@@ -427,6 +430,10 @@ VerifiedBootOptionMenuShowScreen (OPTION_MENU_INFO *OptionMenuInfo)
   UINT32 i = 0;
   UINT32 j = 0;
 
+  if (!Is_VERIFIED_BOOT_2 ()) {
+    return EFI_UNSUPPORTED;
+  }
+
   /* Clear the screen before launch the verified boot option menu */
   gST->ConOut->ClearScreen (gST->ConOut);
   ZeroMem (&OptionMenuInfo->Info, sizeof (MENU_OPTION_ITEM_INFO));
@@ -469,6 +476,10 @@ VerifiedBootMenuUpdateShowScreen (OPTION_MENU_INFO *OptionMenuInfo)
   UINT32 Height = 0;
   MENU_MSG_INFO *MsgStrInfo = NULL;
 
+  if (!Is_VERIFIED_BOOT_2 ()) {
+    return EFI_UNSUPPORTED;
+  }
+
   MsgStrInfo = AllocateZeroPool (sizeof (MENU_MSG_INFO));
   if (MsgStrInfo == NULL) {
     DEBUG ((EFI_D_ERROR, "Failed to allocate zero pool.\n"));
@@ -508,6 +519,10 @@ VerifiedBootMenuShowScreen (OPTION_MENU_INFO *OptionMenuInfo,
   EFI_STATUS Status = EFI_SUCCESS;
   UINT32 Location = 0;
   UINT32 Height = 0;
+
+  if (!Is_VERIFIED_BOOT_2 ()) {
+    return EFI_UNSUPPORTED;
+  }
 
   ZeroMem (&OptionMenuInfo->Info, sizeof (MENU_OPTION_ITEM_INFO));
 
@@ -596,6 +611,10 @@ DisplayVerifiedBootMenu (DISPLAY_MENU_TYPE Type)
   EFI_STATUS Status = EFI_SUCCESS;
   OPTION_MENU_INFO *OptionMenuInfo;
 
+  if (!Is_VERIFIED_BOOT_2 ()) {
+    return EFI_UNSUPPORTED;
+  }
+
   if (IsEnableDisplayMenuFlagSupported ()) {
     OptionMenuInfo = &gMenuInfo;
     DrawMenuInit ();
@@ -619,4 +638,3 @@ DisplayVerifiedBootMenu (DISPLAY_MENU_TYPE Type)
 
   return Status;
 }
-#endif
