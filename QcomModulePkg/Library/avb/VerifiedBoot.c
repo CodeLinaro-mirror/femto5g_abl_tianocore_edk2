@@ -179,7 +179,7 @@ AppendVBCommonCmdLine (BootInfo *Info)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
-  if (Info->VbIntf->Revision >= QCOM_VERIFIEDBOOT_PROTOCOL_REVISION) {
+  if (Info->VbIntf->Revision <= QCOM_VERIFIEDBOOT_PROTOCOL_REVISION) {
     GUARD (AppendVBCmdLine (Info, VerifiedState));
     GUARD (AppendVBCmdLine (Info, VbSn[Info->BootState].name));
   }
