@@ -176,6 +176,11 @@ SetDefaultAudioFw ()
   }
   else {
     if (Src != NULL) {
+      Status =
+      ReadWriteDeviceInfo (READ_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Unable to Read Device Info: %r\n", Status));
+       }
       gBS->SetMem (DevInfo.AudioFramework, sizeof (DevInfo.AudioFramework), 0);
       gBS->CopyMem (DevInfo.AudioFramework, AUDIOFRAMEWORK,
                                       AsciiStrLen (AUDIOFRAMEWORK));
@@ -277,20 +282,22 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   BootStatsSetTimeStamp (BS_BL_START);
 
   /* check if it is NetworkBoot, FlashlessBoot or Fastboot */
-  Val = GetBootDeviceType ();
-  if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
-    NetworkBootImageAddr = BASE_ADDRESS;
-    NetworkBoot = TRUE;
-    /* In Network boot avoid all access to secondary storage during boot */
-    goto flashless_boot;
-  } else if (Val == EFI_PCIE_FLASH_TYPE) {
-    FlashlessBootImageAddr = BASE_ADDRESS;
-    FlashlessBoot = TRUE;
-    /* In flashless boot avoid all access to secondary storage during boot */
-    goto flashless_boot;
-  } else if (Val == 0) {
-    DEBUG ((EFI_D_ERROR, "Failed to get boot device type\n"));
-    goto stack_guard_update_default;
+  if (!IsMultiBoot ()) {
+    Val = GetBootDeviceType ();
+    if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
+      NetworkBootImageAddr = BASE_ADDRESS;
+      NetworkBoot = TRUE;
+      /* In Network boot avoid all access to secondary storage during boot */
+      goto flashless_boot;
+    } else if (Val == EFI_PCIE_FLASH_TYPE) {
+      FlashlessBootImageAddr = BASE_ADDRESS;
+      FlashlessBoot = TRUE;
+      /* In flashless boot avoid all access to secondary storage during boot */
+      goto flashless_boot;
+    } else if (Val == 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to get boot device type\n"));
+      goto stack_guard_update_default;
+    }
   }
 
   // Initialize verified boot & Read Device Info
