@@ -76,7 +76,7 @@
 /** @ingroup
   Protocol version.
 */
-#define QCOM_VERIFIEDBOOT_PROTOCOL_REVISION 0x0000000000010003
+#define QCOM_VERIFIEDBOOT_PROTOCOL_REVISION 0x0000000000010002
 #define QCOM_VERIFIEDBOOT_PROTOCOL_FIRST_REVISION 0x0000000000010001
 
 #define MAX_PNAME_LENGTH 32
@@ -273,19 +273,6 @@ typedef EFI_STATUS (EFIAPI *QCOM_VB_GET_CERT_FINGERPRINT) (
     OUT UINT8 *buf,
     IN UINTN buf_len,
     OUT UINTN *out_len);
-
-/**
-* Check if Keymaster is enabled.
-*
-* @return int
-* In case of success returns 0.
-*
-*
-*/
-typedef EFI_STATUS (EFIAPI *QCOM_VB_IS_KEYMASTER_ENABLED ) (
-    IN  QCOM_VERIFIEDBOOT_PROTOCOL   *This,
-    OUT BOOLEAN                      *KeymasterEnabled);
-
 /*===========================================================================
   PROTOCOL INTERFACE
 ===========================================================================*/
@@ -307,6 +294,5 @@ struct _QCOM_VERIFIEDBOOT_PROTOCOL {
   QCOM_VB_IS_DEVICE_SECURE VBIsDeviceSecure;
   QCOM_VB_GET_BOOT_STATE VBGetBootState;
   QCOM_VB_GET_CERT_FINGERPRINT VBGetCertFingerPrint;
-  QCOM_VB_IS_KEYMASTER_ENABLED VBIsKeymasterEnabled;
 };
 #endif /* __EFIVERIFIEDBOOT_H__ */
