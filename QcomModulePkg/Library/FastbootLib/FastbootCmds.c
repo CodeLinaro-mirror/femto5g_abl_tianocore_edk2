@@ -2536,7 +2536,7 @@ VOID InitMultiThreadEnv ()
 
   if ((Status != EFI_SUCCESS) ||
     (KernIntf == NULL) ||
-    KernIntf->Version < EFI_KERNEL_PROTOCOL_VER_UNSAFE_STACK_APIS) {
+    KernIntf->Version < EFI_KERNEL_PROTOCOL_VER_LOCK_API) {
     DEBUG ((EFI_D_VERBOSE, "Multi thread is not supported.\n"));
     return;
   }
@@ -3035,24 +3035,6 @@ is_display_supported ( VOID )
    return 1;
 }
 
-#if TARGET_BOARD_TYPE_AUTO
-STATIC VOID
-RebootDeviceRecovery ( VOID )
-{
-
-}
-#else
-STATIC VOID
-RebootDeviceRecovery ( VOID )
-{
-   if (GetAVBVersion () != AVB_LE &&
-      !IsEnableDisplayMenuFlagSupported ()) {
-     RebootDevice (RECOVERY_MODE);
-   }
-
-}
-#endif
-
 STATIC VOID
 SetDeviceUnlock (UINT32 Type, BOOLEAN State)
 {
@@ -3096,7 +3078,10 @@ SetDeviceUnlock (UINT32 Type, BOOLEAN State)
          return;
     }
     FastbootOkay ("");
-    RebootDeviceRecovery ();
+    if (GetAVBVersion () != AVB_LE &&
+       !IsEnableDisplayMenuFlagSupported ()) {
+      RebootDevice (RECOVERY_MODE);
+    }
   }
 }
 #endif

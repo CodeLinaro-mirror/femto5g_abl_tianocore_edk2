@@ -176,6 +176,7 @@ typedef struct {
 typedef struct BootInfo {
   BOOLEAN MultiSlotBoot;
   BOOLEAN FlashlessBoot;
+  BOOLEAN NetworkBoot;
   BOOLEAN BootIntoRecovery;
   BOOLEAN BootReasonAlarm;
   CHAR8 SilentBootMode;
@@ -276,6 +277,7 @@ EFI_STATUS
 LaunchApp (IN UINT32 Argc, IN CHAR8 **Argv);
 BOOLEAN TargetBuildVariantUser (VOID);
 BOOLEAN IsLEVariant (VOID);
+BOOLEAN IsMultiBoot (VOID);
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
 VOID SetRecoveryHasNoKernel (VOID);
