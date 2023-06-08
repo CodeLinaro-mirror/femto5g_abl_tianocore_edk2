@@ -150,21 +150,47 @@ GetRebootReason (UINT32 *ResetReason)
 STATIC VOID
 SetDefaultAudioFw ()
 {
- CHAR8 AudioFW[MAX_AUDIO_FW_LENGTH];
- STATIC CHAR8* Src;
- STATIC CHAR8* AUDIOFRAMEWORK;
- STATIC UINT32 Length;
- EFI_STATUS Status;
+  CHAR8 AudioFW[MAX_AUDIO_FW_LENGTH];
+  STATIC CHAR8* Src;
+  STATIC CHAR8* AUDIOFRAMEWORK;
+  STATIC UINT32 Length;
+  EFI_STATUS Status;
 
- AUDIOFRAMEWORK = GetAudioFw ();
- Status = ReadAudioFrameWork (&Src, &Length);
- if (Status == EFI_SUCCESS) {
-  if (AsciiStrLen (Src) == 0) {
-      if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
-        AsciiStrnCpyS (AudioFW, MAX_AUDIO_FW_LENGTH, AUDIOFRAMEWORK,
-        AsciiStrLen (AUDIOFRAMEWORK));
-        StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIOFRAMEWORK));
-   }
+  AUDIOFRAMEWORK = GetAudioFw ();
+  Status = ReadAudioFrameWork (&Src, &Length);
+  if ((AsciiStrCmp (Src, "audioreach") == 0) ||
+                              (AsciiStrCmp (Src, "elite") == 0)) {
+    if (Status == EFI_SUCCESS) {
+      if (AsciiStrLen (Src) == 0) {
+        if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
+          AsciiStrnCpyS (AudioFW, MAX_AUDIO_FW_LENGTH, AUDIOFRAMEWORK,
+          AsciiStrLen (AUDIOFRAMEWORK));
+          StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIOFRAMEWORK));
+        }
+      }
+    }
+    else {
+      DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NOT updated length =%d, %a\n",
+      Length, AUDIOFRAMEWORK));
+    }
+  }
+  else {
+    if (Src != NULL) {
+      Status =
+      ReadWriteDeviceInfo (READ_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Unable to Read Device Info: %r\n", Status));
+       }
+      gBS->SetMem (DevInfo.AudioFramework, sizeof (DevInfo.AudioFramework), 0);
+      gBS->CopyMem (DevInfo.AudioFramework, AUDIOFRAMEWORK,
+                                      AsciiStrLen (AUDIOFRAMEWORK));
+      Status =
+      ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Unable to store audio framework: %r\n", Status));
+        return;
+      }
+    }
   }
  } else
   DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NOT updated length =%d, %a\n",
@@ -259,20 +285,22 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   BootStatsSetTimeStamp (BS_BL_START);
 
   /* check if it is NetworkBoot, FlashlessBoot or Fastboot */
-  Val = GetBootDeviceType ();
-  if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
-    NetworkBootImageAddr = BASE_ADDRESS;
-    NetworkBoot = TRUE;
-    /* In Network boot avoid all access to secondary storage during boot */
-    goto flashless_boot;
-  } else if (Val == EFI_PCIE_FLASH_TYPE) {
-    FlashlessBootImageAddr = BASE_ADDRESS;
-    FlashlessBoot = TRUE;
-    /* In flashless boot avoid all access to secondary storage during boot */
-    goto flashless_boot;
-  } else if (Val == 0) {
-    DEBUG ((EFI_D_ERROR, "Failed to get boot device type\n"));
-    goto stack_guard_update_default;
+  if (!IsMultiBoot ()) {
+    Val = GetBootDeviceType ();
+    if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
+      NetworkBootImageAddr = BASE_ADDRESS;
+      NetworkBoot = TRUE;
+      /* In Network boot avoid all access to secondary storage during boot */
+      goto flashless_boot;
+    } else if (Val == EFI_PCIE_FLASH_TYPE) {
+      FlashlessBootImageAddr = BASE_ADDRESS;
+      FlashlessBoot = TRUE;
+      /* In flashless boot avoid all access to secondary storage during boot */
+      goto flashless_boot;
+    } else if (Val == 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to get boot device type\n"));
+      goto stack_guard_update_default;
+    }
   }
 
   // Initialize verified boot & Read Device Info
