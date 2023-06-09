@@ -97,6 +97,7 @@ STATIC BOOLEAN BootIntoFastboot = FALSE;
 STATIC BOOLEAN BootIntoRecovery = FALSE;
 UINT64 FlashlessBootImageAddr = 0;
 UINT64 NetworkBootImageAddr = 0;
+STATIC DeviceInfo DevInfo;
 
 // This function is used to Deactivate MDTP by entering recovery UI
 STATIC EFI_STATUS MdtpDisable (VOID)
@@ -192,9 +193,6 @@ SetDefaultAudioFw ()
       }
     }
   }
- } else
-  DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NOT updated length =%d, %a\n",
-     Length, AUDIOFRAMEWORK));
 }
 
 BOOLEAN IsABRetryCountUpdateRequired (VOID)
