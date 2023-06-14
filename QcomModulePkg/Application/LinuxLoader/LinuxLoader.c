@@ -141,27 +141,6 @@ GetRebootReason (UINT32 *ResetReason)
 }
 
 
-STATIC VOID
-SetDefaultAudioFw ()
-{
-  CHAR8 AudioFW[MAX_AUDIO_FW_LENGTH];
-  STATIC CHAR8* Src;
-  STATIC UINT32 Length;
-  EFI_STATUS Status;
-
-  Status = ReadAudioFrameWork (&Src, &Length);
-
-  if ((Status == EFI_SUCCESS) && (AsciiStrLen (Src) == 0) &&
-       (AsciiStrLen (AUDIO_FRAMEWORK) > 0)) {
-    AsciiStrnCpyS(AudioFW, MAX_AUDIO_FW_LENGTH, AUDIO_FRAMEWORK,
-                     AsciiStrLen (AUDIO_FRAMEWORK));
-
-    StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIO_FRAMEWORK));
-  } else
-     DEBUG ((EFI_D_ERROR, "TARGET_AUDIO_FRAMEWORK is NOT updated length =%d, %a\n",
-              Length, AUDIO_FRAMEWORK));
-}
-
 BOOLEAN IsABRetryCountUpdateRequired (VOID)
 {
   BOOLEAN BatteryStatus;
@@ -260,7 +239,6 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     goto stack_guard_update_default;
   }
 
-  SetDefaultAudioFw ();
 
   // check for reboot mode
   Status = GetRebootReason (&BootReason);

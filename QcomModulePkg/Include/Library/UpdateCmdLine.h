@@ -123,7 +123,6 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *EarlyIPv6CmdLine;
   CHAR8 *EarlyEthMacCmdLine;
   CHAR8 *SilentBootModeCmdLine;
-  CHAR8 *AudioFrameWork;
   CHAR8 *ModemPathCmdLine;
 } UpdateCmdLineParamList;
 
