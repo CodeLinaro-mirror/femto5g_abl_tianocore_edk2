@@ -1494,6 +1494,7 @@ ReadMisc_boot (Slot *BootableSlot)
   UINT32 MaxHandles = MAX_HANDLEINF_LST_SIZE;
   EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
   UINT8 *Buffer = NULL;
+  BOOLEAN IsMiscbootPtn = FALSE;
 
   CHAR16 PtrName[] = {L"misc_boot"};
   Slot Slots[] = {{L"_a"}, {L"_b"}};
@@ -1522,6 +1523,7 @@ ReadMisc_boot (Slot *BootableSlot)
     if (StrnCmp (PtnEntries[Idx].PartEntry.PartitionName,
                 PtrName, StrLen (PtrName)) == 0) {
 
+      IsMiscbootPtn = TRUE;
       DEBUG ((EFI_D_INFO, "Find %s Partiton.\n",
                            PtnEntries[Idx].PartEntry.PartitionName));
       MaxGptPartEntrySzBytes = BlkSz;
@@ -1613,6 +1615,32 @@ ReadMisc_boot (Slot *BootableSlot)
             goto Exit;
         }
         DEBUG ((EFI_D_INFO, "Erase misc_boot cookie is OK.\n"));
+
+      /* misc_boot cookie is 0xAB, slot should be ActiveSlot */
+      } else if (Buffer[0] == AB_BOOT_RECOVERY) {
+        Status = GetActiveSlot (BootableSlot);
+        if (EFI_ERROR (Status)) {
+            goto Exit;
+        }
+        DEBUG ((EFI_D_INFO, "misc_boot cookie = %02x, Boot Slot is %s\n",
+                           Buffer[0], BootableSlot->Suffix));
+        Buffer[0] = 0;
+        Status = BlockIo->WriteBlocks (BlockIo, BlockIo->Media->MediaId,
+                                       PtnEntries[Idx].PartEntry.StartingLBA,
+                                       MaxGptPartEntrySzBytes, Buffer);
+        if (EFI_ERROR (Status)) {
+          DEBUG ((EFI_D_ERROR, "Unable to clear the misc_boot cookie.\n"));
+          goto Exit;
+        }
+
+        Status = BlockIo->FlushBlocks (BlockIo);
+        if (EFI_ERROR (Status)) {
+            DEBUG ((EFI_D_ERROR,
+                  "ReadMisc_boot: FlushBlocks failed: %r\n",
+                  Status));
+            goto Exit;
+        }
+        DEBUG ((EFI_D_INFO, "Erase misc_boot cookie is OK.\n"));
       } else {
         DEBUG ((EFI_D_WARN,
               "ReadMisc_boot: Unknown cookie value 0x%02x,"
@@ -1625,7 +1653,8 @@ ReadMisc_boot (Slot *BootableSlot)
   }
 
   /* If misc_boot partition was not found, use active slot */
-  if (IsSuffixEmpty (BootableSlot)) {
+  if (!IsMiscbootPtn ||
+      IsSuffixEmpty (BootableSlot)) {
     DEBUG ((EFI_D_INFO, "No misc_boot Partition found, using active slot.\n"));
     Status = GetActiveSlot (BootableSlot);
   }
@@ -1814,6 +1843,11 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
 
     /* Check if BootLun is matching with Slot */
     GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
+    if (BootDeviceType[0] == '\0') {
+      DEBUG ((EFI_D_ERROR,
+              "FindBootableSlot : Failed to GetDeviceType"));
+      return EFI_DEVICE_ERROR;
+    }
     if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
       if (GetBootDeviceType () == EFI_UFS_FLASH_TYPE) {
         UfsGetSetBootLun (&UfsBootLun, UfsGet);

@@ -110,6 +110,7 @@ typedef enum {
 /* misc_boot cookie*/
 #define A_BOOT_RECOVERY 0xAA
 #define B_BOOT_RECOVERY 0xBB
+#define AB_BOOT_RECOVERY 0xAB
 
 /*
 The attributes like Priority, Active bit,
