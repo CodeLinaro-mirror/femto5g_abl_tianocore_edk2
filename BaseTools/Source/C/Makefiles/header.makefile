@@ -81,7 +81,7 @@ BUILD_CFLAGS += -Wno-error="vla-parameter"
 endif
 endif
 BUILD_LFLAGS =
-BUILD_CXXFLAGS = -Wno-unused-result
+BUILD_CXXFLAGS = -Wno-unused-result -Wno-register
 
 ifeq ($(HOST_ARCH), IA32)
 #
