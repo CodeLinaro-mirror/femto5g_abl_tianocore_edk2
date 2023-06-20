@@ -83,6 +83,7 @@
 #include <Library/HypervisorMvCalls.h>
 #include <Library/UpdateCmdLine.h>
 #include <Protocol/EFICardInfo.h>
+#include <Protocol/EFIClock.h>
 
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
@@ -97,6 +98,7 @@ STATIC BOOLEAN BootIntoFastboot = FALSE;
 STATIC BOOLEAN BootIntoRecovery = FALSE;
 UINT64 FlashlessBootImageAddr = 0;
 UINT64 NetworkBootImageAddr = 0;
+STATIC DeviceInfo DevInfo;
 
 // This function is used to Deactivate MDTP by entering recovery UI
 STATIC EFI_STATUS MdtpDisable (VOID)
@@ -146,29 +148,92 @@ GetRebootReason (UINT32 *ResetReason)
   return Status;
 }
 
-
 STATIC VOID
 SetDefaultAudioFw ()
 {
- CHAR8 AudioFW[MAX_AUDIO_FW_LENGTH];
- STATIC CHAR8* Src;
- STATIC CHAR8* AUDIOFRAMEWORK;
- STATIC UINT32 Length;
- EFI_STATUS Status;
+  CHAR8 AudioFW[MAX_AUDIO_FW_LENGTH];
+  STATIC CHAR8* Src;
+  STATIC CHAR8* AUDIOFRAMEWORK;
+  STATIC UINT32 Length;
+  EFI_STATUS Status;
 
- AUDIOFRAMEWORK = GetAudioFw ();
- Status = ReadAudioFrameWork (&Src, &Length);
- if (Status == EFI_SUCCESS) {
-  if (AsciiStrLen (Src) == 0) {
-      if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
-        AsciiStrnCpyS (AudioFW, MAX_AUDIO_FW_LENGTH, AUDIOFRAMEWORK,
-        AsciiStrLen (AUDIOFRAMEWORK));
-        StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIOFRAMEWORK));
-   }
+  AUDIOFRAMEWORK = GetAudioFw ();
+  Status = ReadAudioFrameWork (&Src, &Length);
+  if ((AsciiStrCmp (Src, "audioreach") == 0) ||
+                              (AsciiStrCmp (Src, "elite") == 0)) {
+    if (Status == EFI_SUCCESS) {
+      if (AsciiStrLen (Src) == 0) {
+        if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
+          AsciiStrnCpyS (AudioFW, MAX_AUDIO_FW_LENGTH, AUDIOFRAMEWORK,
+          AsciiStrLen (AUDIOFRAMEWORK));
+          StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIOFRAMEWORK));
+        }
+      }
+    }
+    else {
+      DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NOT updated length =%d, %a\n",
+      Length, AUDIOFRAMEWORK));
+    }
   }
- } else
-  DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NOT updated length =%d, %a\n",
-     Length, AUDIOFRAMEWORK));
+  else {
+    if (Src != NULL) {
+      Status =
+      ReadWriteDeviceInfo (READ_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Unable to Read Device Info: %r\n", Status));
+       }
+      gBS->SetMem (DevInfo.AudioFramework, sizeof (DevInfo.AudioFramework), 0);
+      gBS->CopyMem (DevInfo.AudioFramework, AUDIOFRAMEWORK,
+                                      AsciiStrLen (AUDIOFRAMEWORK));
+      Status =
+      ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Unable to store audio framework: %r\n", Status));
+        return;
+      }
+    }
+  }
+}
+
+STATIC VOID PrintCpuFrequency (VOID)
+{
+  EFI_CLOCK_PROTOCOL  *ClockProtocol = NULL;
+  EFI_KERNEL_PROTOCOL *KernIntf = NULL;
+  EFI_STATUS  status = EFI_SUCCESS;
+  UINT32  numOfCore = 0;
+  UINT32  pnPerfLevel;
+  UINT32  pnFrequencyHz;
+  UINT32  pnRequiredVoltage;
+  UINT32  i = 0;
+
+  status = gBS->LocateProtocol (&gEfiKernelProtocolGuid,
+                  NULL, (VOID **)&KernIntf);
+  if (EFI_SUCCESS != status) {
+          return;
+  }
+
+  numOfCore = KernIntf->MpCpu->MpcoreGetAvailCpuCount ();
+  if (!numOfCore) {
+     return;
+  }
+
+  status = gBS->LocateProtocol (&gEfiClockProtocolGuid,
+                  NULL, (VOID **)&ClockProtocol);
+  if (EFI_ERROR (status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to locate CLOCK protocol\r\n"));
+    return;
+  }
+
+  if (ClockProtocol) {
+    for (i = 0; i < numOfCore; i++) {
+      status = ClockProtocol->GetCpuPerfLevel (ClockProtocol, i, &pnPerfLevel);
+      if (status != EFI_SUCCESS) {
+          continue;
+      }
+      status = ClockProtocol->GetCpuPerfLevelFrequency (ClockProtocol, i,
+                     pnPerfLevel, &pnFrequencyHz, &pnRequiredVoltage);
+    }
+  }
 }
 
 BOOLEAN IsABRetryCountUpdateRequired (VOID)
@@ -259,20 +324,22 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   BootStatsSetTimeStamp (BS_BL_START);
 
   /* check if it is NetworkBoot, FlashlessBoot or Fastboot */
-  Val = GetBootDeviceType ();
-  if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
-    NetworkBootImageAddr = BASE_ADDRESS;
-    NetworkBoot = TRUE;
-    /* In Network boot avoid all access to secondary storage during boot */
-    goto flashless_boot;
-  } else if (Val == EFI_PCIE_FLASH_TYPE) {
-    FlashlessBootImageAddr = BASE_ADDRESS;
-    FlashlessBoot = TRUE;
-    /* In flashless boot avoid all access to secondary storage during boot */
-    goto flashless_boot;
-  } else if (Val == 0) {
-    DEBUG ((EFI_D_ERROR, "Failed to get boot device type\n"));
-    goto stack_guard_update_default;
+  if (IsMultiBoot ()) {
+    Val = GetBootDeviceType ();
+    if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
+      NetworkBootImageAddr = BASE_ADDRESS;
+      NetworkBoot = TRUE;
+      /* In Network boot avoid all access to secondary storage during boot */
+      goto flashless_boot;
+    } else if (Val == EFI_PCIE_FLASH_TYPE) {
+      FlashlessBootImageAddr = BASE_ADDRESS;
+      FlashlessBoot = TRUE;
+      /* In flashless boot avoid all access to secondary storage during boot */
+      goto flashless_boot;
+    } else if (Val == 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to get boot device type\n"));
+      goto stack_guard_update_default;
+    }
   }
 
   // Initialize verified boot & Read Device Info
@@ -312,6 +379,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   }
 
   SetDefaultAudioFw ();
+  PrintCpuFrequency ();
 
   // check for reboot mode
   Status = GetRebootReason (&BootReason);

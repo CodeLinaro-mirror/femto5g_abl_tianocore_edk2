@@ -163,6 +163,7 @@ CHAR8 BootForceNormalBoot = '0';
 STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
+STATIC CHAR8 *FstabSuffixNetworkBoot = "network_boot";
 STATIC CHAR8 *FstabSuffixDefault = "default";
 
 /* Memory offline arguments */
@@ -422,7 +423,7 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
   Status = ReadAudioFrameWork (&Src, Length);
   if (Status == EFI_SUCCESS) {
      if (*Length) {
-        AsciiStrCatS (FrameWork, MAX_AUDIO_FW_LENGTH, Src);
+        AsciiStrCpyS (FrameWork, *Length, Src);
    }
  }
 }
@@ -644,6 +645,7 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   INT32 MemOfflineOffset;
   UINT64 *MemTable;
   INT32 PropLen;
+  CONST CHAR8 *status = NULL;
   EFI_STATUS Status;
   UINT64 UpdRamPartitionSize = 0;
 
@@ -666,6 +668,10 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
 
   MemLimit = DdrSize;
   MemOfflineOffset = FdtPathOffset (fdt, "/mem-offline");
+  status = fdt_getprop (fdt, MemOfflineOffset, "status", &PropLen);
+  if (status &&
+      (AsciiStrnCmp (status, "disabled", PropLen) == 0))
+    goto Unsupported;
 
   if (DdrSize < MEM_OFF_MIN ||
       MemOfflineOffset < 0) {
@@ -743,8 +749,10 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
   } else if (Param->NetworkBoot) {
     Src = WarmResetArgs;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-    AsciiStrCatS (Dst, MaxCmdLineLen,
-                  " androidboot.fstab_suffix=network_boot");
+    Src = Param->AndroidBootFstabSuffix;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->FstabSuffix;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if ((Param->BootDevBuf) &&
@@ -1105,7 +1113,8 @@ UpdateBootConfigParams (LIST_ENTRY *BootConfigListHead,
   }
   Link = GetFirstNode (BootConfigListHead);
   if (!Link) {
-    DEBUG ((EFI_D_INFO, "Error in Node entry \n"));
+    DEBUG ((EFI_D_ERROR, "Error in Node entry \n"));
+    return EFI_D_ERROR;
   }
 
   gBS->CopyMem (Dst, "\n", SIZE_OF_DELIM);
@@ -1141,7 +1150,8 @@ ClearBootConfigList (LIST_ENTRY* BootConfigListHead)
 
   Link = GetFirstNode (BootConfigListHead);
   if (!Link) {
-    DEBUG ((EFI_D_INFO, "Error in Node entry \n"));
+    DEBUG ((EFI_D_ERROR, "Error in Node entry \n"));
+    return;
   }
 
   while (!IsNull (BootConfigListHead, Link)) {
@@ -1213,6 +1223,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   VOID *fdt = (VOID *)BootParamlistPtr->DeviceTreeLoadAddr;
 
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
+  if (BootConfigListHead == NULL) {
+    DEBUG ((EFI_D_ERROR, "BootConfigListHead: Out of resources\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
   InitializeListHead (BootConfigListHead);
   CHAR8 *ModemPathStr = NULL;
 
@@ -1455,18 +1469,22 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                         BootConfigListHead, ParamLen, 0);
   }
 
-  GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
-  if (AsciiStrLen (AudioFrameWork)) {
-     ParamLen = AsciiStrLen (AndroidBootAudioFW);
-     BootConfigFlag = IsAndroidBootParam (AndroidBootAudioFW,
-     ParamLen, HeaderVersion);
-     ADD_PARAM_LEN (BootConfigFlag, ParamLen,
-     CmdLineLen, BootConfigLen);
-     AddtoBootConfigList (BootConfigFlag, AndroidBootAudioFW, AudioFrameWork,
-     BootConfigListHead, ParamLen, AsciiStrLen (AudioFrameWork));
-     ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (AudioFrameWork),
-     CmdLineLen, BootConfigLen);
- }
+  if ( (!FlashlessBoot) &&
+       (!NetworkBoot) ) {
+    GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
+    if (AsciiStrLen (AudioFrameWork)) {
+       ParamLen = AsciiStrLen (AndroidBootAudioFW);
+       BootConfigFlag = IsAndroidBootParam (AndroidBootAudioFW,
+       ParamLen, HeaderVersion);
+       ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+       CmdLineLen, BootConfigLen);
+       AddtoBootConfigList (BootConfigFlag, AndroidBootAudioFW, AudioFrameWork,
+       BootConfigListHead, ParamLen, AsciiStrLen (AudioFrameWork));
+       ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (AudioFrameWork),
+       CmdLineLen, BootConfigLen);
+    }
+  }
+
   if (EarlyServicesEnabled ()) {
     CmdLineLen += GetSystemPathByPname (&ModemPathStr,
                                         MultiSlotBoot,
@@ -1513,7 +1531,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
       IsDynamicPartitionSupport () &&
       !Recovery) ||
       (!MultiSlotBoot &&
-       !IsBuildUseRecoveryAsBoot ())) { 
+       !IsBuildUseRecoveryAsBoot ())) {
     ParamLen = AsciiStrLen (AndroidBootForceNormalBoot);
     BootConfigFlag = IsAndroidBootParam (AndroidBootForceNormalBoot,
                                            ParamLen, HeaderVersion);
@@ -1536,9 +1554,13 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) {
     Param.FstabSuffix = FstabSuffixEmmc;
+  } else if ((AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) &&
+             NetworkBoot) {
+    Param.FstabSuffix = FstabSuffixNetworkBoot;
   } else {
     Param.FstabSuffix = FstabSuffixDefault;
   }
+
   Param.AndroidBootFstabSuffix = AndroidBootFstabSuffix;
   AddtoBootConfigList (BootConfigFlag, AndroidBootFstabSuffix,
                   Param.FstabSuffix,
@@ -1585,6 +1607,15 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     }
   } else {
     Param.MemOffAmt = NULL;
+  }
+  if (FlashlessBoot ||
+       NetworkBoot) {
+    ParamLen = AsciiStrLen (WarmResetArgs);
+    BootConfigFlag = IsAndroidBootParam (WarmResetArgs,
+                    ParamLen, HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, WarmResetArgs, NULL,
+               BootConfigListHead, ParamLen, 0);
   }
 
   if (SilentMode == SILENT_MODE) {
