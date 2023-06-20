@@ -422,7 +422,7 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
   Status = ReadAudioFrameWork (&Src, Length);
   if (Status == EFI_SUCCESS) {
      if (*Length) {
-        AsciiStrCatS (FrameWork, MAX_AUDIO_FW_LENGTH, Src);
+        AsciiStrCpyS (FrameWork, *Length, Src);
    }
  }
 }
@@ -642,6 +642,7 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   INT32 MemOfflineOffset;
   UINT64 *MemTable;
   INT32 PropLen;
+  CONST CHAR8 *status = NULL;
   EFI_STATUS Status;
   UINT64 UpdRamPartitionSize = 0;
 
@@ -664,6 +665,10 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
 
   MemLimit = DdrSize;
   MemOfflineOffset = FdtPathOffset (fdt, "/mem-offline");
+  status = fdt_getprop (fdt, MemOfflineOffset, "status", &PropLen);
+  if (status &&
+      (AsciiStrnCmp (status, "disabled", PropLen) == 0))
+    goto Unsupported;
 
   if (DdrSize < MEM_OFF_MIN ||
       MemOfflineOffset < 0) {
@@ -1447,18 +1452,21 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                         BootConfigListHead, ParamLen, 0);
   }
 
-  GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
-  if (AudioFWLen) {
-     ParamLen = AsciiStrLen (AndroidBootAudioFW);
-     BootConfigFlag = IsAndroidBootParam (AndroidBootAudioFW,
-     ParamLen, HeaderVersion);
-     ADD_PARAM_LEN (BootConfigFlag, ParamLen,
-     CmdLineLen, BootConfigLen);
-     AddtoBootConfigList (BootConfigFlag, AndroidBootAudioFW, AudioFrameWork,
-     BootConfigListHead, ParamLen, AsciiStrLen (AudioFrameWork));
-     ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (AudioFrameWork),
-     CmdLineLen, BootConfigLen);
- }
+  if (!FlashlessBoot) {
+    GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
+    if (AsciiStrLen (AudioFrameWork)) {
+       ParamLen = AsciiStrLen (AndroidBootAudioFW);
+       BootConfigFlag = IsAndroidBootParam (AndroidBootAudioFW,
+       ParamLen, HeaderVersion);
+       ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+       CmdLineLen, BootConfigLen);
+       AddtoBootConfigList (BootConfigFlag, AndroidBootAudioFW, AudioFrameWork,
+       BootConfigListHead, ParamLen, AsciiStrLen (AudioFrameWork));
+       ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (AudioFrameWork),
+       CmdLineLen, BootConfigLen);
+    }
+  }
+
   if (EarlyServicesEnabled ()) {
     CmdLineLen += GetSystemPathByPname (&ModemPathStr,
                                         MultiSlotBoot,

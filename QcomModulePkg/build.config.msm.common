@@ -6,8 +6,8 @@ fi
 
 PREBUILT_PYTHON_PATH=prebuilts/build-tools/path/linux-x86/python3
 
-if [ "${MSM_ARCH}" = "pineapple" ] || [ "${MSM_ARCH}" = "gen4auto" ] || [ "${MSM_ARCH}" = "gen3auto" ] || [ "${MSM_ARCH}" = "blair" ]; then
-CLANG_VERSION=r458507
+if [ "${MSM_ARCH}" = "pineapple" ] || [ "${MSM_ARCH}" = "gen4auto" ] || [ "${MSM_ARCH}" = "gen3auto" ] || [ "${MSM_ARCH}" = "blair" ] || [ "${MSM_ARCH}" = "sdmsteppeauto" ]; then
+CLANG_VERSION=r450784e
 CLANG_PREBUILT_BIN=prebuilts/clang/host/linux-x86/clang-${CLANG_VERSION}/bin
 fi
 
@@ -23,6 +23,12 @@ if [ -n "${VERIFIED_BOOT_LE}" ]; then
 fi
 if [ -n "${VERIFIED_BOOT_ENABLED}" ]; then
   MAKE_FLAGS+=("VERIFIED_BOOT_ENABLED=${VERIFIED_BOOT_ENABLED}")
+fi
+if [ -n "${PVMFW_ENABLED}" ]; then
+  MAKE_FLAGS+=("PVMFW_BCC_ENABLED=-DPVMFW_BCC")
+fi
+if [ -n "${PVMFW_DUMMY_BCC_ENABLED}" ]; then
+  MAKE_FLAGS+=("PVMFW_USE_DUMMY_BCC=-DUSE_DUMMY_BCC")
 fi
 if [ -n "${EARLY_ETH_ENABLED}" ]; then
   MAKE_FLAGS+=("EARLY_ETH_ENABLED=${EARLY_ETH_ENABLED}")

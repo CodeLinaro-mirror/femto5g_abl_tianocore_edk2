@@ -71,6 +71,7 @@
 #include <Library/MenuKeysDetection.h>
 #include <Library/VerifiedBootMenu.h>
 #include <Library/LEOEMCertificate.h>
+#include "AvbPopulateBccParams.h"
 
 STATIC CONST CHAR8 *VerityMode = " androidboot.veritymode=";
 STATIC CONST CHAR8 *VerifiedState = " androidboot.verifiedbootstate=";
@@ -1360,7 +1361,11 @@ IsValidPartition (Slot *Slot, CONST CHAR16 *Name)
 
 STATIC EFI_STATUS
 LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
-                        BOOLEAN SetRotAndBootState)
+                        BOOLEAN SetRotAndBootState
+#ifndef USE_DUMMY_BCC
+                        , BccParams_t *BccParams
+#endif
+                    )
 {
   EFI_STATUS Status = EFI_SUCCESS;
   AvbSlotVerifyResult Result;
@@ -1758,6 +1763,18 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
     DEBUG ((EFI_D_INFO, "VB2: Authenticate complete! boot state is: %a\n",
             VbSn[Info->BootState].name));
   }
+
+#ifndef USE_DUMMY_BCC
+  if (Info->HasPvmFw) {
+    EFI_STATUS BccStatus = PopulateBccParams (SlotData,
+                                              Info->BootIntoRecovery,
+                                              BccParams);
+    if (BccStatus != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "VB2: PopulateBccParams failed with Status: %r\n",
+                BccStatus));
+    }
+  }
+#endif
 out:
   if (Status != EFI_SUCCESS) {
     if (SlotData != NULL) {
@@ -2026,7 +2043,11 @@ skip_verification:
 
 EFI_STATUS
 LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
-                        BOOLEAN SetRotAndBootState)
+                        BOOLEAN SetRotAndBootState
+#ifndef USE_DUMMY_BCC
+                        , BccParams_t *BccParamsRecvdFromAVB
+#endif
+                        )
 {
   EFI_STATUS Status = EFI_SUCCESS;
   BOOLEAN MdtpActive = FALSE;
@@ -2036,9 +2057,10 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
   UINT32 RecoveryHdrSz = 0;
   VOID *InitBootHdr = NULL;
   UINT32 InitBootHdrSz = 0;
+#ifdef PVMFW_BCC
   VOID *PvmFwHdr = NULL;
   UINT32 PvmFwHdrSz = 0;
-
+#endif
   WaitForFlashFinished ();
 
   if (Info == NULL) {
@@ -2094,7 +2116,9 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
   }
 
   Info->HasPvmFw = false;
+  Info->PvmFwRawSize = 0;
 
+#ifdef PVMFW_BCC
   /* Check for pvmfw partition */
   Status = LoadPartitionImageHeader (Info, (CHAR16 *)L"pvmfw",
            &PvmFwHdr, &PvmFwHdrSz);
@@ -2103,6 +2127,7 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
     if (PvmFwHdrSz &&
         ((boot_img_hdr *)(PvmFwHdr))->kernel_size != 0) {
       Info->HasPvmFw = true;
+      Info->PvmFwRawSize = ((boot_img_hdr *)(PvmFwHdr))->kernel_size;
       DEBUG ((EFI_D_VERBOSE, "Valid pvmfw found\n"));
     } else {
       DEBUG ((EFI_D_ERROR,
@@ -2111,6 +2136,7 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
   } else {
     DEBUG ((EFI_D_VERBOSE, "No pvmfw partition found.\n"));
   }
+#endif
 
 get_ptn_name:
   /* Get Partition Name*/
@@ -2189,7 +2215,11 @@ get_ptn_name:
     Status = LoadImageAndAuthVB1 (Info);
     break;
   case AVB_2:
-    Status = LoadImageAndAuthVB2 (Info, HibernationResume, SetRotAndBootState);
+    Status = LoadImageAndAuthVB2 (Info, HibernationResume, SetRotAndBootState
+#ifndef USE_DUMMY_BCC
+                                  , BccParamsRecvdFromAVB
+#endif
+                                  );
     break;
   case AVB_LE:
     Status = LoadImageAndAuthForLE (Info);

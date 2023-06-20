@@ -15,16 +15,13 @@
 #ifndef DICE_DICE_H_
 #define DICE_DICE_H_
 
-#include <stddef.h>
-#include <stdint.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define DICE_CDI_SIZE 32
 #define DICE_HASH_SIZE 64
-#define DICE_HIDDEN_SIZE 64
+#define DICE_HIDDEN_SIZE 32
 #define DICE_INLINE_CONFIG_SIZE 64
 #define DICE_PRIVATE_KEY_SEED_SIZE 32
 #define DICE_ID_SIZE 20

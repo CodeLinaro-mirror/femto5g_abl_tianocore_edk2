@@ -14,7 +14,9 @@ def _abl_impl(ctx):
     inputs = []
     inputs += ctx.files.srcs
     inputs += ctx.files.deps
-    inputs += ctx.attr.kernel_build[KernelEnvInfo].dependencies
+    transitive_inputs = [ctx.attr.kernel_build[KernelEnvInfo].inputs]
+    tools = ctx.attr.kernel_build[KernelEnvInfo].tools
+
 
     output_files = [ctx.actions.declare_file("{}.tar.gz".format(ctx.label.name))]
 
@@ -100,8 +102,9 @@ def _abl_impl(ctx):
 
     ctx.actions.run_shell(
         mnemonic = "Abl",
-        inputs = inputs,
+        inputs = depset(inputs, transitive = transitive_inputs),
         outputs = output_files,
+        tools = tools,
         command = command,
         progress_message = "Building {}".format(ctx.label),
     )
@@ -173,15 +176,21 @@ def define_abl(msm_target, variant):
     if msm_target == "autogvm":
         return
 
-    if msm_target == "pineapple" or msm_target == "pineapple-allyes" or msm_target == "gen3auto" or msm_target == "gen4auto" or msm_target == "blair":
-        extra_deps = ["//prebuilts/clang/host/linux-x86/clang-r458507:binaries"]
+    if msm_target == "pineapple" or msm_target == "pineapple-allyes" or msm_target == "gen3auto" or msm_target == "gen4auto" or msm_target == "blair" or msm_target == "sdmsteppeauto":
+        extra_deps = ["//prebuilts/clang/host/linux-x86/clang-r450784e:binaries"]
     else:
         extra_deps = []
+
+    abl_build_config = "build.config.msm.{}".format(msm_target.replace("-", "."))
+    # Use "{}.lxc" config if its a non-GKI target/variant combination
+    if msm_target == "gen4auto":
+        if variant == "perf-defconfig" or variant == "debug-defconfig":
+            abl_build_config = "{}.lxc".format(abl_build_config)
 
     abl(
         name = "{}_abl".format(target),
         kernel_build = "//msm-kernel:{}_env".format(target),
-        abl_build_config = "build.config.msm.{}".format(msm_target.replace("-", ".")),
+        abl_build_config = abl_build_config,
         srcs = native.glob(["**"]) + extra_srcs,
         extra_function_snippets = extra_function_snippets,
         extra_post_gen_snippets = extra_post_gen_snippets,
