@@ -83,6 +83,7 @@
 #include "Recovery.h"
 #include "LECmdLine.h"
 #include "EarlyEthernet.h"
+#include "RecoveryInfo.h"
 
 #define BOOT_CPU_PARAM_LEN 13
 #define SIZE_OF_DELIM 2
@@ -645,6 +646,7 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   INT32 MemOfflineOffset;
   UINT64 *MemTable;
   INT32 PropLen;
+  CONST CHAR8 *status = NULL;
   EFI_STATUS Status;
   UINT64 UpdRamPartitionSize = 0;
 
@@ -667,6 +669,10 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
 
   MemLimit = DdrSize;
   MemOfflineOffset = FdtPathOffset (fdt, "/mem-offline");
+  status = fdt_getprop (fdt, MemOfflineOffset, "status", &PropLen);
+  if (status &&
+      (AsciiStrnCmp (status, "disabled", PropLen) == 0))
+    goto Unsupported;
 
   if (DdrSize < MEM_OFF_MIN ||
       MemOfflineOffset < 0) {
@@ -835,8 +841,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if (Param->MultiSlotBoot &&
-     !IsBootDevImage ()) {
+  if (Param->MultiSlotBoot) {
+    if (!IsBootDevImage ()) {
         UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
                               Param->SlotSuffixAscii);
         if (IsLEVariant () &&
@@ -866,6 +872,17 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
                                   AsciiStrLen (Param->SlotSuffixAscii));
           }
         }
+    } else if (IsRecoveryInfo () &&
+               IsLEVariant ()) {
+      /* Recoveryinfo needs LE slot suffix */
+          INT32 StrLen = 0;
+          UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
+                              Param->SlotSuffixAscii);
+          StrLen = AsciiStrLen (SystemdSlotEnv);
+          SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
+          Src = Param->SystemdSlotEnv;
+          AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    }
   }
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
@@ -1108,7 +1125,8 @@ UpdateBootConfigParams (LIST_ENTRY *BootConfigListHead,
   }
   Link = GetFirstNode (BootConfigListHead);
   if (!Link) {
-    DEBUG ((EFI_D_INFO, "Error in Node entry \n"));
+    DEBUG ((EFI_D_ERROR, "Error in Node entry \n"));
+    return EFI_D_ERROR;
   }
 
   gBS->CopyMem (Dst, "\n", SIZE_OF_DELIM);
@@ -1144,7 +1162,8 @@ ClearBootConfigList (LIST_ENTRY* BootConfigListHead)
 
   Link = GetFirstNode (BootConfigListHead);
   if (!Link) {
-    DEBUG ((EFI_D_INFO, "Error in Node entry \n"));
+    DEBUG ((EFI_D_ERROR, "Error in Node entry \n"));
+    return;
   }
 
   while (!IsNull (BootConfigListHead, Link)) {
@@ -1216,6 +1235,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   VOID *fdt = (VOID *)BootParamlistPtr->DeviceTreeLoadAddr;
 
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
+  if (BootConfigListHead == NULL) {
+    DEBUG ((EFI_D_ERROR, "BootConfigListHead: Out of resources\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
   InitializeListHead (BootConfigListHead);
   CHAR8 *ModemPathStr = NULL;
 

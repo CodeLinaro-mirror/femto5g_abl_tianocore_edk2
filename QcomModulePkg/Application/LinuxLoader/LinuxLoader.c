@@ -84,6 +84,9 @@
 #include <Library/UpdateCmdLine.h>
 #include <Protocol/EFICardInfo.h>
 
+#include <Protocol/EFIClock.h>
+#include "RecoveryInfo.h"
+
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
@@ -194,6 +197,47 @@ SetDefaultAudioFw ()
   }
 }
 
+STATIC VOID PrintCpuFrequency (VOID)
+{
+  EFI_CLOCK_PROTOCOL  *ClockProtocol = NULL;
+  EFI_KERNEL_PROTOCOL *KernIntf = NULL;
+  EFI_STATUS  status = EFI_SUCCESS;
+  UINT32  numOfCore = 0;
+  UINT32  pnPerfLevel;
+  UINT32  pnFrequencyHz;
+  UINT32  pnRequiredVoltage;
+  UINT32  i = 0;
+
+  status = gBS->LocateProtocol (&gEfiKernelProtocolGuid,
+                  NULL, (VOID **)&KernIntf);
+  if (EFI_SUCCESS != status) {
+          return;
+  }
+
+  numOfCore = KernIntf->MpCpu->MpcoreGetAvailCpuCount ();
+  if (!numOfCore) {
+     return;
+  }
+
+  status = gBS->LocateProtocol (&gEfiClockProtocolGuid,
+                  NULL, (VOID **)&ClockProtocol);
+  if (EFI_ERROR (status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to locate CLOCK protocol\r\n"));
+    return;
+  }
+
+  if (ClockProtocol) {
+    for (i = 0; i < numOfCore; i++) {
+      status = ClockProtocol->GetCpuPerfLevel (ClockProtocol, i, &pnPerfLevel);
+      if (status != EFI_SUCCESS) {
+          continue;
+      }
+      status = ClockProtocol->GetCpuPerfLevelFrequency (ClockProtocol, i,
+                     pnPerfLevel, &pnFrequencyHz, &pnRequiredVoltage);
+    }
+  }
+}
+
 BOOLEAN IsABRetryCountUpdateRequired (VOID)
 {
  BOOLEAN BatteryStatus;
@@ -282,7 +326,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   BootStatsSetTimeStamp (BS_BL_START);
 
   /* check if it is NetworkBoot, FlashlessBoot or Fastboot */
-  if (!IsMultiBoot ()) {
+  if (IsMultiBoot ()) {
     Val = GetBootDeviceType ();
     if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
       NetworkBootImageAddr = BASE_ADDRESS;
@@ -337,6 +381,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   }
 
   SetDefaultAudioFw ();
+  PrintCpuFrequency ();
 
   // check for reboot mode
   Status = GetRebootReason (&BootReason);
@@ -439,6 +484,12 @@ flashless_boot:
     Status = LoadImageAndAuth (&Info, FALSE, SetRotAndBootState);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
+      if (IsRecoveryInfo ()) {
+        Slot CurrentSlot ;
+        CurrentSlot = GetCurrentSlotSuffix ();
+        RI_HandleFailedSlot (CurrentSlot);
+        /*No return*/
+      }
       goto fastboot;
     }
 
