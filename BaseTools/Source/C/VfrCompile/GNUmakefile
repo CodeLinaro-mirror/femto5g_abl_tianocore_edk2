@@ -17,7 +17,7 @@ TOOL_INCLUDE = -I Pccts/h
 OBJECTS = AParser.o DLexerBase.o ATokenBuffer.o EfiVfrParser.o VfrLexer.o VfrSyntax.o \
           VfrFormPkg.o VfrError.o VfrUtilityLib.o VfrCompiler.o
 
-VFR_CPPFLAGS = -DPCCTS_USE_NAMESPACE_STD $(BUILD_CPPFLAGS)
+VFR_CPPFLAGS = -DPCCTS_USE_NAMESPACE_STD -Wno-register $(BUILD_CPPFLAGS)
 
 # keep BUILD_OPTFLAGS last
 VFR_CXXFLAGS = $(BUILD_OPTFLAGS)
