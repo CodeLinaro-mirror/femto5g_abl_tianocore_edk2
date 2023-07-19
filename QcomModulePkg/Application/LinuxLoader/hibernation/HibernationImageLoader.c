@@ -113,8 +113,8 @@ static UINT8 UnwrappedKey[32];
 #else
 #define NUM_CORES 1
 #define NUM_SILVER_CORES 0
-#define NUM_PAGES_PER_GOLD_CORE ((NrCopyPages / 54) * 9)
-#define NUM_PAGES_PER_SILVER_CORE ((NrCopyPages / 54) * 4)
+#define NUM_PAGES_PER_GOLD_CORE 0
+#define NUM_PAGES_PER_SILVER_CORE 0
 #endif
 
 /* Holds free memory ranges read from UEFI memory map */
@@ -1295,7 +1295,7 @@ static INT32 InitAesDecrypt (VOID)
 
 static INT32 RestoreSnapshotImage (VOID)
 {
-        INT32 Ret, Iter1 = 0;
+        INT32 Ret = 0, Iter1 = 0;
         UINT64 StartMs, Offset, PfnOffset = 0;
         RestoreInfo Info[NUM_CORES];
         struct BounceTableIterator *Bti = &TableIterator;
@@ -1408,6 +1408,7 @@ static INT32 RestoreSnapshotImage (VOID)
         Ret = UefiMapUnmapped ();
         if (Ret < 0) {
                 printf ("Error mapping unmapped regions\n");
+                Ret = -1;
                 goto err;
         }
 
@@ -1435,6 +1436,7 @@ static INT32 RestoreSnapshotImage (VOID)
         for (Iter1 = 0; Iter1 < NUM_CORES; Iter1++) {
                 if (Info[Iter1].Status != 0) {
                         printf ("error in restore_snapshot_image\n");
+                        Ret = -1;
                         goto err;
                 }
         }
