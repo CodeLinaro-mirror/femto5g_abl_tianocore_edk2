@@ -20,9 +20,33 @@ int dto_print(const char *fmt, ...) {
 }
 #endif
 
+#include <Base.h>	21
+#include <Library/UefiBootServicesTableLib.h>	22
+#include <Library/PrintLib.h>	23
+#include <Library/BaseLib.h>	24
+#include <Library/DebugPrintErrorLevelLib.h>	25
+#include <libfdt_env.h>
+static char *Buffer;
+int dto_print(const char *fmt, ...) {
+  VA_LIST ap;
+  VA_START(ap, fmt);
+  if (Buffer == NULL) {
+    Buffer = AllocateZeroPool (0x100);
+    if (Buffer == NULL) {
+	 return 0;
+    }
+  }
+  UnicodeVSPrintAsciiFormat (Buffer, 0x100,  fmt, ap);
+  VA_END(ap);
+  if ((gST != NULL) && (gST->ConOut != NULL)) {
+    gST->ConOut->OutputString (gST->ConOut, Buffer);
+  }
+  return 0;
+}
+/*
 int dto_print(const char *fmt, ...) {
   return EFI_DTBO_ERROR;
-}
+}*/
 /* Codes from
  * https://android.googlesource.com/platform/bionic.git/+/eclair-release/libc/stdlib/qsort.c
  * Start
