@@ -169,6 +169,12 @@
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
+  !if $(INTEGRITY_LE_IMA)
+      GCC:*_*_*_CC_FLAGS = -DINTEGRITY_LE_IMA
+  !endif
+  !if $(INTEGRITY_LE_EVM)
+      GCC:*_*_*_CC_FLAGS = -DINTEGRITY_LE_EVM
+  !endif
   !if $(USER_BUILD_VARIANT) == 0
       GCC:*_*_*_CC_FLAGS = -DENABLE_UPDATE_PARTITIONS_CMDS -DENABLE_BOOT_CMD -DENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS
   !else
@@ -230,6 +236,12 @@
   !endif
   !if $(EXTRA_TARGET_OPTFLAGS) != ""
       GCC:*_*_*_ARCHCC_FLAGS = $(EXTRA_TARGET_OPTFLAGS)
+  !endif
+  !if $(UBUNTU_AB_OTA)
+      GCC:*_*_*_CC_FLAGS = -DUBUNTU_AB_OTA
+  !endif
+  !if $(RW_ROOTFS)
+      GCC:*_*_*_CC_FLAGS = -DRW_ROOTFS
   !endif
 
 [PcdsFixedAtBuild.common]

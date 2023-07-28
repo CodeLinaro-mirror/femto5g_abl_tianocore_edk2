@@ -76,6 +76,7 @@
 #include <Protocol/EFIPmicPon.h>
 #include <Protocol/Print2.h>
 #include <Library/EarlyUsbInit.h>
+#include <Library/IntegrityIMA.h>
 
 #include "AutoGen.h"
 #include "DeviceInfo.h"
@@ -122,7 +123,11 @@ STATIC CHAR8 *SilentBootNForCmdLine =
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
+#if RW_ROOTFS
+STATIC CHAR8 *RootCmdLine = " rootwait rw init=";
+#else
 STATIC CHAR8 *RootCmdLine = " rootwait ro init=";
+#endif
 STATIC CHAR8 *InitCmdline = INIT_BIN;
 STATIC CHAR8 *SkipRamFs = " skip_initramfs";
 
@@ -474,12 +479,35 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
             StrLen (ReqPartition));
   }
 
+  /* If it support Ubuntu ab ota, there are not system _a and _b slot.
+   * And there is only one system partition.*/
+#ifndef UBUNTU_AB_OTA
   /* Append slot info for A/B Variant */
   if (MultiSlotBoot &&
       NAND != CheckRootDeviceType ()) {
-     StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
-            StrLen (CurSlot.Suffix));
+    /* Skip slot suffix when RecoveryInfo and slot a*/
+    if (!StrCmp (CurSlot.Suffix, L"_a")) {
+      if (!IsRecoveryInfo ()) {
+        StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
+                  StrLen (CurSlot.Suffix));
+      }
+    } else {
+      /* Slots other than _a */
+      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
+                StrLen (CurSlot.Suffix));
+    }
+  } else if (IsRecoveryInfo () &&
+             NAND == CheckRootDeviceType ()) {
+
+    /* IsRecoveryinfo implicitly means MultiSlot */
+    /* Append slot suffix for slots other than _a */
+
+    if (StrCmp (CurSlot.Suffix, L"_a")) {
+      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
+                StrLen (CurSlot.Suffix));
+    }
   }
+#endif
 
   Index = GetPartitionIndex (PartitionName);
   if (Index == INVALID_PTN || Index >= MAX_NUM_PARTITIONS) {
@@ -976,6 +1004,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
+  if (IsIntegrityIMAEnabled ()) {
+    Src = Param->IntegrityIMACmdline;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
   if (IsHibernationEnabled ()) {
     Src = Param->ResumeCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
@@ -1227,6 +1260,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 MemOffAmt[MEM_OFF_SIZE];
   BOOLEAN BootConfigFlag = FALSE;
   CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
+  CHAR8 IntegrityIMACmdline[IMA_CMDLINE_LEN] = "\0";
 
   CONST CHAR8 *CmdLine = BootParamlistPtr->CmdLine;
   CHAR8 **FinalCmdLine = &BootParamlistPtr->FinalCmdLine;
@@ -1664,6 +1698,11 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (UsbCompositionCmdline);
   }
 
+  if (IsIntegrityIMAEnabled ()) {
+    GetIntegrityIMACmdline (IntegrityIMACmdline);
+    CmdLineLen += AsciiStrLen (IntegrityIMACmdline);
+  }
+
   if (BootCpuSelectionEnabled ()) {
     AsciiSPrint (BootCpuCmdLine, sizeof (BootCpuCmdLine), " boot_cpu=%d",
                  BootCpuId);
@@ -1733,6 +1772,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
 
   if (EarlyUsbInitEnabled ()) {
     Param.UsbCompCmdLine = UsbCompositionCmdline;
+  }
+
+  if (IsIntegrityIMAEnabled ()) {
+    Param.IntegrityIMACmdline = IntegrityIMACmdline;
   }
 
   if (IsHibernationEnabled ()) {
