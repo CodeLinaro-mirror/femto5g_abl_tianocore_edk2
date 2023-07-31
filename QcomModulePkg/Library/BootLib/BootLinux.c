@@ -85,7 +85,6 @@
 #include "Bootconfig.h"
 #include <ufdt_overlay.h>
 
-#define DTO_ENABLE_DEBUG	1
 #ifndef DISABLE_KERNEL_PROTOCOL
 #include <Protocol/EFIKernelInterface.h>
 #endif

@@ -13,7 +13,6 @@
 #include <stdint.h>
 #else
 #include <libfdt_env.h>
-#define DTO_ENABLE_DEBUG 1
 #endif
 
 #ifdef DTO_ENABLE_DEBUG
@@ -23,7 +22,7 @@
  */
 #define dto_debug(...)                   \
   do {                                   \
-    dto_print("DEBUG: %a():", __func__); \
+    dto_print("DEBUG: %s():", __func__); \
     dto_print(__VA_ARGS__);              \
   } while (0)
 #else
@@ -32,7 +31,7 @@
 
 #define dto_error(...)                   \
   do {                                   \
-    dto_print("ERROR: %a():", __func__); \
+    dto_print("ERROR: %s():", __func__); \
     dto_print(__VA_ARGS__);              \
   } while (0)
 

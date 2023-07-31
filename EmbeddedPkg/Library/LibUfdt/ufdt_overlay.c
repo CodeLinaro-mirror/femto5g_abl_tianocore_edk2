@@ -139,7 +139,7 @@ static void *ufdt_get_fixup_location(struct ufdt *tree, const char *fixup) {
   path = dto_strdup(fixup);
   prop_ptr = dto_strchr(path, ':');
   if (prop_ptr == NULL) {
-    dto_error("Missing property part in '%a'\n", path);
+    dto_error("Missing property part in '%s'\n", path);
     goto fail;
   }
 
@@ -256,7 +256,7 @@ static int ufdt_overlay_do_fixups(struct ufdt *main_tree,
         main_symbols_node, name_of(fixups), &len);
 
     if (!symbol_path) {
-      dto_error("Couldn't find '%a' symbol in main dtb\n", name_of(fixups));
+      dto_error("Couldn't find '%s' symbol in main dtb\n", name_of(fixups));
       return -1;
     }
 
@@ -264,7 +264,7 @@ static int ufdt_overlay_do_fixups(struct ufdt *main_tree,
     symbol_node = ufdt_get_node_by_path(main_tree, symbol_path);
 
     if (!symbol_node) {
-      dto_error("Couldn't find '%a' path in main dtb\n", symbol_path);
+      dto_error("Couldn't find '%s' path in main dtb\n", symbol_path);
       return -1;
     }
 
@@ -590,7 +590,7 @@ struct fdt_header *ufdt_install_blob(void *blob, size_t blob_size) {
   struct fdt_header *pHeader;
   int err;
 
-  dto_debug("ufdt_install_blob (0x%08jx)\n", (uintptr_t)blob);
+  dto_debug("ufdt_install_blob (0x%08jx)\n", (uintmax_t)blob);
 
   if (blob_size < sizeof(struct fdt_header)) {
     dto_error("Blob_size %zu smaller than the header size %zu\n", blob_size,
