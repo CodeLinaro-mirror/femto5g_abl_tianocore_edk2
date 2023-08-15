@@ -71,6 +71,7 @@
 #include <Library/MenuKeysDetection.h>
 #include <Library/VerifiedBootMenu.h>
 #include <Library/LEOEMCertificate.h>
+#include "RecoveryInfo.h"
 
 STATIC CONST CHAR8 *VerityMode = " androidboot.veritymode=";
 STATIC CONST CHAR8 *VerifiedState = " androidboot.verifiedbootstate=";
@@ -220,8 +221,12 @@ NoAVBLoadReqImage (BootInfo *Info, VOID **DtboImage,
 
   if (Info->MultiSlotBoot) {
       CurrentSlot = GetCurrentSlotSuffix ();
-      GUARD ( StrnCatS (Pname, MAX_GPT_NAME_SIZE,
+      /* Fixup suffix in case of recoveryinfo */
+      if (!IsRecoveryInfo () ||
+          (StrCmp (CurrentSlot.Suffix, L"_a"))) {
+        GUARD ( StrnCatS (Pname, MAX_GPT_NAME_SIZE,
                   CurrentSlot.Suffix, StrLen (CurrentSlot.Suffix)));
+      }
   }
   if (GetPartitionIndex (Pname) == INVALID_PTN) {
     Status = EFI_NO_MEDIA;
@@ -282,6 +287,11 @@ NoAVBLoadReqImage (BootInfo *Info, VOID **DtboImage,
   }
   Status = LoadImageFromPartition (*DtboImage, DtboSize, Pname);
 
+  if (Status != EFI_SUCCESS &&
+      IsRecoveryInfo ()) {
+    RI_HandleFailedSlot (CurrentSlot);
+    /*No return*/
+  }
 out:
   if (Ops != NULL) {
     AvbOpsFree (Ops);
@@ -1887,6 +1897,9 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     secasn1_data_type Modulus = {NULL};
     secasn1_data_type PublicExp = {NULL};
     UINT32 PaddingType = 0;
+#ifdef CMDLINE_SHOW_SECURE_BOOT_STATUS
+    CHAR8 *SecureCmdline = NULL;
+#endif /* CMDLINE_SHOW_SECURE_BOOT_STATUS */
 
     /*Load image*/
     GUARD (VBAllocateCmdLine (Info));
@@ -1897,6 +1910,15 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
         return Status;
     }
+
+    /* If secure device,append cmdline */
+#ifdef CMDLINE_SHOW_SECURE_BOOT_STATUS
+    if (SecureDevice == TRUE) {
+        DEBUG ((EFI_D_ERROR, "VB: Secure Boot enabled: %r\n", Status));
+        SecureCmdline = " secure=1";
+        GUARD (AppendVBCmdLine (Info, SecureCmdline));
+    }
+#endif /* CMDLINE_SHOW_SECURE_BOOT_STATUS */
 
     /* In case of flashless LE devices images are already loaded and verified
      * by previous bootloaders, so just fill the BootInfo structure with
@@ -2046,6 +2068,7 @@ skip_verification:
         }
         GUARD (AppendVBCmdLine (Info, SystemPath));
     }
+
     return Status;
 }
 
@@ -2069,6 +2092,7 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
   UINT32 RecoveryHdrSz = 0;
   VOID *InitBootHdr = NULL;
   UINT32 InitBootHdrSz = 0;
+  Slot CurrentSlot = {{0}};
 
   WaitForFlashFinished ();
 
@@ -2144,7 +2168,7 @@ get_ptn_name:
                 StrLen (L"boot"));
     }
   } else {
-    Slot CurrentSlot = {{0}};
+
 
     GUARD (FindBootableSlot (&CurrentSlot));
     if (IsSuffixEmpty (&CurrentSlot)) {
@@ -2171,6 +2195,13 @@ get_ptn_name:
 
     GUARD (StrnCatS (Info->Pname, ARRAY_SIZE (Info->Pname), CurrentSlot.Suffix,
                      StrLen (CurrentSlot.Suffix)));
+    /* For RecoveryInfo skip _a suffix */
+    if (IsRecoveryInfo () &&
+        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) {
+      GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"boot",
+                         StrLen (L"boot")));
+    }
+
   }
 
   DEBUG ((EFI_D_VERBOSE, "MultiSlot %a, partition name %s\n",
@@ -2214,6 +2245,12 @@ get_ptn_name:
 
   if (HibernationResume) {
     return Status;
+  }
+
+  if ((Status != EFI_SUCCESS) &&
+      IsRecoveryInfo ()) {
+    RI_HandleFailedSlot (CurrentSlot);
+    /*No Return*/
   }
 
   // if MDTP is active Display Recovery UI

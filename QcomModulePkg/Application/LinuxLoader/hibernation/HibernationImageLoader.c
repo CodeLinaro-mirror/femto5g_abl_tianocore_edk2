@@ -113,8 +113,8 @@ static UINT8 UnwrappedKey[32];
 #else
 #define NUM_CORES 1
 #define NUM_SILVER_CORES 0
-#define NUM_PAGES_PER_GOLD_CORE ((NrCopyPages / 54) * 9)
-#define NUM_PAGES_PER_SILVER_CORE ((NrCopyPages / 54) * 4)
+#define NUM_PAGES_PER_GOLD_CORE 0
+#define NUM_PAGES_PER_SILVER_CORE 0
 #endif
 
 /* Holds free memory ranges read from UEFI memory map */
@@ -226,6 +226,7 @@ typedef struct RestoreInfo {
         VOID *TempOut;
         VOID *AuthCur;
         UINT32 ThreadId;
+        UINT8 Iv[12];
 #endif
 }RestoreInfo;
 
@@ -640,8 +641,27 @@ VOID InitReadMultiThreadEnv (VOID)
 }
 
 #if HIBERNATION_SUPPORT_AES
+static UINT8 IvGlb[12];
+#define BYTE_SIZE 8
+static VOID IncrementIV (UINT8 *Iv, UINT8 Size, UINT64 Val)
+{
+        UINT32 Offset;
+        UINT64 Num;
+        UINT64 Mask = 0xFFUL;
+
+        Offset = Size - 1;
+        do {
+                Num = (UINT8) Iv[Offset];
+                Num += Val;
+                Iv[Offset] = Num & Mask;
+                Val = (Num > Mask) ? ((Num & ~Mask) >> BYTE_SIZE) : 0;
+                Offset--;
+        } while (Offset >= 0 &&
+                   Val != 0);
+}
+
 static INT32 DecryptPage (VOID *EncryptData, CHAR8 *Auth, VOID *TempOut,
-                          VOID *AuthCurrent, UINT32 ThreadId)
+                          VOID *AuthCurrent, UINT32 ThreadId, UINT8* Iv)
 {
         SW_CipherEncryptDir Dir = SW_CIPHER_DECRYPT;
         SW_CipherModeType Mode = SW_CIPHER_MODE_GCM;
@@ -678,7 +698,8 @@ static INT32 DecryptPage (VOID *EncryptData, CHAR8 *Auth, VOID *TempOut,
                 sizeof (UnwrappedKey), &Ctx[ThreadId])) {
                 return -1;
         }
-        if (SW_Cipher_SetParam (SW_CIPHER_PARAM_IV, Dp.Iv, sizeof (Dp.Iv),
+        IncrementIV (Iv, sizeof (Dp.Iv), 1);
+        if (SW_Cipher_SetParam (SW_CIPHER_PARAM_IV, Iv, sizeof (Dp.Iv),
                                 &Ctx[ThreadId])) {
                 return -1;
         }
@@ -851,7 +872,7 @@ static UINT64* ReadKernelImagePfnIndexes (UINT64 *Offset)
         while (PendingPages != NrMetaPages) {
 #if HIBERNATION_SUPPORT_AES
                 if (DecryptPage (PfnArrayStart, Authtags, TempOut[0],
-                                 AuthCur[0], 0)) {
+                                 AuthCur[0], 0, IvGlb)) {
                         printf ("Decryption failed for pfn array\n");
                         return NULL;
                 }
@@ -887,7 +908,7 @@ static INT32 ReadDataPages (VOID *Arg)
                 if (Ret < 0) {
                         printf ("Disk read failed Line %d\n", __LINE__);
                         Info->Status = -1;
-                        return -1;
+                        goto err;
                 }
 
                 SrcPfn = (UINT64) Info->DiskReadBuffer >> PAGE_SHIFT;
@@ -900,7 +921,8 @@ static INT32 ReadDataPages (VOID *Arg)
                                 if (DecryptPage (
                                              (VOID *)(SrcPfn << PAGE_SHIFT),
                                               Info->Authtags, Info->TempOut,
-                                              Info->AuthCur, Info->ThreadId)) {
+                                              Info->AuthCur, Info->ThreadId,
+                                              Info->Iv)) {
                                         printf (
                                           "Decrypt failed for Data pages\n"
                                         );
@@ -917,9 +939,7 @@ static INT32 ReadDataPages (VOID *Arg)
                 }
         }
         Info->Status = 0;
-#if HIBERNATION_SUPPORT_AES
 err:
-#endif
         KernIntf->Sem->SemPost (Info->Sem, FALSE);
         return 0;
 }
@@ -1204,6 +1224,8 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
                 RspLen = QSEECOM_ALIGN (RspLen);
         }
 
+        gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp.Iv), sizeof (Dp.Iv));
+
         Req.Cmd = UNWRAP_KEY_CMD;
         Req.UnwrapkeyReq.WrappedKeySize = WRAPPED_KEY_SIZE;
         gBS->CopyMem ((VOID *)Req.UnwrapkeyReq.WrappedKeyBuffer,
@@ -1271,7 +1293,7 @@ static INT32 InitAesDecrypt (VOID)
 
 static INT32 RestoreSnapshotImage (VOID)
 {
-        INT32 Ret, Iter1 = 0;
+        INT32 Ret = 0, Iter1 = 0;
         UINT64 StartMs, Offset, PfnOffset = 0;
         RestoreInfo Info[NUM_CORES];
         struct BounceTableIterator *Bti = &TableIterator;
@@ -1304,6 +1326,8 @@ static INT32 RestoreSnapshotImage (VOID)
 #if HIBERNATION_SUPPORT_AES
         for (Iter1 = 0; Iter1 < NUM_SILVER_CORES; Iter1++) {
                 INT32 Iter2;
+                UINT64 Count = 0;
+                gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp.Iv));
                 Info[Iter1].Offset = Offset;
                 Info[Iter1].Authtags = Authtags;
                 Info[Iter1].NumPages = NUM_PAGES_PER_SILVER_CORE;
@@ -1315,10 +1339,14 @@ static INT32 RestoreSnapshotImage (VOID)
                         Offset++;
                         PfnOffset++;
                         Authtags += Dp.Authsize;
+                        Count++;
                 }
+                IncrementIV (IvGlb, sizeof (Dp.Iv), Count);
         }
         for (Iter1 = NUM_SILVER_CORES; Iter1 < NUM_CORES - 1; Iter1++) {
                 INT32 Iter2;
+                UINT64 Count = 0;
+                gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp.Iv));
                 Info[Iter1].Offset = Offset;
                 Info[Iter1].Authtags = Authtags;
                 Info[Iter1].NumPages = NUM_PAGES_PER_GOLD_CORE;
@@ -1330,9 +1358,12 @@ static INT32 RestoreSnapshotImage (VOID)
                         Offset++;
                         PfnOffset++;
                         Authtags += Dp.Authsize;
+                        Count++;
                 }
+                IncrementIV (IvGlb, sizeof (Dp.Iv), Count);
         }
         Info[Iter1].Authtags = Authtags;
+        gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp.Iv));
 #endif
         Info[Iter1].Offset = Offset;
         Info[Iter1].NumPages = NrCopyPages - (4 * NUM_PAGES_PER_SILVER_CORE) -
@@ -1375,6 +1406,7 @@ static INT32 RestoreSnapshotImage (VOID)
         Ret = UefiMapUnmapped ();
         if (Ret < 0) {
                 printf ("Error mapping unmapped regions\n");
+                Ret = -1;
                 goto err;
         }
 
@@ -1402,6 +1434,7 @@ static INT32 RestoreSnapshotImage (VOID)
         for (Iter1 = 0; Iter1 < NUM_CORES; Iter1++) {
                 if (Info[Iter1].Status != 0) {
                         printf ("error in restore_snapshot_image\n");
+                        Ret = -1;
                         goto err;
                 }
         }
