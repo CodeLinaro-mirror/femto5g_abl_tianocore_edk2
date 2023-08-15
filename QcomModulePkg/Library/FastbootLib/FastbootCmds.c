@@ -123,6 +123,7 @@ found at
 #include "MetaFormat.h"
 #include "SparseFormat.h"
 #include "Recovery.h"
+#include "RecoveryInfo.h"
 
 STATIC struct GetVarPartitionInfo part_info[] = {
     {"system", "partition-size:", "partition-type:", "", "ext4"},
@@ -1744,9 +1745,13 @@ ReenumeratePartTable (VOID)
     /*Check for multislot boot support*/
     MultiSlotBoot = PartitionHasMultiSlot (L"boot");
     if (MultiSlotBoot) {
-      UpdatePartitionAttributes (PARTITION_ALL);
-      FindPtnActiveSlot ();
-      PopulateMultislotMetadata ();
+      if (!IsRecoveryInfo ()) {
+        UpdatePartitionAttributes (PARTITION_ALL);
+        FindPtnActiveSlot ();
+        PopulateMultislotMetadata ();
+      } else {
+        DEBUG (( EFI_D_ERROR, "Skip UpdateParitionAttribute\n"));
+      }
       DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     } else {
       DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is not supported\n"));
@@ -4007,7 +4012,10 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
      *CurrenSlot, these can modified using fastboot set_active command
      */
     FindPtnActiveSlot ();
-    PopulateMultislotMetadata ();
+    /* This metadata is not available for RecoveryInfo case */
+    if (!IsRecoveryInfo ()) {
+      PopulateMultislotMetadata ();
+    }
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
   }
 

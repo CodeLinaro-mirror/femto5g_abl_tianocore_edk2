@@ -83,7 +83,9 @@
 #include <Library/HypervisorMvCalls.h>
 #include <Library/UpdateCmdLine.h>
 #include <Protocol/EFICardInfo.h>
+
 #include <Protocol/EFIClock.h>
+#include "RecoveryInfo.h"
 
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
@@ -324,7 +326,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   BootStatsSetTimeStamp (BS_BL_START);
 
   /* check if it is NetworkBoot, FlashlessBoot or Fastboot */
-  if (!IsMultiBoot ()) {
+  if (IsMultiBoot ()) {
     Val = GetBootDeviceType ();
     if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
       NetworkBootImageAddr = BASE_ADDRESS;
@@ -482,6 +484,12 @@ flashless_boot:
     Status = LoadImageAndAuth (&Info, FALSE, SetRotAndBootState);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
+      if (IsRecoveryInfo ()) {
+        Slot CurrentSlot ;
+        CurrentSlot = GetCurrentSlotSuffix ();
+        RI_HandleFailedSlot (CurrentSlot);
+        /*No return*/
+      }
       goto fastboot;
     }
 
