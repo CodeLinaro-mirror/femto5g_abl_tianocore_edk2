@@ -22,10 +22,15 @@ STATIC BootSetType BootSet = SET_INVALID;
 | False    | X                | X                           | False          |
 | True     | False            | X                           | False          |
 | True     | True             | RECOVERY_INFO_PARTITION_FAIL| False          |
-| True     | True             | RECOVERY_INFO_NO_RECOVERY   | True(gpio)     |
-| True     | True             | RECOVERY_INFO_RECOVERY      | True           |
+| True     | True             | RECOVERY_INFO_GPIO          | True(gpio)     |
+| True     | True             | RECOVERY_INFO_NORMAL        | True           |
 +----------+------------------+-----------------------------+----------------+
 */
+
+BOOLEAN RI_IsGpioControlled ()
+{
+  return (HasGpioControl == 1);
+}
 
 BOOLEAN IsRecoveryInfo ()
 {
@@ -38,19 +43,28 @@ BOOLEAN IsRecoveryInfo ()
                                   (VOID **) & pRecoveryInfoProtocol);
     if (Status != EFI_SUCCESS) {
       HasRecoveryInfo = 0;
+      DEBUG ((EFI_D_ERROR, "Failed to get recovery status, %r\n", Status));
       return FALSE;
     }
 
     Status = pRecoveryInfoProtocol -> GetRecoveryState (pRecoveryInfoProtocol,
                                                         &RecoveryState);
     if (Status != EFI_SUCCESS) {
-      HasRecoveryInfo = 1;
-    } else if ((RecoveryState != RECOVERY_INFO_PARTITION_FAIL) &&
-         (Status == EFI_SUCCESS)) {
-      DEBUG (( EFI_D_INFO,  "RecoveryInfo is enabled\n"));
-      HasRecoveryInfo = 1;
-    }
-
+      DEBUG (( EFI_D_ERROR,  "GetRecoveryState failed\n"));
+      HasRecoveryInfo = 0;
+    } else {
+       if (RecoveryState == RECOVERY_INFO_PARTITION_FAIL) {
+         DEBUG (( EFI_D_ERROR,  "recoveryinfo partition not found\n"));
+         HasRecoveryInfo = 0;
+       } else if (RecoveryState == RECOVERY_INFO_GPIO) {
+         HasGpioControl = 1;
+         DEBUG (( EFI_D_INFO,  "Slot switching is GPIO controlled\n"));
+       } else {
+         HasGpioControl = 0;
+       }
+       DEBUG (( EFI_D_VERBOSE,  "RecoveryInfo is enabled\n"));
+       HasRecoveryInfo = 1;
+     }
   }
   return (HasRecoveryInfo == 1);
 }
