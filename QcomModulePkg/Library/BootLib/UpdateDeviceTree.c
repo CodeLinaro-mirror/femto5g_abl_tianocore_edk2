@@ -745,7 +745,7 @@ CombineNoMapRegions (struct CarveoutMemRegion *NoMapRegions,
       Start = NoMapRegions[i + 1].StartAddr;
       End = NoMapRegions[i + 1].StartAddr + NoMapRegions[i + 1].Size;
       NumReg++;
-      if (NumReg > NUM_NOMAP_REGIONS) {
+      if (NumReg >= NUM_NOMAP_REGIONS) {
         return EFI_OUT_OF_RESOURCES;
       }
       CombNoMapRegions[NumReg].StartAddr = Start;
@@ -784,6 +784,10 @@ UpdateRamPartitions (RamPartitionEntry *RamPartitionsList,
 
   RamPartitions = AllocateZeroPool (
                         NumPartitions * sizeof (RamPartitionEntry));
+  if (!RamPartitions) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate memory for RamPartitions\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
   CopyMem (RamPartitions, RamPartitionsList,
            NumPartitions * sizeof (RamPartitionEntry));
 
@@ -1333,6 +1337,34 @@ Out:
   return NumRank;
 }
 
+UINT64 GetInitrdStartAddr (VOID *Fdt)
+{
+  INT32 Ret = 0;
+  CONST CHAR8 *InitrdStartProp = NULL;
+  INT32 InitrdStartLen;
+  UINT32 Offset;
+  UINT32 InitrdStartAddr;
+
+  /* Get offset of the chosen node */
+  Ret = fdt_path_offset (Fdt, "/chosen");
+  if (Ret < 0) {
+    DEBUG ((EFI_D_ERROR, "ERROR: Could not find chosen node ...\n"));
+    return 0;
+  }
+  Offset = Ret;
+
+  InitrdStartProp = (CONST CHAR8 *)fdt_getprop (Fdt, Offset,
+                                   (CONST CHAR8 *)"linux,initrd-start",
+                                   &InitrdStartLen);
+  if (InitrdStartProp &&
+     (InitrdStartLen > 0)) {
+    InitrdStartAddr = fdt32_to_cpu (
+                ((struct InitrdStartNode *)InitrdStartProp)->InitrdStartAddr);
+    return InitrdStartAddr;
+  }
+  return 0;
+}
+
 /* Top level function that updates the device tree. */
 EFI_STATUS
 UpdateDeviceTree (VOID *fdt,
@@ -1687,23 +1719,25 @@ UpdateFstabNode (VOID *fdt)
       }
       ReplaceStr += AsciiStrLen (Table.DevicePathId);
       NextStr = AsciiStrStr ((ReplaceStr + 1), "/");
-      DevNodeBootDevLen = NextStr - ReplaceStr;
-      if (DevNodeBootDevLen >= AsciiStrLen (BootDevBuf)) {
-        gBS->CopyMem (ReplaceStr, BootDevBuf, AsciiStrLen (BootDevBuf));
-        PaddingEnd = DevNodeBootDevLen - AsciiStrLen (BootDevBuf);
-        /* Update the property with new value */
-        if (PaddingEnd) {
-          gBS->CopyMem (ReplaceStr + AsciiStrLen (BootDevBuf), NextStr,
-                        AsciiStrLen (NextStr));
-          for (Index = 0; Index < PaddingEnd; Index++) {
-            ReplaceStr[AsciiStrLen (BootDevBuf) + AsciiStrLen (NextStr) +
-                       Index] = ' ';
+      if (NextStr != NULL) {
+        DevNodeBootDevLen = NextStr - ReplaceStr;
+        if (DevNodeBootDevLen >= AsciiStrLen (BootDevBuf)) {
+          gBS->CopyMem (ReplaceStr, BootDevBuf, AsciiStrLen (BootDevBuf));
+          PaddingEnd = DevNodeBootDevLen - AsciiStrLen (BootDevBuf);
+          /* Update the property with new value */
+          if (PaddingEnd) {
+            gBS->CopyMem (ReplaceStr + AsciiStrLen (BootDevBuf), NextStr,
+                          AsciiStrLen (NextStr));
+            for (Index = 0; Index < PaddingEnd; Index++) {
+              ReplaceStr[AsciiStrLen (BootDevBuf) + AsciiStrLen (NextStr) +
+                         Index] = ' ';
+            }
           }
+        } else {
+          DEBUG ((EFI_D_ERROR, "String length mismatch b/w DT Bootdevice string"
+                               " (%d) and expected Bootdevice strings (%d)\n",
+                  DevNodeBootDevLen, AsciiStrLen (BootDevBuf)));
         }
-      } else {
-        DEBUG ((EFI_D_ERROR, "String length mismatch b/w DT Bootdevice string"
-                             " (%d) and expected Bootdevice strings (%d)\n",
-                DevNodeBootDevLen, AsciiStrLen (BootDevBuf)));
       }
     }
   }

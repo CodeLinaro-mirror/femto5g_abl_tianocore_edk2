@@ -169,6 +169,12 @@
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
+  !if $(INTEGRITY_LE_IMA)
+      GCC:*_*_*_CC_FLAGS = -DINTEGRITY_LE_IMA
+  !endif
+  !if $(INTEGRITY_LE_EVM)
+      GCC:*_*_*_CC_FLAGS = -DINTEGRITY_LE_EVM
+  !endif
   !if $(USER_BUILD_VARIANT) == 0
       GCC:*_*_*_CC_FLAGS = -DENABLE_UPDATE_PARTITIONS_CMDS -DENABLE_BOOT_CMD -DENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS
   !else
@@ -176,6 +182,9 @@
   !endif
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
+  !endif
+  !if $(DISABLE_MULTI_BOOT) == 1
+      GCC:*_*_*_CC_FLAGS = -DDISABLE_MULTI_BOOT
   !endif
   !if $(ENABLE_LV_ATOMIC_AB) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LV_ATOMIC_AB
@@ -216,11 +225,23 @@
   !if $(NAND_UBI_VOLUME_FLASHING_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DNAND_UBI_VOLUME_FLASHING_ENABLED
   !endif
+  !if $(CMDLINE_SHOW_SECURE_BOOT_STATUS)
+      GCC:*_*_*_CC_FLAGS = -DCMDLINE_SHOW_SECURE_BOOT_STATUS
+  !endif
   !if $(TARGET_SUPPORTS_EARLY_USB_INIT)
       GCC:*_*_*_CC_FLAGS = -DTARGET_SUPPORTS_EARLY_USB_INIT
   !endif
   !if $(TARGET_SUPPORTS_EARLY_USB_INIT)
       GCC:*_*_*_PP_FLAGS = -DTARGET_SUPPORTS_EARLY_USB_INIT
+  !endif
+  !if $(EXTRA_TARGET_OPTFLAGS) != ""
+      GCC:*_*_*_ARCHCC_FLAGS = $(EXTRA_TARGET_OPTFLAGS)
+  !endif
+  !if $(UBUNTU_AB_OTA)
+      GCC:*_*_*_CC_FLAGS = -DUBUNTU_AB_OTA
+  !endif
+  !if $(RW_ROOTFS)
+      GCC:*_*_*_CC_FLAGS = -DRW_ROOTFS
   !endif
 
 [PcdsFixedAtBuild.common]

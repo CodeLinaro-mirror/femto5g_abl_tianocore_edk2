@@ -71,6 +71,7 @@
 #include <Library/MenuKeysDetection.h>
 #include <Library/VerifiedBootMenu.h>
 #include <Library/LEOEMCertificate.h>
+#include "RecoveryInfo.h"
 
 STATIC CONST CHAR8 *VerityMode = " androidboot.veritymode=";
 STATIC CONST CHAR8 *VerifiedState = " androidboot.verifiedbootstate=";
@@ -85,6 +86,9 @@ STATIC BOOLEAN KeymasterEnabled = TRUE;
 
 #define MAX_NUM_REQ_PARTITION    8
 #define MAX_PROPERTY_SIZE        10
+
+#define DUMMY_PUBLIC_KEY_MOD_LEN 256
+#define DUMMY_PUBLIC_KEY_EXP_LEN 1
 
 static CHAR8 *avb_verify_partition_name[] = {
      "boot",
@@ -217,8 +221,12 @@ NoAVBLoadReqImage (BootInfo *Info, VOID **DtboImage,
 
   if (Info->MultiSlotBoot) {
       CurrentSlot = GetCurrentSlotSuffix ();
-      GUARD ( StrnCatS (Pname, MAX_GPT_NAME_SIZE,
+      /* Fixup suffix in case of recoveryinfo */
+      if (!IsRecoveryInfo () ||
+          (StrCmp (CurrentSlot.Suffix, L"_a"))) {
+        GUARD ( StrnCatS (Pname, MAX_GPT_NAME_SIZE,
                   CurrentSlot.Suffix, StrLen (CurrentSlot.Suffix)));
+      }
   }
   if (GetPartitionIndex (Pname) == INVALID_PTN) {
     Status = EFI_NO_MEDIA;
@@ -279,6 +287,11 @@ NoAVBLoadReqImage (BootInfo *Info, VOID **DtboImage,
   }
   Status = LoadImageFromPartition (*DtboImage, DtboSize, Pname);
 
+  if (Status != EFI_SUCCESS &&
+      IsRecoveryInfo ()) {
+    RI_HandleFailedSlot (CurrentSlot);
+    /*No return*/
+  }
 out:
   if (Ops != NULL) {
     AvbOpsFree (Ops);
@@ -1884,6 +1897,9 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     secasn1_data_type Modulus = {NULL};
     secasn1_data_type PublicExp = {NULL};
     UINT32 PaddingType = 0;
+#ifdef CMDLINE_SHOW_SECURE_BOOT_STATUS
+    CHAR8 *SecureCmdline = NULL;
+#endif /* CMDLINE_SHOW_SECURE_BOOT_STATUS */
 
     /*Load image*/
     GUARD (VBAllocateCmdLine (Info));
@@ -1894,6 +1910,15 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
         return Status;
     }
+
+    /* If secure device,append cmdline */
+#ifdef CMDLINE_SHOW_SECURE_BOOT_STATUS
+    if (SecureDevice == TRUE) {
+        DEBUG ((EFI_D_ERROR, "VB: Secure Boot enabled: %r\n", Status));
+        SecureCmdline = " secure=1";
+        GUARD (AppendVBCmdLine (Info, SecureCmdline));
+    }
+#endif /* CMDLINE_SHOW_SECURE_BOOT_STATUS */
 
     /* In case of flashless LE devices images are already loaded and verified
      * by previous bootloaders, so just fill the BootInfo structure with
@@ -1915,6 +1940,15 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         DEBUG ((EFI_D_ERROR, "VB: Error LocateProtocol "
                       "gEfiQcomASN1X509ProtocolGuid: %r\n", Status));
         return Status;
+    }
+
+    /* Check if LoadKeymasterFlag is enabled or not */
+    Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                  &KeymasterEnabled);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n",
+                                                                  Status));
+      return Status;
     }
 
     /* Read OEM certificate from the embedded header file */
@@ -1967,27 +2001,35 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         /* There are build variants where boot image is not signed.
          * Below check allows the device to bootup even if the
          * authentication fails on a Non-secure device.
-         * Note: Root of Trust cannnot be set if image authentication fails
-         * or boot image is not signed.
+         * Note: Dummy Root of Trust will be set if image
+         * authentication fails or boot image is not signed.
          */
          if (!SecureDevice) {
             if (!TargetBuildVariantUser () ) {
                 DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
                                                     "debug builds\n"));
+                if (KeymasterEnabled) {
+                    Data.PublicKeyModLength = DUMMY_PUBLIC_KEY_MOD_LEN;
+                    Data.PublicKeyMod = avb_calloc (DUMMY_PUBLIC_KEY_MOD_LEN);
+                    Data.PublicKeyExpLength = DUMMY_PUBLIC_KEY_EXP_LEN;
+                    Data.PublicKeyExp = avb_calloc (DUMMY_PUBLIC_KEY_EXP_LEN);
+                    if (Data.PublicKeyMod != NULL &&
+                            Data.PublicKeyExp != NULL) {
+                        Status = KeyMasterSetRotForLE (&Data);
+                        if (Status != EFI_SUCCESS) {
+                            DEBUG ((EFI_D_ERROR, "KeyMasterSetRotForLE failed "
+                                                            "%r\n", Status));
+                            return Status;
+                        }
+                        DEBUG ((EFI_D_INFO, "VB: Dummy ROT set\n"));
+                    }
+                }
                 goto skip_verification;
             }
         }
         return Status;
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
-
-    Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
-                                                  &KeymasterEnabled);
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n",
-                                                                  Status));
-      return Status;
-    }
 
     if (KeymasterEnabled) {
       /* Set Rot & Boot State*/
@@ -2026,6 +2068,7 @@ skip_verification:
         }
         GUARD (AppendVBCmdLine (Info, SystemPath));
     }
+
     return Status;
 }
 
@@ -2049,6 +2092,7 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
   UINT32 RecoveryHdrSz = 0;
   VOID *InitBootHdr = NULL;
   UINT32 InitBootHdrSz = 0;
+  Slot CurrentSlot = {{0}};
 
   WaitForFlashFinished ();
 
@@ -2124,7 +2168,7 @@ get_ptn_name:
                 StrLen (L"boot"));
     }
   } else {
-    Slot CurrentSlot = {{0}};
+
 
     GUARD (FindBootableSlot (&CurrentSlot));
     if (IsSuffixEmpty (&CurrentSlot)) {
@@ -2151,6 +2195,13 @@ get_ptn_name:
 
     GUARD (StrnCatS (Info->Pname, ARRAY_SIZE (Info->Pname), CurrentSlot.Suffix,
                      StrLen (CurrentSlot.Suffix)));
+    /* For RecoveryInfo skip _a suffix */
+    if (IsRecoveryInfo () &&
+        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) {
+      GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"boot",
+                         StrLen (L"boot")));
+    }
+
   }
 
   DEBUG ((EFI_D_VERBOSE, "MultiSlot %a, partition name %s\n",
@@ -2194,6 +2245,12 @@ get_ptn_name:
 
   if (HibernationResume) {
     return Status;
+  }
+
+  if ((Status != EFI_SUCCESS) &&
+      IsRecoveryInfo ()) {
+    RI_HandleFailedSlot (CurrentSlot);
+    /*No Return*/
   }
 
   // if MDTP is active Display Recovery UI
