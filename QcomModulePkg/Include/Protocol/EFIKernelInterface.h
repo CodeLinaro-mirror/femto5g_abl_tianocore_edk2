@@ -28,11 +28,50 @@
  *
 **/
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted (subject to the limitations in the
+ *  disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *        contributors may be used to endorse or promote products derived
+ *        from this software without specific prior written permission.
+ *
+ *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ *  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /*=============================================================================
                               EDIT HISTORY
 
  when       who     what, where, why
  --------   ---     -----------------------------------------------------------
+ 12/16/22   yw		add two enhanced APIs to support interrupt test
+ 04/30/20   cp      Updated enum for interrupt config types to support level.
+ 12/03/19   md      Added API to disable sleep logs from draining to UART.
  10/22/19   md      Added API's to support unsafe stack.
  01/15/19   yg      Add Thread/CPU stat API's
  09/15/18   yg      Add WDog interface
@@ -51,8 +90,7 @@ extern EFI_GUID gEfiKernelProtocolGuid;
 
 /* Protocol GUID definition. { B5062BE7-170B-4A32-BE21-689262FF4399 } */
 #define EFI_KERNEL_PROTOCOL_GUID \
-    { 0xB5062BE7, 0x170B, 0x4A32, { 0xBE, 0x21, 0x68, 0x92, 0x62, 0xFF, 0x43, \
-      0x99 } }
+   { 0xB5062BE7, 0x170B, 0x4A32, { 0xBE, 0x21, 0x68, 0x92, 0x62, 0xFF, 0x43, 0x99 } }
 
 /*
  *   Document the version changes here
@@ -78,9 +116,29 @@ extern EFI_GUID gEfiKernelProtocolGuid;
  *      Add Simple lock API's with recursive lock support
  *
  *   V 1.6
- *      Add API's to support unsafe stack.
+ *      Added API's to support unsafe stack.
+ *
+ *   V 1.7
+ *     Added API to Disable Sleep Logs.
  *
  * */
+
+/** @defgroup efi_kernel_interface_protocol EFI_KERNEL_INTERFACE_PROTOCOL
+ *  @ingroup UEFI_CORE
+ */
+ /** @defgroup  efi_kernel_interface_protocol_prot PROTOCOL
+ *  @ingroup efi_kernel_interface_protocol
+ */
+ /** @defgroup  efi_kernel_interface_protocol_apis APIs
+ *  @ingroup efi_kernel_interface_protocol
+ */
+
+/** @defgroup  efi_kernel_interface_protocol_data DATA_STRUCTURES
+ *  @ingroup efi_kernel_interface_protocol
+ */
+
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 #define EFI_KERNEL_PROTOCOL_VER_INTR_CONFIG        0x00010001
 #define EFI_KERNEL_PROTOCOL_VER_PWR_NOTIFY         0x00010002
 #define EFI_KERNEL_PROTOCOL_VER_WDOG_INTF          0x00010003
@@ -88,10 +146,15 @@ extern EFI_GUID gEfiKernelProtocolGuid;
 #define EFI_KERNEL_PROTOCOL_VER_LIB_VER_API        0x00010004
 #define EFI_KERNEL_PROTOCOL_VER_LOCK_API           0x00010005
 #define EFI_KERNEL_PROTOCOL_VER_UNSAFE_STACK_APIS  0x00010006
-
+#define EFI_KERNEL_PROTOCOL_VER_SLEEP_LOG_CONTROL_API  0x00010007
+#define EFI_KERNEL_PROTOCOL_VER_CPU_HOTPLUG_APIS   0x00010008
+#define EFI_KERNEL_PROTOCOL_VER_SLEEP_CPU_EX       0x00010009
+#define EFI_KERNEL_PROTOCOL_VER_THREAD_PRIORITY    0x0001000A
+#define EFI_KERNEL_PROTOCOL_VER_FUNCTIONAL_CPU     0x0001000B
+#define EFI_KERNEL_PROTOCOL_VER_ENHANCED_INT       0x0001000C
 /* Current protocol version */
-#define EFI_KERNEL_PROTOCOL_VERSION    EFI_KERNEL_PROTOCOL_VER_UNSAFE_STACK_APIS
-
+#define EFI_KERNEL_PROTOCOL_VERSION        EFI_KERNEL_PROTOCOL_VER_FUNCTIONAL_CPU
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 /*******************************************************************************
  *
  *   Interface type definitions
@@ -146,6 +209,11 @@ typedef INT32 KStatus;
 #define ERR_ACCESS_DENIED       (-43)
 #define ERR_PARTIAL_WRITE       (-44)
 
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  ThreadStats struct.
+  @par Parameters
+*/
 typedef struct
 {
     UINT32 PreemptCount;
@@ -156,6 +224,11 @@ typedef struct
     UINT64 SleepDuration;
 }ThreadStats;
 
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  CpuSchedStats struct.
+  @par Parameters
+*/
 typedef struct
 {
     UINT64 IdleTime;
@@ -164,28 +237,105 @@ typedef struct
     UINT64 ContextSwitches;
     UINT64 Preempts;
     UINT64 Yields;
-    UINT64 Interrupts;    /* platform code increment this */
-    UINT64 TimerInts;     /* timer code increment this */
-    UINT64 Timers;        /* timer code increment this */
+    UINT64 Interrupts;    /** platform code increment this */
+    UINT64 TimerInts;     /** timer code increment this */
+    UINT64 Timers;        /** timer code increment this */
     UINT64 RescheduleIpis;
 }CpuSchedStats;
 
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  Hints to suggest Sleep Modes.
+  @par Parameters
+*/
+enum LpmType{
+SYS_SLEEP_STATE1      = 0,   /** Shallow LPM, C4D4, Threshold charging */
+SYS_SLEEP_STATE2      = 1,   /** Deep LPM, CxPC , Offmode charging */
+};
+
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  PwrStateType enum.
+  @par Parameters
+*/
+enum PwrStateType {
+  PRE,
+  MAIN,
+  POST
+};
+
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  PwrTxnType enum.
+  @par Parameters
+*/
 enum PwrTxnType{
     DevicePwrNone    = 0,     // None
     DevicePwrOFF     = 1,     // Turn the device power OFF
     DevicePwrON      = 2,     // Turn the device power ON
 };
 
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  PwrTxnIntf struct.
+  @par Parameters
+*/
+typedef struct{
+   enum PwrTxnType   Evt;
+   enum PwrStateType State;
+   enum LpmType      SleepHint;
+}PwrTxnIntf;
+
 typedef VOID (*UnsafeStackCb) (void* Arg);
 
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  ThrUnsafeStackIntf struct.
+  @par Parameters
+*/
 typedef struct {
-   VOID          *unsafe_sp_base; 
+   VOID          *unsafe_sp_base;
    UINT64        unsafe_stack_size;
    UnsafeStackCb cb;
    VOID          *unsafe_stack_cb_data;
    VOID          *unsafe_stack_top;
 }ThrUnsafeStackIntf;
-/******************************************************************************
+
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  sleep_logging_state enum.
+  @par Parameters
+*/
+typedef enum _sleep_logging_state
+{
+   ENABLE = 0,
+   DISABLE = 1,
+   SLEEP_LOGGING_STATE_MAX = (int)0xFFFFFFFFULL,
+}sleep_logging_state;
+
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  MPCORE_HOTPLUG_STATUS enum.
+  @par Parameters
+*/
+typedef enum mpcore_hotplug_core_status
+{
+  MPCORE_HOTPLUG_SUCCESS                           = 0,
+  MPCORE_HOTPLUG_CPU_ALREADY_OFFLINE               = -1,
+  MPCORE_HOTPLUG_CPU_ALREADY_ONLINE                = -2,
+  MPCORE_HOTPLUG_DENIED                            = -3,
+  MPCORE_HOTPLUG_ERROR_PINNED_THREAD_HOLDS_LOCK    = -4,
+  MPCORE_HOTPLUG_UNPLUG_ERROR                      = -5,
+  MPCORE_HOTPLUG_DENIED_CPU_IS_IN_SLEEPING_PROCESS = -6,
+  MPCORE_HOTPLUG_PSCI_PENDING_ERROR                = -7,
+  MPCORE_HOTPLUG_PSCI_INVALID_PARAMETER_ERROR      = -8,
+  MPCORE_HOTPLUG_UNKNOWN_ERROR                     = -9,
+  MPCORE_HOTPLUG_DENIED_BOOT_CORE                  = -10,
+  MPCORE_HOTPLUG_NOT_SUPPORTED                     = -11,
+  MP_HOTPLUG_CPU_DEFECTIVE                         = -12,
+}MPCORE_HOTPLUG_STATUS;
+
+/********************************************************************************
  *   Interrupt handler interface
  *
  *   Note that the interrupt handlers registered should not conflict with
@@ -194,42 +344,71 @@ typedef struct {
  *   Handlers execute in ISR context, so only events can be posted with some
  *   restrictions.
  *
- ******************************************************************************/
+ ********************************************************************************/
+
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  HandlerStatus enum.
+  @par Parameters
+*/
 enum HandlerStatus
 {
   HANDLER_NO_RESCHEDULE = 0,
   HANDLER_RESCHEDULE
 };
 
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  IntrConfig enum.
+  @par Parameters
+*/
 enum IntrConfig
 {
-   INTR_CONFIG_NONE             = 0,
+   INTR_CONFIG_LEVEL_TRIGGER    = 0,
    INTR_CONFIG_EDGE_TRIGGER     = 1,
    INTR_CONFIG_MAX              = 2,
 };
 
+
 typedef enum HandlerStatus (*IntrHandler)(VOID *Arg);
 
-typedef VOID (*REGISTER_INTR_HANDLER) (UINT32 Vector, IntrHandler Handler,
-    VOID *Arg);
+typedef VOID (*REGISTER_INTR_HANDLER) (UINT32 Vector, IntrHandler Handler, VOID *Arg);
 
 typedef KStatus (*MASK_INTERRUPT) (UINT32 Vector);
 typedef KStatus (*UNMASK_INTERRUPT) (UINT32 Vector);
-typedef KStatus (*CONFIGURE_INTERRUPT) (UINT32 Vector,
-    enum IntrConfig Config, VOID* Arg);
+typedef KStatus (*CONFIGURE_INTERRUPT) (UINT32 Vector, enum IntrConfig Config, VOID* Arg);
+typedef KStatus (*INETRRUPT_IS_ENABLED) (UINT32 Vector, BOOLEAN* IsEnabled);
+typedef KStatus (*TRIGGER_INTERRUPT) (UINT32 Vector);
 
+typedef void (*MASK_SPI_INTERRUPTS) (VOID);
+typedef void (*MASK_PPI_INTERRUPTS) (VOID);
+typedef void (*UNMASK_SPI_INTERRUPTS) (VOID);
+typedef void (*UNMASK_PPI_INTERRUPTS) (VOID);
+
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  InterruptIntf struct.
+  @par Parameters
+*/
 typedef struct {
   REGISTER_INTR_HANDLER    RegisterIntrHandler;
   MASK_INTERRUPT           MaskInterrupt;
   UNMASK_INTERRUPT         UnmaskInterrupt;
   CONFIGURE_INTERRUPT      ConfigureInterrupt;
+  INETRRUPT_IS_ENABLED     InterruptIsEnabled; /* enhanced API, added in ver EFI_KERNEL_PROTOCOL_VER_ENHANCED_INT */
+  TRIGGER_INTERRUPT		   TriggerInterrupt; /* enhanced API, added in ver EFI_KERNEL_PROTOCOL_VER_ENHANCED_INT */
+
+  MASK_SPI_INTERRUPTS MaskSpiInterrupts;
+  MASK_PPI_INTERRUPTS MaskPpiInterrupts;
+  UNMASK_SPI_INTERRUPTS UnmaskSpiInterrupts;
+  UNMASK_PPI_INTERRUPTS UnmaskPpiInterrupts;
 } InterruptIntf;
 
-/******************************************************************************
+/********************************************************************************
  *
  *   Scheduler supported Event Services
  *
- ******************************************************************************/
+ ********************************************************************************/
 
 /* Rules for Events:
  * - Events may be signaled from interrupt context *but* the reschedule
@@ -274,6 +453,11 @@ typedef KStatus (*EVENT_UNSIGNAL)(Event *Evt);
 
 typedef _Bool (*EVENT_GET_SIGNAL_STATE) (Event *Evt);
 
+/** @ingroup efi_kernel_interface_protocol_data
+  @par Summary
+  EventIntf struct.
+  @par Parameters
+*/
 typedef struct {
   EVENT_INIT              EventInit;
   EVENT_DESTROY           EventDestroy;
@@ -285,13 +469,15 @@ typedef struct {
   EVENT_GET_SIGNAL_STATE  EventGetSignalState;
 }EventIntf;
 
-/******************************************************************************
+/********************************************************************************
      Mutex
-*******************************************************************************/
+********************************************************************************/
 /* Rules for Mutexes:
  * - Mutexes are only safe to use from thread context.
  * - Mutexes are non-recursive.
 */
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 struct mutex;
 typedef struct mutex Mutex;
 
@@ -299,12 +485,11 @@ typedef Mutex* (*MUTEX_INIT)(UINT64 Id OPTIONAL);
 typedef VOID (*MUTEX_DESTROY)(Mutex *Mtx);
 
 typedef KStatus (*MUTEX_ACQUIRE)(Mutex *Mtx);
-/* try to acquire the mutex with a timeout value */
-typedef KStatus (*MUTEX_ACQUIRE_TIMEOUT)(Mutex *, TimeDuration);
+typedef KStatus (*MUTEX_ACQUIRE_TIMEOUT)(Mutex *, TimeDuration); /** try to acquire the mutex with a timeout value */
 
 typedef KStatus (*MUTEX_RELEASE)(Mutex *Mtx);
 
-/* does the current thread hold the mutex? */
+/** does the current thread hold the mutex? */
 typedef _Bool (*IS_MUTEX_HELD)(Mutex *Mtx);
 
 typedef struct {
@@ -316,10 +501,13 @@ typedef struct {
   IS_MUTEX_HELD            IsMutexHeld;
 
 }MutexIntf;
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 
-/******************************************************************************
+/********************************************************************************
      Semaphore
-******************************************************************************/
+********************************************************************************/
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 struct semaphore;
 typedef struct semaphore Semaphore;
 
@@ -340,11 +528,13 @@ typedef struct {
   SEM_TIMEDWAIT        SemTimedWait;
 
 }SemIntf;
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 
-/******************************************************************************
+/********************************************************************************
      Spinlock
-******************************************************************************/
-
+********************************************************************************/
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 struct spinlock;
 typedef struct spinlock Spinlock;
 
@@ -362,10 +552,11 @@ typedef struct {
   SPINLOCK_UNLOCK        SpinUnlock;
 
 }SpinlockIntf;
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 
-/******************************************************************************
+/********************************************************************************
      Thread
-******************************************************************************/
+********************************************************************************/
 
 /* Thread priority */
 #define NUM_PRIORITIES                  32
@@ -391,14 +582,14 @@ typedef struct {
 #else
 #define DEFAULT_STACK_SIZE              0x1000
 #endif
-
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 struct thread;
 typedef struct thread Thread;
 
 typedef INT32 (*ThreadStartRoutine) (VOID *Arg);
 
-typedef Thread* (*THREAD_CREATE)(const char *Name,
-    ThreadStartRoutine EntryPoint, VOID *Arg, INT32 Priority, UINTN Stack_size);
+typedef Thread* (*THREAD_CREATE)(const char *Name, ThreadStartRoutine EntryPoint, VOID *Arg, INT32 Priority, UINTN Stack_size);
 typedef KStatus (*THREAD_RESUME)(Thread *);
 typedef VOID (*THREAD_EXIT)(INT32 RetCode);
 
@@ -414,32 +605,39 @@ typedef VOID (*THREAD_SET_PRIORITY)(INT32 Priority);
 typedef VOID (*THREAD_SLEEP)(TimeDuration Delay);
 
 typedef KStatus (*THREAD_DETACH)(Thread *);
-typedef KStatus (*THREAD_JOIN)(Thread *, INT32 *RetCode,
-    TimeDuration Timeout);
+typedef KStatus (*THREAD_JOIN)(Thread *, INT32 *RetCode, TimeDuration Timeout);
 typedef KStatus (*THREAD_DETACH_AND_RESUME)(Thread *);
+typedef KStatus (*THREAD_SET_REAL_TIME)(Thread *);
 
 typedef ThreadStats* (*THREAD_GET_STATS) (Thread *, ThreadStats* Tsp);
 typedef UINT64 (*THREAD_GET_TIMESTAMP) (VOID);
 
-/* Get thread unsafe stack pointer current */
+/** Get thread unsafe stack pointer current */
 typedef VOID** (*THREAD_GET_UNSAFE_SP_CURRENT) (Thread *);
 
-/* Get thread unsafe stack base */
+/** Get thread unsafe stack base */
 typedef VOID* (*THREAD_GET_UNSAFE_SP_BASE) (Thread *Thr);
 
-/* Returns size of padding that will be used in unsafe stack for bound check */
+/** Returns size of padding that will be used in unsafe stack for bound check */
 typedef UINT64 (*THREAD_GET_UNSAFE_SP_PADDING_SIZE) (VOID);
 
-/* set thread unsafe stack pointer */
-/* For bound check, allocate unsafe stack of size =  required stack size +
+/** set thread unsafe stack pointer */
+/** For bound check, allocate unsafe stack of size =  required stack size +
                                                      Padding size
    Get Padding size by calling ThreadGetUnsafeStackPaddingSize ()
    In Size parameter pass allocated unsafe stack size  */
 
-/* NOTE: Client should pass the memory for unsafe stack and it is the
+/** NOTE: Client should pass the memory for unsafe stack and it is the
    responsibility of client to free up that space. */
-typedef KStatus (*THREAD_SET_THREAD_UNSAFE_SP) (Thread *,
-    ThrUnsafeStackIntf *);
+typedef KStatus (*THREAD_SET_THREAD_UNSAFE_SP) (Thread *, ThrUnsafeStackIntf *);
+
+/* Get current thread priority */
+typedef INT32 (*THREAD_GET_CURRENT_PRIORITY) (VOID);
+
+/* This API is different than thread_set_priority().
+  This API only updates the priority, it does not change the state of the thread
+  to READY and does not put it in the run queue.*/
+typedef VOID (*THREAD_UPDATE_CURRENT_THREAD_PRIORITY) (Thread *, INT32 Priority);
 
 typedef struct {
   THREAD_CREATE                ThreadCreate;
@@ -456,6 +654,7 @@ typedef struct {
   THREAD_DETACH                ThreadDetach;
   THREAD_JOIN                  ThreadJoin;
   THREAD_DETACH_AND_RESUME     ThreadDetachAndResume;
+  THREAD_SET_REAL_TIME         ThreadSetRealTime;
   VOID*                        Reserved0;   // Deprecated API filler
   VOID*                        Reserved1;   // Deprecated API filler
   VOID*                        Reserved2;   // Deprecated API filler
@@ -466,30 +665,31 @@ typedef struct {
   THREAD_GET_UNSAFE_SP_BASE    ThreadGetUnsafeSPBase;
   THREAD_SET_THREAD_UNSAFE_SP  ThreadSetUnsafeSP;
   THREAD_GET_UNSAFE_SP_PADDING_SIZE ThreadGetUnsafeStackPaddingSize;
+  THREAD_GET_CURRENT_PRIORITY  ThreadGetCurrentPriority;
+  THREAD_UPDATE_CURRENT_THREAD_PRIORITY  ThreadUpdateCurrentThreadPriority;
 
 }ThreadIntf;
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 
-/******************************************************************************
+/********************************************************************************
      Timer
-******************************************************************************/
+********************************************************************************/
 /* Rules for Timers:
  * - Timer callbacks occur from interrupt context
  * - Timers may be programmed or canceled from interrupt or thread context
  * - Timers may be canceled or reprogrammed from within their callback
  * - Timers currently are dispatched from a 10ms periodic tick
 */
-
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 struct timer;
 typedef struct timer Timer;
 
-typedef enum HandlerStatus (*TimerCallback) (Timer *Tmr, TimeDuration Now,
-    VOID *Arg);
+typedef enum HandlerStatus (*TimerCallback) (Timer *Tmr, TimeDuration Now, VOID *Arg);
 
 typedef Timer* (*TIMER_INIT)(VOID);
-typedef VOID (*TIMER_SET_ONESHOT)(Timer *, TimeDuration Delay,
-    TimerCallback Cb, VOID *arg);
-typedef VOID (*TIMER_SET_PERIODIC)(Timer *, TimeDuration Period,
-    TimerCallback Cb, VOID *arg);
+typedef VOID (*TIMER_SET_ONESHOT)(Timer *, TimeDuration Delay, TimerCallback Cb, VOID *arg);
+typedef VOID (*TIMER_SET_PERIODIC)(Timer *, TimeDuration Period, TimerCallback Cb, VOID *arg);
 typedef VOID (*TIMER_CANCEL)(Timer *);
 
 
@@ -500,11 +700,12 @@ typedef struct {
   TIMER_CANCEL          CancelTimer;
 
 }TimerIntf;
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 
 
-/******************************************************************************
+/********************************************************************************
      MP Cpu
-******************************************************************************/
+********************************************************************************/
 
 /*
  *  Active CPU :
@@ -512,6 +713,8 @@ typedef struct {
  *  Idle CPU :
  *
  * */
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 typedef UINT32 (*MPCORE_GET_MAX_CPU_COUNT) (VOID);
 typedef UINT32 (*MPCORE_GET_AVAIL_CPU_COUNT) (VOID);
 typedef UINT32 (*MPCORE_INIT_DEFERRED_CORES) (UINT32 Cpu_Mask);
@@ -529,18 +732,34 @@ typedef VOID (*MPCORE_POWER_ON_CPU) (UINT32 CpuMask);
 
 typedef INT32 (*MPCORE_SLEEP_CPU) (UINT64 DurationMs);
 
-typedef CpuSchedStats* (*MPCORE_GET_CPU_SCHED_STATS) (UINT32 Cpu,
-    CpuSchedStats* Csp);
+typedef INT32 (*MPCORE_SLEEP_CPU_EX) (UINTN DurationMs, enum LpmType SleepHint, UINTN Latency);
 
-/* Should be able to receive the power transition notification on any of the
- * cores
- * */
-typedef void (*PwrTxnNotifyFn) (enum PwrTxnType Evt, VOID* Arg);
+typedef CpuSchedStats* (*MPCORE_GET_CPU_SCHED_STATS) (UINT32 Cpu, CpuSchedStats* Csp);
 
-typedef EFI_STATUS (*REGISTER_PWR_TRANSITION_NOTIFY) (PwrTxnNotifyFn CbFn,
-    VOID* Arg);
-typedef EFI_STATUS (*UNREGISTER_PWR_TRANSITION_NOTIFY)
-    (PwrTxnNotifyFn CbFn);
+/* Should be able to receive the power transition notification on any of the cores */
+typedef void (*PwrTxnNotifyFn) (enum PwrTxnType Evt, VOID* Arg );
+
+/* PwrTxnIntf parameter added at the end to maintain backward compatibility.
+ To be used for CxPC */
+typedef void (*PwrTxnNotifyFnEx) (enum PwrTxnType Evt, VOID* Arg, PwrTxnIntf * );
+
+/* To be deprecated soon */
+typedef EFI_STATUS (*REGISTER_PWR_TRANSITION_NOTIFY) (PwrTxnNotifyFn CbFn, VOID* Arg);
+typedef EFI_STATUS (*UNREGISTER_PWR_TRANSITION_NOTIFY) (PwrTxnNotifyFn CbFn);
+
+/* To be used for CxPC */
+typedef EFI_STATUS (*REGISTER_PWR_TRANSITION_NOTIFY_EX) (PwrTxnNotifyFnEx CbFn, VOID* Arg);
+typedef EFI_STATUS (*UNREGISTER_PWR_TRANSITION_NOTIFY_EX) (PwrTxnNotifyFnEx CbFn);
+
+typedef VOID (*MPCORE_SLEEP_LOGGING_CONTROL) (sleep_logging_state Control);
+
+typedef MPCORE_HOTPLUG_STATUS (*MPCORE_UNPLUG_CPU) (UINT32 Cpu);
+typedef MPCORE_HOTPLUG_STATUS (*MPCORE_HOTPLUG_CPU) (UINT32 Cpu);
+
+typedef VOID (*MPCORE_SET_CURR_CPU_SLEEPING) (VOID);
+typedef VOID (*MPCORE_SET_CURR_CPU_WAKEUP) (VOID);
+
+typedef UINT32 (*MPCORE_GET_FUNCTIONAL_CPU_MASK) (VOID);
 
 typedef struct {
     MPCORE_GET_MAX_CPU_COUNT        MpcoreGetMaxCpuCount;
@@ -564,17 +783,36 @@ typedef struct {
      * NOTE: Only supported in Non retail test configuration */
     MPCORE_SLEEP_CPU                MpcoreSleepCpu;
 
+    /* Will be deprecated soon. Please use *EX version */
     REGISTER_PWR_TRANSITION_NOTIFY     RegisterPwrTransitionNotify;
     UNREGISTER_PWR_TRANSITION_NOTIFY   UnRegisterPwrTransitionNotify;
 
     MPCORE_GET_CPU_SCHED_STATS      MpcoreGetCpuSchedStats;
 
+    MPCORE_SLEEP_LOGGING_CONTROL    MpcoreSleepLoggingControl;
+
+    MPCORE_UNPLUG_CPU               MpcoreUnplugCPU;
+
+    MPCORE_HOTPLUG_CPU              MpcoreHotplugCPU;
+
+    MPCORE_SET_CURR_CPU_SLEEPING    MpcoreSetCurrCpuSleeping;
+
+    MPCORE_SET_CURR_CPU_WAKEUP      MpcoreSetCurrCpuWakeup;
+
+    MPCORE_SLEEP_CPU_EX             MpcoreSleepCpuEx;
+
+    REGISTER_PWR_TRANSITION_NOTIFY_EX     RegisterPwrTransitionNotifyEx;
+    UNREGISTER_PWR_TRANSITION_NOTIFY_EX   UnRegisterPwrTransitionNotifyEx;
+    MPCORE_GET_FUNCTIONAL_CPU_MASK  MpcoreGetFunctionalCpuMask;
+
 }MpCpuIntf;
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 
-/******************************************************************************
+/********************************************************************************
      Watch Dog
-******************************************************************************/
-
+********************************************************************************/
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 typedef EFI_STATUS (*WDOG_ENABLE) (VOID);
 typedef VOID       (*WDOG_DISABLE) (VOID);
 typedef EFI_STATUS (*WDOG_SET_BITE_TIMEOUT) (UINT32 Timeoutms);
@@ -591,14 +829,17 @@ typedef struct {
     WDOG_SET_PET_TIMER_PERIOD WdogSetPetTimerPeriod;
 }WDogIntf;
 
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 
-/******************************************************************************
+/********************************************************************************
       Simple and Recursible Locks
-******************************************************************************/
+********************************************************************************/
+/** @ingroup efi_kernel_interface_protocol_data
+@{ */
 struct LockType;
 typedef struct LockType LockHandle;
 
-/* Creates a lock instance. If the LockStrID has a valid string name, then
+/** Creates a lock instance. If the LockStrID has a valid string name, then
  * the named lock is created if it already doesn't exist, if the named lock
  * already exists, the lock created points to the same underlying instance.
  * The Lock String name should be of length 8 chars or less, if its above 8
@@ -611,8 +852,8 @@ typedef struct LockType LockHandle;
 typedef EFI_STATUS  (*INIT_LOCK) (IN  CONST CHAR8 *LockStrID   OPTIONAL,
                                   OUT LockHandle** LockHandlePtr);
 
-typedef EFI_STATUS  (*INIT_RECURSIVE_LOCK)
-    (IN  CONST CHAR8 *LockStrID   OPTIONAL, OUT LockHandle** LockHandlePtr);
+typedef EFI_STATUS  (*INIT_RECURSIVE_LOCK) (IN  CONST CHAR8 *LockStrID   OPTIONAL,
+                                            OUT LockHandle** LockHandlePtr);
 
 typedef VOID        (*DESTROY_LOCK) (LockHandle*);
 typedef VOID        (*ACQUIRE_LOCK) (LockHandle*);
@@ -625,14 +866,16 @@ typedef struct {
     ACQUIRE_LOCK            AcquireLock;
     RELEASE_LOCK            ReleaseLock;
 }LockIntf;
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_data */
 
 /*===========================================================================
                     PROTOCOL INTERFACE
 ===========================================================================*/
-
+/** @ingroup efi_kernel_interface_protocol_prot
+@{ */
 typedef UINT32 (*GET_LIB_VERSION) (VOID);
 
-/*
+/**
  *  Scheduler protocol interface in UEFI. Provides the standard scheduler
  *  services for driver/applications consumption.
  */
@@ -647,9 +890,11 @@ typedef struct {
   SpinlockIntf                   *Spinlock;
   MpCpuIntf                      *MpCpu;
   WDogIntf                       *WDog;
-  GET_LIB_VERSION                 GetLibVersion; // Major [31:16], Minor {15:0]
+  GET_LIB_VERSION                 GetLibVersion; /** Major [31:16], Minor {15:0] */
   LockIntf                       *Lock;
 }EFI_KERNEL_PROTOCOL;
+
+/** @} */ /* end_ingroup efi_kernel_interface_protocol_prot */
 
 extern EFI_KERNEL_PROTOCOL* gKernel;
 
