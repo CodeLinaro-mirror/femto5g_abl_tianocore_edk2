@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -74,6 +74,8 @@
 #include <Uefi.h>
 #include <Uefi/UefiSpec.h>
 #include <VerifiedBoot.h>
+#include <Protocol/EFIRecoveryInfo.h>
+#include "RecoveryInfo.h"
 
 STATIC BOOLEAN FlashingGpt;
 STATIC BOOLEAN ParseSecondaryGpt;
@@ -774,11 +776,20 @@ PartitionHasMultiSlot (CONST CHAR16 *Pname)
   for (i = 0; i < PartitionCount; i++) {
     if (!(StrnCmp (PtnEntries[i].PartEntry.PartitionName, Pname, Len))) {
       if (PtnEntries[i].PartEntry.PartitionName[Len] == L'_' &&
-          (PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'a' ||
-           PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'b'))
-        if (++SlotCount > MIN_SLOTS) {
+          (PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'a')) {
+        SlotCount++;
+      } else if (PtnEntries[i].PartEntry.PartitionName[Len] == L'_' &&
+                 (PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'b')) {
+        if (IsRecoveryInfo ()) {
+          DEBUG (( EFI_D_INFO, "Multislot because RecoveryInfo Detected\n"));
           return TRUE;
         }
+        SlotCount++;
+      }
+    }
+
+    if (SlotCount > MIN_SLOTS) {
+      return TRUE;
     }
   }
   return FALSE;
@@ -1268,7 +1279,13 @@ GetBootPartitionEntry (Slot *BootSlot)
 
   if (StrnCmp ((CONST CHAR16 *)L"_a", BootSlot->Suffix,
                StrLen (BootSlot->Suffix)) == 0) {
-    Index = GetPartitionIndex ((CHAR16 *)L"boot_a");
+    if (IsRecoveryInfo ()) {
+      DEBUG (( EFI_D_ERROR,  "Using boot parition for recoverinfo\n"));
+      Index = GetPartitionIndex ((CHAR16 *)L"boot");
+    } else {
+      DEBUG (( EFI_D_ERROR,  "using boot_a\n"));
+      Index = GetPartitionIndex ((CHAR16 *)L"boot_a");
+    }
   } else if (StrnCmp ((CONST CHAR16 *)L"_b", BootSlot->Suffix,
                       StrLen (BootSlot->Suffix)) == 0) {
     Index = GetPartitionIndex ((CHAR16 *)L"boot_b");
@@ -1330,6 +1347,36 @@ IsSuffixEmpty (Slot *CheckSlot)
     return TRUE;
   }
   return FALSE;
+}
+
+BOOLEAN IsSlotsUbootable (VOID)
+{
+  Slot Slots[] = {{L"_a"}, {L"_b"}};
+  struct PartitionEntry *BootEntry = NULL;
+  UINT32 Count = 0;
+  UINT32 UnbootableCount = 0;
+  BOOLEAN IsMultiSlot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
+
+  if (IsMultiSlot == FALSE) {
+    return FALSE;
+  }
+
+  for (Count = 0; Count < ARRAY_SIZE (Slots); Count++) {
+    BootEntry = GetBootPartitionEntry (&Slots[Count]);
+    if (BootEntry == NULL) {
+      DEBUG ((EFI_D_ERROR, "CheckBootableSlot: No boot partition "
+                           "entry for slot %s\n", Slots[Count].Suffix));
+      return FALSE;
+    }
+    if (BootEntry->PartEntry.Attributes & PART_ATT_UNBOOTABLE_VAL) {
+      UnbootableCount += 1;
+    }
+  }
+
+  if (UnbootableCount < ARRAY_SIZE (Slots)) {
+    return FALSE;
+  }
+  return TRUE;
 }
 
 STATIC EFI_STATUS
@@ -1424,6 +1471,12 @@ GetActiveSlot (Slot *ActiveSlot)
 
   if (AtomicABEnabled ()) {
     return GetAtomicABActiveSlot (ActiveSlot);
+  }
+
+  if ((IsSuffixEmpty (ActiveSlot) == TRUE) &&
+      (IsRecoveryInfo ())) {
+    Status = RI_GetActiveSlot (ActiveSlot);
+    return Status;
   }
 
   if (IsSuffixEmpty (ActiveSlot) == TRUE) {
@@ -1572,7 +1625,7 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
   return EFI_SUCCESS;
 }
 
-EFI_STATUS HandleActiveSlotUnbootable (VOID)
+EFI_STATUS HandleActiveSlotUnbootable (BOOLEAN ForceBootAlternateSlot)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   struct PartitionEntry *BootEntry = NULL;
@@ -1622,7 +1675,9 @@ EFI_STATUS HandleActiveSlotUnbootable (VOID)
   BootSuccess = (BootEntry->PartEntry.Attributes & PART_ATT_SUCCESSFUL_VAL) >>
                 PART_ATT_SUCCESS_BIT;
 
-  if (Unbootable == 0 && BootSuccess == 1) {
+  if ((Unbootable == 0 &&
+       BootSuccess == 1) ||
+       ForceBootAlternateSlot) {
     DEBUG (
         (EFI_D_INFO, "Alternate Slot %s is bootable\n", AlternateSlot->Suffix));
     GUARD (SetActiveSlot (AlternateSlot, FALSE));
@@ -1749,6 +1804,10 @@ FindBootableSlot (Slot *BootableSlot)
             BootableSlot->Suffix));
     return EFI_NOT_FOUND;
   }
+  /* Rely on uefi that returned bootset is */
+  if (IsRecoveryInfo ()) {
+    goto out;
+  }
 
   Unbootable = (BootEntry->PartEntry.Attributes & PART_ATT_UNBOOTABLE_VAL) >>
                PART_ATT_UNBOOTABLE_BIT;
@@ -1778,7 +1837,7 @@ FindBootableSlot (Slot *BootableSlot)
   } else {
     DEBUG ((EFI_D_INFO, "Slot %s is unbootable, trying alternate slot\n",
             BootableSlot->Suffix));
-    GUARD_OUT (HandleActiveSlotUnbootable ());
+    GUARD_OUT (HandleActiveSlotUnbootable (FALSE));
   }
 
   /* Validate slot suffix and partition guids */

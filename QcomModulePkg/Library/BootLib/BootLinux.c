@@ -32,7 +32,7 @@
  /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -75,8 +75,7 @@
 #include <Protocol/EFIMdtp.h>
 #include <Protocol/EFIScmModeSwitch.h>
 #include <libufdt_sysdeps.h>
-#include <Protocol/EFIKernelInterface.h>
-
+#include <FastbootLib/FastbootCmds.h>
 #include "AutoGen.h"
 #include "BootImage.h"
 #include "BootLinux.h"
@@ -86,9 +85,16 @@
 #include "Bootconfig.h"
 #include <ufdt_overlay.h>
 
+#ifndef DISABLE_KERNEL_PROTOCOL
+#include <Protocol/EFIKernelInterface.h>
+#endif
+
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
 STATIC BOOLEAN RecoveryHasNoKernel = FALSE;
+RamPartitionEntry UpdatedRamPartitions[NUM_NOMAP_REGIONS];
+UINT32 NumUpdPartitions;
+BOOLEAN UpdRamPartitionsAvail = FALSE;
 
 STATIC VOID
 SetLinuxBootCpu (UINT32 BootCpu)
@@ -112,16 +118,14 @@ SetLinuxBootCpu (UINT32 BootCpu)
   return;
 }
 
-#ifdef LINUX_BOOT_CPU_SELECTION_ENABLED
-#define BootCpuId TARGET_LINUX_BOOT_CPU_ID
-STATIC BOOLEAN
+#ifdef TARGET_LINUX_BOOT_CPU_ID
+BOOLEAN
 BootCpuSelectionEnabled (VOID)
 {
   return TRUE;
 }
 #else
-#define BootCpuId 0
-STATIC BOOLEAN
+BOOLEAN
 BootCpuSelectionEnabled (VOID)
 {
   return FALSE;
@@ -175,23 +179,48 @@ QueryBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
           SizeStatus == EFI_SUCCESS);
 }
 
+#ifdef ENABLE_EARLY_SERVICES
+STATIC VOID
+QueryEarlyServiceBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
+{
+  *KernelLoadAddr = KERNEL_LOAD_ADDRESS;
+  *KernelSizeReserved = KERNEL_SIZE_RESERVED;
+  return;
+}
+#else
+STATIC VOID
+QueryEarlyServiceBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
+{
+  *KernelLoadAddr = 0;
+  *KernelSizeReserved = 0;
+  return;
+}
+#endif
+
 STATIC EFI_STATUS
 UpdateBootParams (BootParamlist *BootParamlistPtr)
 {
   UINT64 KernelSizeReserved;
   UINT64 KernelLoadAddr;
   Kernel64Hdr *Kptr = NULL;
+  UINT64 KernelLoadAddr_new = 0;
+  UINT64 KernelSizeReserved_new = 0;
 
   if (BootParamlistPtr == NULL ) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
     return EFI_INVALID_PARAMETER;
   }
+  QueryEarlyServiceBootParams (&KernelLoadAddr_new, &KernelSizeReserved_new);
 
   /* The three regions Kernel, Ramdisk and DT should be reserved in memory map
    * Query the kernel load address and size from UEFI core, if it's not
    * successful use the predefined load addresses */
   if (QueryBootParams (&KernelLoadAddr, &KernelSizeReserved)) {
-    BootParamlistPtr->KernelLoadAddr = KernelLoadAddr;
+    if (EarlyServicesEnabled ()) {
+      BootParamlistPtr->KernelLoadAddr = KernelLoadAddr_new;
+    } else {
+      BootParamlistPtr->KernelLoadAddr = KernelLoadAddr;
+    }
     if (BootParamlistPtr->BootingWith32BitKernel) {
       BootParamlistPtr->KernelLoadAddr += KERNEL_32BIT_LOAD_OFFSET;
     } else {
@@ -204,7 +233,13 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
         BootParamlistPtr->KernelLoadAddr += KERNEL_64BIT_LOAD_OFFSET;
       }
     }
-    BootParamlistPtr->KernelEndAddr = KernelLoadAddr + KernelSizeReserved;
+
+    if (EarlyServicesEnabled ()) {
+      BootParamlistPtr->KernelEndAddr =
+          KernelLoadAddr_new + KernelSizeReserved_new;
+    } else {
+      BootParamlistPtr->KernelEndAddr = KernelLoadAddr + KernelSizeReserved;
+    }
   } else {
     DEBUG ((EFI_D_VERBOSE, "QueryBootParams Failed: "));
     /* If Query of boot params fails, RamdiskEndAddress is end of the
@@ -215,19 +250,36 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
       /* For 32-bit Not all memory is accessible as defined by
          RamdiskEndAddress. Using pre-defined offset for backward
          compatability */
+    if (EarlyServicesEnabled ()) {
       BootParamlistPtr->KernelLoadAddr =
-            (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr->BaseMemory |
+            (EFI_PHYSICAL_ADDRESS) (KernelLoadAddr_new |
                                     PcdGet32 (KernelLoadAddress32));
-      KernelSizeReserved = PcdGet32 (RamdiskEndAddress32);
     } else {
       BootParamlistPtr->KernelLoadAddr =
             (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr->BaseMemory |
+                                    PcdGet32 (KernelLoadAddress32));
+    }
+      KernelSizeReserved = PcdGet32 (RamdiskEndAddress32);
+    } else {
+      if (EarlyServicesEnabled ()) {
+         BootParamlistPtr->KernelLoadAddr =
+            (EFI_PHYSICAL_ADDRESS) (KernelLoadAddr_new |
                                     PcdGet32 (KernelLoadAddress));
+      } else {
+      BootParamlistPtr->KernelLoadAddr =
+            (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr->BaseMemory |
+                                    PcdGet32 (KernelLoadAddress));
+      }
       KernelSizeReserved = PcdGet32 (RamdiskEndAddress);
     }
 
-    BootParamlistPtr->KernelEndAddr = BootParamlistPtr->BaseMemory +
+    if (EarlyServicesEnabled ()) {
+      BootParamlistPtr->KernelEndAddr = KernelLoadAddr_new +
                                        KernelSizeReserved;
+    } else {
+      BootParamlistPtr->KernelEndAddr = BootParamlistPtr->BaseMemory +
+                                       KernelSizeReserved;
+    }
     DEBUG ((EFI_D_VERBOSE, "calculating dynamic offsets\n"));
   }
 
@@ -397,7 +449,8 @@ CheckMDTPStatus (CHAR16 *PartitionName, BootInfo *Info)
 STATIC EFI_STATUS
 ApplyOverlay (BootParamlist *BootParamlistPtr,
               VOID *AppendedDtHdr,
-              struct fdt_entry_node *DtsList)
+              struct fdt_entry_node *DtsList,
+              UINT32 *DtbSize)
 {
   VOID *FinalDtbHdr = AppendedDtHdr;
   VOID *TmpDtbHdr = NULL;
@@ -446,9 +499,10 @@ out:
      CopyMem will not copy Source Buffer to Destination Buffer
      and return Destination BUffer.
   */
+  *DtbSize = fdt_totalsize (FinalDtbHdr);
   gBS->CopyMem ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
                 FinalDtbHdr,
-                fdt_totalsize (FinalDtbHdr));
+                *DtbSize);
   post_overlay_free ();
   DEBUG ((EFI_D_INFO, "Apply Overlay total time: %lu ms \n",
         GetTimerCountms () - ApplyDTStartTime));
@@ -487,6 +541,10 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   VOID* ImageBuffer = NULL;
   UINT32 ImageSize = 0;
   CHAR8 *TempHypBootInfo[HYP_MAX_NUM_DTBOS];
+  UINT64 InitrdStartAddr = 0;
+  UINT64 NewDeviceTreeLoadAddr = 0;
+  VOID *Fdt = NULL;
+  UINT32 TotalDtbSize = 0;
 
   if (Info == NULL ||
       BootParamlistPtr == NULL) {
@@ -550,7 +608,8 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
     Dtb = DeviceTreeAppended (ImageBuffer,
                              ImageSize,
                              BootParamlistPtr->DtbOffset,
-                             (VOID *)BootParamlistPtr->DeviceTreeLoadAddr);
+                             (VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
+                             &TotalDtbSize);
     if (!Dtb) {
       if (BootParamlistPtr->DtbOffset >= ImageSize) {
         DEBUG ((EFI_D_ERROR, "Dtb offset goes beyond the image size\n"));
@@ -585,8 +644,9 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
           return EFI_BAD_BUFFER_SIZE;
         }
 
+        TotalDtbSize = fdt_totalsize (SingleDtHdr);
         gBS->CopyMem ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
-                      SingleDtHdr, fdt_totalsize (SingleDtHdr));
+                      SingleDtHdr, TotalDtbSize);
       } else {
         DEBUG ((EFI_D_ERROR, "Error: Device Tree blob not found\n"));
         return EFI_NOT_FOUND;
@@ -639,11 +699,13 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
 
     Status = ApplyOverlay (BootParamlistPtr,
                            Dtb,
-                           DtsList);
+                           DtsList,
+                           &TotalDtbSize);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Error: Dtb overlay failed\n"));
       SetVmDisable ();
     }
+    Fdt = Dtb;
   } else {
     /*It is the case of DTB overlay Get the Soc specific dtb */
     SocDtb = GetSocDtb (ImageBuffer,
@@ -736,10 +798,35 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
 
     Status = ApplyOverlay (BootParamlistPtr,
                            SocDtb,
-                           DtsList);
+                           DtsList,
+                           &TotalDtbSize);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Error: Dtb overlay failed\n"));
       SetVmDisable ();
+    }
+    Fdt = SocDtb;
+  }
+
+  /* initrd-start defined in dts is preferred, otherwise the addressed loaded
+   * by the boot loader is used.
+   */
+  if (Fdt) {
+    InitrdStartAddr = GetInitrdStartAddr (Fdt);
+    if (InitrdStartAddr > 0) {
+      NewDeviceTreeLoadAddr = (BootParamlistPtr->KernelEndAddr -
+                               (DT_SIZE_2MB +
+                               BootParamlistPtr->PageSize));
+      gBS->CopyMem ((VOID *)NewDeviceTreeLoadAddr,
+                    (VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
+                    TotalDtbSize);
+      if (NewDeviceTreeLoadAddr >
+                 (BootParamlistPtr->DeviceTreeLoadAddr + TotalDtbSize)) {
+        gBS->SetMem ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
+                    TotalDtbSize, 0);
+      }
+      BootParamlistPtr->DeviceTreeLoadAddr = NewDeviceTreeLoadAddr;
+      DEBUG ((EFI_D_VERBOSE, "Update Device tree Load Address: 0x%x\n",
+                                       BootParamlistPtr->DeviceTreeLoadAddr));
     }
   }
   return EFI_SUCCESS;
@@ -873,11 +960,21 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
     RamdiskImageBuffer = BootParamlistPtr->ImageBuffer;
   }
 
-  RamdiskLoadAddr = BootParamlistPtr->RamdiskLoadAddr;
-
   TotalRamdiskSize = BootParamlistPtr->RamdiskSize +
                             BootParamlistPtr->VendorRamdiskSize +
                             BootParamlistPtr->RecoveryRamdiskSize;
+
+  RamdiskLoadAddr = GetInitrdStartAddr (
+                       (VOID *)(BootParamlistPtr->DeviceTreeLoadAddr));
+  if (RamdiskLoadAddr > 0) {
+    BootParamlistPtr->RamdiskLoadAddr = RamdiskLoadAddr -
+                                        (LOCAL_ROUND_TO_PAGE (TotalRamdiskSize,
+                                        BootParamlistPtr->PageSize) +
+                                        BootParamlistPtr->PageSize);
+    DEBUG ((EFI_D_VERBOSE, "Update Ramdisk Load Address: 0x%x\n",
+                                       BootParamlistPtr->RamdiskLoadAddr));
+  }
+  RamdiskLoadAddr = BootParamlistPtr->RamdiskLoadAddr;
 
   if (RamdiskEndAddr - RamdiskLoadAddr < TotalRamdiskSize) {
     DEBUG ((EFI_D_ERROR, "Error: Ramdisk size is over the limit\n"));
@@ -1159,15 +1256,14 @@ BootLinux (BootInfo *Info)
   CHAR16 *PartitionName = NULL;
   BOOLEAN Recovery = FALSE;
   BOOLEAN AlarmBoot = FALSE;
-  BOOLEAN FlashlessBoot = Info->FlashlessBoot;
+  BOOLEAN FlashlessBoot;
+  BOOLEAN NetworkBoot;
   CHAR8 SilentBootMode;
 
   LINUX_KERNEL LinuxKernel;
   LINUX_KERNEL32 LinuxKernel32;
   UINT32 RamdiskSizeActual = 0;
   UINT32 SecondSizeActual = 0;
-  UINT64 KernelSizeReserved = 0;
-  UINTN DataSize;
 
   /*Boot Image header information variables*/
   CHAR8 FfbmStr[FFBM_MODE_BUF_SIZE] = {'\0'};
@@ -1175,15 +1271,23 @@ BootLinux (BootInfo *Info)
 
   BootParamlist BootParamlistPtr = {0};
 
+#ifndef DISABLE_KERNEL_PROTOCOL
+  UINT64 KernelSizeReserved = 0;
+  UINTN DataSize;
   EFI_KERNEL_PROTOCOL *KernIntf = NULL;
   Thread *ThreadNum;
-  VOID *StackBase;
-  VOID **StackCurrent;
+  VOID *StackBase = NULL;
+  VOID **StackCurrent = NULL;
+#endif
+
+  RamPartitionEntry *RamPartitions = NULL;
+  UINT32 NumPartitions = 0;
 
   if (Info == NULL) {
     DEBUG ((EFI_D_ERROR, "BootLinux: invalid parameter Info\n"));
     return EFI_INVALID_PARAMETER;
   }
+
 
   if (IsVmEnabled ()) {
     Status = CheckAndSetVmData (&BootParamlistPtr);
@@ -1197,12 +1301,15 @@ BootLinux (BootInfo *Info)
   Recovery = Info->BootIntoRecovery;
   AlarmBoot = Info->BootReasonAlarm;
   SilentBootMode = Info->SilentBootMode;
+  FlashlessBoot = Info->FlashlessBoot;
+  NetworkBoot = Info->NetworkBoot;
 
   if (SilentBootMode) {
     DEBUG ((EFI_D_INFO, "Silent Mode value: %d\n", SilentBootMode));
   }
 
-  if (!FlashlessBoot) {
+  if (!FlashlessBoot &&
+      !NetworkBoot) {
     if (!StrnCmp (PartitionName, (CONST CHAR16 *)L"boot",
                   StrLen ((CONST CHAR16 *)L"boot"))) {
       Status = GetFfbmCommand (FfbmStr, FFBM_MODE_BUF_SIZE);
@@ -1379,14 +1486,34 @@ BootLinux (BootInfo *Info)
    */
   GetQrksKernelStartAddress ();
 
+  if (IsCarveoutRemovalEnabled ((VOID *)BootParamlistPtr.DeviceTreeLoadAddr)) {
+    Status = ReadRamPartitions (&RamPartitions, &NumPartitions);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_ERROR, "Error returned from ReadRamPartitions %r\n",
+              Status));
+      return Status;
+    }
+
+    Status = GetUpdatedRamPartitions (
+                            (VOID *)BootParamlistPtr.DeviceTreeLoadAddr,
+                            RamPartitions, NumPartitions,
+                            UpdatedRamPartitions, &NumUpdPartitions);
+    if (Status == EFI_SUCCESS) {
+      UpdRamPartitionsAvail = TRUE;
+    } else {
+      DEBUG ((EFI_D_ERROR, "Failed to update RAM Partitions Status:%r\r\n",
+              Status));
+    }
+  }
+
   /* Updates the command line from boot image, appends device serial no.,
    * baseband information, etc.
    * Called before ShutdownUefiBootServices as it uses some boot service
    * functions
    */
   Status = UpdateCmdLine (&BootParamlistPtr, FfbmStr, Recovery, FlashlessBoot,
-                    AlarmBoot, Info->VBCmdLine, Info->HeaderVersion,
-                    SilentBootMode);
+                          NetworkBoot, AlarmBoot, Info->VBCmdLine,
+                          Info->HeaderVersion, SilentBootMode);
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
     return Status;
@@ -1411,6 +1538,7 @@ BootLinux (BootInfo *Info)
       IsModeSwitch = TRUE;
   }
 
+#ifndef DISABLE_KERNEL_PROTOCOL
   Status = gBS->LocateProtocol (&gEfiKernelProtocolGuid, NULL,
         (VOID **)&KernIntf);
 
@@ -1435,6 +1563,8 @@ BootLinux (BootInfo *Info)
     DEBUG ((EFI_D_INFO, "Failed to get size of kernel region\n"));
     return Status;
   }
+#endif
+
   if (BootCpuSelectionEnabled ()) {
     SetLinuxBootCpu (BootCpuId);
   }
@@ -1450,13 +1580,17 @@ BootLinux (BootInfo *Info)
     goto Exit;
   }
 
+
+#ifdef DISABLE_KERNEL_PROTOCOL
+  PreparePlatformHardware ();
+#else
   PreparePlatformHardware (KernIntf, (VOID *)BootParamlistPtr.KernelLoadAddr,
                   (UINTN)KernelSizeReserved,
                   (VOID *)BootParamlistPtr.RamdiskLoadAddr,
                   (UINTN)RamdiskSizeActual,
                   (VOID *)BootParamlistPtr.DeviceTreeLoadAddr, DT_SIZE_2MB,
                   (VOID *)StackCurrent, (UINTN)StackBase);
-
+#endif
   BootStatsSetTimeStamp (BS_BL_END);
 
   if (IsVmEnabled ()) {
@@ -1530,7 +1664,7 @@ CheckImageHeader (VOID *ImageHdrBuffer,
   boot_img_hdr_v3 *RecoveryImgHdrV3 = NULL;
   boot_img_hdr_v4 *BootImgHdrV4;
   vendor_boot_img_hdr_v4 *VendorBootImgHdrV4;
-  boot_img_hdr_v4 *RecoveryImgHdrV4;
+  boot_img_hdr_v4 *RecoveryImgHdrV4 = NULL;
 
   UINT32 KernelSizeActual = 0;
   UINT32 DtSizeActual = 0;
@@ -1742,31 +1876,12 @@ CheckImageHeader (VOID *ImageHdrBuffer,
         }
     }
     else {
-        UINT32 DtbActual = 0;
-        struct boot_img_hdr_v2 *Hdr2 = (struct boot_img_hdr_v2 *)
-            (ImageHdrBuffer +
-            BOOT_IMAGE_HEADER_V1_RECOVERY_DTBO_SIZE_OFFSET +
-            BOOT_IMAGE_HEADER_V2_OFFSET);
-        DtbActual = ROUND_TO_PAGE (Hdr2->dtb_size,
-                                        *PageSize - 1);
         if ((Hdr1->header_size !=
                         BOOT_IMAGE_HEADER_V1_RECOVERY_DTBO_SIZE_OFFSET +
                         BOOT_IMAGE_HEADER_V2_OFFSET +
                         sizeof (struct boot_img_hdr_v2))) {
            DEBUG ((EFI_D_ERROR,
               "Invalid boot image header: %d\n", Hdr1->header_size));
-           return EFI_BAD_BUFFER_SIZE;
-        }
-        if (Hdr2->dtb_size && !DtbActual) {
-           DEBUG ((EFI_D_ERROR,
-               "DTB Image not present: DTB Size = %u\n", Hdr2->dtb_size));
-           return EFI_BAD_BUFFER_SIZE;
-        }
-        tempImgSize = *ImageSizeActual;
-        *ImageSizeActual = ADD_OF (*ImageSizeActual, DtbActual);
-        if (!*ImageSizeActual) {
-           DEBUG ((EFI_D_ERROR, "Integer Overflow: ImgSizeActual=%u,"
-              " DtbActual=%u\n", tempImgSize, DtbActual));
            return EFI_BAD_BUFFER_SIZE;
         }
     }
@@ -1883,10 +1998,16 @@ LoadImage (CHAR16 *Pname, VOID **ImageBuffer,
     return EFI_BAD_BUFFER_SIZE;
   }
 
-  *ImageBuffer = AllocatePages (ALIGN_PAGES (ImageSize, ALIGNMENT_MASK_4KB));
+  /* In case of fastboot continue command, data buffer are already allocated
+   * and checked by fastboot, so just use this buffer for image buffer.
+   */
+  *ImageBuffer = FastbootDloadBuffer ();
   if (!*ImageBuffer) {
-    DEBUG ((EFI_D_ERROR, "No resources available for ImageBuffer\n"));
-    return EFI_OUT_OF_RESOURCES;
+    *ImageBuffer = AllocatePages (ALIGN_PAGES (ImageSize, ALIGNMENT_MASK_4KB));
+    if (!*ImageBuffer) {
+      DEBUG ((EFI_D_ERROR, "No resources available for ImageBuffer\n"));
+      return EFI_OUT_OF_RESOURCES;
+    }
   }
 
   BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_START);
@@ -1950,10 +2071,34 @@ BOOLEAN IsLEVariant (VOID)
 }
 #endif
 
+#ifndef DISABLE_MULTI_BOOT
+BOOLEAN IsMultiBoot (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsMultiBoot (VOID)
+{
+  return FALSE;
+}
+#endif
+
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr)
 {
    return BootParamlistPtr->RamdiskSize == 0;
 }
+
+#ifdef ENABLE_EARLY_SERVICES
+BOOLEAN EarlyServicesEnabled (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN EarlyServicesEnabled (VOID)
+{
+  return FALSE;
+}
+#endif
 
 #ifdef BUILD_USES_RECOVERY_AS_BOOT
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID)
@@ -2073,7 +2218,7 @@ BOOLEAN IsHibernationEnabled (VOID)
 
   GetPartitionCount (&PtnCount);
 
-  PtnIdx = GetPartitionIndex ((CHAR16 *)L"swap_a");
+  PtnIdx = GetPartitionIndex ((CHAR16 *)SWAP_PARTITION_NAME);
 
   if (PtnIdx < PtnCount &&
       PtnIdx != INVALID_PTN) {

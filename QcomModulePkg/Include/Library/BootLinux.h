@@ -29,7 +29,7 @@
  /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -131,6 +131,15 @@
 #define KERNEL_32BIT_LOAD_OFFSET 0x8000
 #define KERNEL_64BIT_LOAD_OFFSET 0x80000
 
+#define NUM_NOMAP_REGIONS 50
+#define NUM_RAM_PARTITIONS 30
+
+#ifdef TARGET_LINUX_BOOT_CPU_ID
+#define BootCpuId TARGET_LINUX_BOOT_CPU_ID
+#else
+#define BootCpuId 0
+#endif
+
 typedef enum {
   KERNEL_32BIT = 0,
   KERNEL_64BIT
@@ -167,6 +176,7 @@ typedef struct {
 typedef struct BootInfo {
   BOOLEAN MultiSlotBoot;
   BOOLEAN FlashlessBoot;
+  BOOLEAN NetworkBoot;
   BOOLEAN BootIntoRecovery;
   BOOLEAN BootReasonAlarm;
   CHAR8 SilentBootMode;
@@ -244,6 +254,9 @@ typedef struct BootLinuxParamlist {
   VOID *RamdiskBuffer;
 } BootParamlist;
 
+extern RamPartitionEntry UpdatedRamPartitions[NUM_NOMAP_REGIONS];
+extern UINT32 NumUpdPartitions;
+extern BOOLEAN UpdRamPartitionsAvail;
 EFI_STATUS
 BootLinux (BootInfo *Info);
 EFI_STATUS
@@ -264,10 +277,12 @@ EFI_STATUS
 LaunchApp (IN UINT32 Argc, IN CHAR8 **Argv);
 BOOLEAN TargetBuildVariantUser (VOID);
 BOOLEAN IsLEVariant (VOID);
+BOOLEAN IsMultiBoot (VOID);
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
 VOID SetRecoveryHasNoKernel (VOID);
 BOOLEAN IsRecoveryHasNoKernel (VOID);
+BOOLEAN EarlyServicesEnabled (VOID);
 EFI_STATUS
 GetImage (CONST BootInfo *Info,
           VOID **ImageBuffer,
@@ -287,4 +302,5 @@ BOOLEAN IsEnableDisplayMenuFlagSupported (VOID);
 BOOLEAN IsTargetAuto (VOID);
 BOOLEAN IsHibernationEnabled (VOID);
 BOOLEAN IsLVBootslotEnabled (VOID);
+BOOLEAN BootCpuSelectionEnabled (VOID);
 #endif
