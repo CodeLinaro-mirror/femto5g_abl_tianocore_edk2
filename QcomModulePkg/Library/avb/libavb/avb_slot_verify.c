@@ -68,6 +68,8 @@
 #include "avb_util.h"
 #include "avb_vbmeta_image.h"
 #include "avb_version.h"
+#include "avb_load_verify_parallel.h"
+
 
 /* Maximum number of partitions that can be loaded with avb_slot_verify(). */
 #define MAX_NUMBER_OF_LOADED_PARTITIONS 32
@@ -415,11 +417,36 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     avb_debugv(part_name, ": Loading entire partition.\n", NULL);
   }
 
-  ret = load_full_partition(
-      ops, part_name, image_size, &image_buf, &image_preloaded);
-  if (ret != AVB_SLOT_VERIFY_RESULT_OK) {
+#if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
+  if ((avb_strncmp ("boot", part_name, 4) == 0)) {
+    image_buf = avb_malloc (image_size);
+    if (image_buf == NULL) {
+      ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
+      goto out;
+    }
+    ret = LoadAndVerifyBootHashPartition (ops,
+                                          hash_desc,
+                                          part_name,
+                                          desc_digest,
+                                          desc_salt,
+                                          image_buf,
+                                          hash_desc.image_size);
     goto out;
+  } else {
+    ret = load_full_partition (
+        ops, part_name, image_size, &image_buf, &image_preloaded);
+    if (ret != AVB_SLOT_VERIFY_RESULT_OK) {
+      goto out;
+    }
   }
+#else
+    ret = load_full_partition (
+        ops, part_name, image_size, &image_buf, &image_preloaded);
+    if (ret != AVB_SLOT_VERIFY_RESULT_OK) {
+      goto out;
+    }
+#endif
+
   // Although only one of the type might be used, we have to defined the
   // structure here so that they would live outside the 'if/else' scope to be
   // used later.
@@ -431,13 +458,15 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
   if (image_size_to_hash > image_size) {
     image_size_to_hash = image_size;
   }
-  if (avb_strcmp((const char*)hash_desc.hash_algorithm, "sha256") == 0) {
+  if (avb_strncmp ((const char*)hash_desc.hash_algorithm, "sha256",
+      sizeof ("sha256")) == 0) {
     avb_sha256_init(&sha256_ctx);
     avb_sha256_update(&sha256_ctx, desc_salt, hash_desc.salt_len);
     avb_sha256_update(&sha256_ctx, image_buf, image_size_to_hash);
     digest = avb_sha256_final(&sha256_ctx);
     digest_len = AVB_SHA256_DIGEST_SIZE;
-  } else if (avb_strcmp((const char*)hash_desc.hash_algorithm, "sha512") == 0) {
+  } else if (avb_strncmp ((const char*)hash_desc.hash_algorithm, "sha512",
+             sizeof ("sha512")) == 0) {
     avb_sha512_init(&sha512_ctx);
     avb_sha512_update(&sha512_ctx, desc_salt, hash_desc.salt_len);
     avb_sha512_update(&sha512_ctx, image_buf, image_size_to_hash);
@@ -1204,14 +1233,14 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
           part_name[hashtree_desc.partition_name_len] = '\0';
 
           /* Determine the expected digest size from the hash algorithm. */
-          if (avb_strcmp((const char*)hashtree_desc.hash_algorithm, "sha1") ==
-              0) {
+          if (avb_strncmp ((const char*)hashtree_desc.hash_algorithm, "sha1",
+              sizeof ("sha1")) == 0) {
             digest_len = AVB_SHA1_DIGEST_SIZE;
-          } else if (avb_strcmp((const char*)hashtree_desc.hash_algorithm,
-                                "sha256") == 0) {
+          } else if (avb_strncmp ((const char*)hashtree_desc.hash_algorithm,
+                     "sha256", sizeof ("sha256")) == 0) {
             digest_len = AVB_SHA256_DIGEST_SIZE;
-          } else if (avb_strcmp((const char*)hashtree_desc.hash_algorithm,
-                                "sha512") == 0) {
+          } else if (avb_strncmp ((const char*)hashtree_desc.hash_algorithm,
+                     "sha512", sizeof ("sha512")) == 0) {
             digest_len = AVB_SHA512_DIGEST_SIZE;
           } else {
             avb_errorv(part_name, ": Unsupported hash algorithm.\n", NULL);
