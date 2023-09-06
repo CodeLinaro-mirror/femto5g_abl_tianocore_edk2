@@ -1387,6 +1387,10 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   BOOLEAN UpdateRollback = FALSE;
   #endif
   BOOLEAN UpdateRollbackIndex = FALSE;
+#ifdef PVMFW_BCC
+  VOID *PvmFwHdr = NULL;
+  UINT32 PvmFwHdrSz = 0;
+#endif
 
   Info->BootState = RED;
   if (!HibernationResume) {
@@ -1570,10 +1574,27 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
       NumRequestedPartition += 1;
     }
 
-    if (Info->HasPvmFw) {
+#ifdef PVMFW_BCC
+  /* Check for pvmfw partition */
+  Status = LoadPartitionImageHeader (Info, (CHAR16 *)L"pvmfw",
+           &PvmFwHdr, &PvmFwHdrSz);
+  if (Status == EFI_SUCCESS) {
+    DEBUG ((EFI_D_VERBOSE, "Found pvmfw partition\n"));
+    if (PvmFwHdrSz &&
+        ((boot_img_hdr *)(PvmFwHdr))->kernel_size != 0) {
+      Info->HasPvmFw = true;
+      Info->PvmFwRawSize = ((boot_img_hdr *)(PvmFwHdr))->kernel_size;
       AddRequestedPartition (RequestedPartitionAll, IMG_PVMFW);
       NumRequestedPartition += 1;
+      DEBUG ((EFI_D_VERBOSE, "Valid pvmfw found\n"));
+    } else {
+      DEBUG ((EFI_D_ERROR,
+             "ERROR: pvmfw partition does not contain a valid image!\n"));
     }
+  } else {
+    DEBUG ((EFI_D_VERBOSE, "No pvmfw partition found.\n"));
+  }
+#endif
 
     Result = avb_slot_verify (Ops, (CONST CHAR8 *CONST *)RequestedPartition,
                 SlotSuffix, VerifyFlags, VerityFlags, &SlotData);
@@ -2054,10 +2075,6 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
   UINT32 RecoveryHdrSz = 0;
   VOID *InitBootHdr = NULL;
   UINT32 InitBootHdrSz = 0;
-#ifdef PVMFW_BCC
-  VOID *PvmFwHdr = NULL;
-  UINT32 PvmFwHdrSz = 0;
-#endif
   WaitForFlashFinished ();
 
   if (Info == NULL) {
@@ -2114,26 +2131,6 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
 
   Info->HasPvmFw = false;
   Info->PvmFwRawSize = 0;
-
-#ifdef PVMFW_BCC
-  /* Check for pvmfw partition */
-  Status = LoadPartitionImageHeader (Info, (CHAR16 *)L"pvmfw",
-           &PvmFwHdr, &PvmFwHdrSz);
-  if (Status == EFI_SUCCESS) {
-    DEBUG ((EFI_D_VERBOSE, "Found pvmfw partition\n"));
-    if (PvmFwHdrSz &&
-        ((boot_img_hdr *)(PvmFwHdr))->kernel_size != 0) {
-      Info->HasPvmFw = true;
-      Info->PvmFwRawSize = ((boot_img_hdr *)(PvmFwHdr))->kernel_size;
-      DEBUG ((EFI_D_VERBOSE, "Valid pvmfw found\n"));
-    } else {
-      DEBUG ((EFI_D_ERROR,
-             "ERROR: pvmfw partition does not contain a valid image!\n"));
-    }
-  } else {
-    DEBUG ((EFI_D_VERBOSE, "No pvmfw partition found.\n"));
-  }
-#endif
 
 get_ptn_name:
   /* Get Partition Name*/
