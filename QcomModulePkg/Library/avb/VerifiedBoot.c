@@ -1365,7 +1365,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
 #ifndef USE_DUMMY_BCC
                         , BccParams_t *BccParams
 #endif
-                    )
+                        , BOOLEAN SetVBH)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   AvbSlotVerifyResult Result;
@@ -1757,7 +1757,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
       GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
   }
 
-  if (!HibernationResume) {
+  if (!SetVBH) {
     ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
     GUARD_OUT (SetVerifiedBootHash ((CONST CHAR8 *)&Digest, sizeof (Digest)));
     DEBUG ((EFI_D_INFO, "VB2: Authenticate complete! boot state is: %a\n",
@@ -2047,7 +2047,7 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
 #ifndef USE_DUMMY_BCC
                         , BccParams_t *BccParamsRecvdFromAVB
 #endif
-                        )
+                        , BOOLEAN SetVerifiedBootHash)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   BOOLEAN MdtpActive = FALSE;
@@ -2219,7 +2219,7 @@ get_ptn_name:
 #ifndef USE_DUMMY_BCC
                                   , BccParamsRecvdFromAVB
 #endif
-                                  );
+                                  , SetVerifiedBootHash);
     break;
   case AVB_LE:
     Status = LoadImageAndAuthForLE (Info);

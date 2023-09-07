@@ -106,6 +106,9 @@ GetAVBVersion ();
  * @param[in] BccParamsRecvdFromAVB
  * It will contain populated BCC parameters
  *
+ * @param[in]  SetVerifiedBootHash FALSE by
+ * default and TRUE incase of VBH already set
+ *
  * @return EFI_STATUS
  */
 EFI_STATUS
@@ -114,7 +117,7 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
 #ifndef USE_DUMMY_BCC
                   , BccParams_t *BccParamsRecvdFromAVB
 #endif
-                 );
+                  , BOOLEAN SetVerifiedBootHash);
 
 /**
  *  Free resources/memory allocated by

@@ -1630,7 +1630,8 @@ static VOID EraseSwapSignature (VOID)
         }
 }
 
-VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState)
+VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState,
+                               BOOLEAN *SetVerifiedBootHash)
 {
         INT32 Ret;
         EFI_STATUS Status = EFI_SUCCESS;
@@ -1645,11 +1646,16 @@ VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState)
                 goto err;
         }
 
+        if (!SetVerifiedBootHash) {
+                printf ("SetVerifiedBootHash cannot be NULL.\n");
+                goto err;
+        }
+
         Status = LoadImageAndAuth (Info, TRUE, FALSE
 #ifndef USE_DUMMY_BCC
                                    , &BccParamsRecvdFromAVB
 #endif
-                                  );
+                                   , FALSE);
         if (Status != EFI_SUCCESS) {
                 printf ("Failed to set ROT and Bootstate : %r\n", Status);
                 goto err;
@@ -1661,6 +1667,12 @@ VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState)
          * snapshot stage..
          */
          *SetRotAndBootState = TRUE;
+
+        /* Set variable to TRUE to avoid setting second
+         * time incase hibernation resume fails at restore
+         * snapshot image
+         */
+         *SetVerifiedBootHash = TRUE;
 
         Status = KeyMasterFbeSetSeed ();
         if (Status != EFI_SUCCESS) {

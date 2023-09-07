@@ -2785,7 +2785,7 @@ CmdContinue (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
   #ifndef USE_DUMMY_BCC
                             , &BccParamsRecvdFromAVB
   #endif
-                            );
+                            , FALSE);
   if (Status != EFI_SUCCESS) {
     AsciiSPrint (Resp, sizeof (Resp), "Failed to load image from partition: %r",
                  Status);
@@ -2971,7 +2971,7 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   #ifndef USE_DUMMY_BCC
                             , &BccParamsRecvdFromAVB
   #endif
-                            );
+                            , FALSE);
   if (Status != EFI_SUCCESS) {
     AsciiSPrint (Resp, sizeof (Resp),
                  "Failed to load/authenticate boot image: %r", Status);
