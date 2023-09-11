@@ -426,13 +426,19 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
 {
   EFI_STATUS Status;
   CHAR8 *Src;
+  CHAR8 *AUDIOFRAMEWORK;
 
-  Status = ReadAudioFrameWork (&Src, Length);
-  if (Status == EFI_SUCCESS) {
-     if (*Length) {
+  AUDIOFRAMEWORK = GetAudioFw ();
+
+  if ((*Length = AsciiStrLen (AUDIOFRAMEWORK)) > 0) {
+      AsciiStrCpyS (FrameWork, *Length + 1, AUDIOFRAMEWORK);
+      Status = ReadAudioFrameWork (&Src, Length);
+    if (Status == EFI_SUCCESS) {
+      if (*Length) {
         AsciiStrCpyS (FrameWork, *Length, Src);
-   }
- }
+      }
+    }
+  }
 }
 
 /*
@@ -494,16 +500,6 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
       }
     } else {
       /* Slots other than _a */
-      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
-                StrLen (CurSlot.Suffix));
-    }
-  } else if (IsRecoveryInfo () &&
-             NAND == CheckRootDeviceType ()) {
-
-    /* IsRecoveryinfo implicitly means MultiSlot */
-    /* Append slot suffix for slots other than _a */
-
-    if (StrCmp (CurSlot.Suffix, L"_a")) {
       StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
                 StrLen (CurSlot.Suffix));
     }
