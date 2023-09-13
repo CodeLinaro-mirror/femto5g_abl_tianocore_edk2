@@ -89,7 +89,8 @@
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
 
 #if HIBERNATION_SUPPORT_NO_AES
-VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState);
+VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState,
+                               BOOLEAN *SetVerifiedBootHash);
 #endif
 
 BccParams_t BccParamsRecvdFromAVB = {{0}};
@@ -240,6 +241,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   EFI_MEM_CARDINFO_PROTOCOL *CardInfo = NULL;
   /* set ROT and BootSatte only once per boot*/
   BOOLEAN SetRotAndBootState = FALSE;
+  BOOLEAN SetVerifiedBootHash = FALSE;
   BOOLEAN FDRDetected = FALSE;
 
   DEBUG ((EFI_D_INFO, "Loader Build Info: %a %a\n", __DATE__, __TIME__));
@@ -419,13 +421,13 @@ flashless_boot:
     Info.FlashlessBoot = FlashlessBoot;
     Info.SilentBootMode = SilentBootMode;
   #if HIBERNATION_SUPPORT_NO_AES
-    BootIntoHibernationImage (&Info, &SetRotAndBootState);
+    BootIntoHibernationImage (&Info, &SetRotAndBootState, &SetVerifiedBootHash);
   #endif
     Status = LoadImageAndAuth (&Info, FALSE, SetRotAndBootState
   #ifndef USE_DUMMY_BCC
                                , &BccParamsRecvdFromAVB
   #endif
-                              );
+                               , SetVerifiedBootHash);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
       goto fastboot;
