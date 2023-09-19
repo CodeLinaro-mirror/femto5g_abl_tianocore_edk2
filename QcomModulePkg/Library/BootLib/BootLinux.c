@@ -937,21 +937,25 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   UINT64 RamdiskLoadAddrCopy = 0;
   UINT32 TotalRamdiskSize;
   UINT64 End = 0;
-  UINT32 VRamdiskSizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
-    BootParamlistPtr->PageSize);
-  UINT32 VDtbSizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->DtSize,
-    BootParamlistPtr->PageSize);
-  UINT32 VRamdiskTablesizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskTableSize,
-    BootParamlistPtr->PageSize);
+  UINT32 VRamdiskSizePageAligned;
+  UINT32 VDtbSizePageAligned;
+  UINT32 VRamdiskTablesizePageAligned;
   VOID *RamdiskImageBuffer;
 
   if (BootParamlistPtr == NULL) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
     return EFI_INVALID_PARAMETER;
   }
+
+  VRamdiskSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
+    BootParamlistPtr->PageSize);
+  VDtbSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->DtSize,
+    BootParamlistPtr->PageSize);
+  VRamdiskTablesizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskTableSize,
+    BootParamlistPtr->PageSize);
 
   if ((Info->HasBootInitRamdisk) &&
          (Info->HeaderVersion >= BOOT_HEADER_VERSION_FOUR)) {
@@ -2078,6 +2082,18 @@ BOOLEAN IsMultiBoot (VOID)
 }
 #else
 BOOLEAN IsMultiBoot (VOID)
+{
+  return FALSE;
+}
+#endif
+
+#ifdef ENABLE_POWER_KEY_MULTIPLEX
+BOOLEAN IsPowerKeyMultiplex (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsPowerKeyMultiplex (VOID)
 {
   return FALSE;
 }

@@ -352,7 +352,7 @@ static UINT64 GetUnusedPfn ()
  * are kept unallocated for UEFI to use. If kernel has any destined pages in
  * this region, that will be bounced.
  */
-static VOID PreallocateFreeRanges (VOID)
+static INT32 PreallocateFreeRanges (VOID)
 {
         INT32 Iter = 0, Ret;
         INT32 ReservationDone = 0;
@@ -388,8 +388,10 @@ static VOID PreallocateFreeRanges (VOID)
                         printf (
                         "WARN: Prealloc falied LINE %d alloc_addr = 0x%lx\n",
                          __LINE__, AllocAddr);
+                        return Ret;
                 }
         }
+        return 0;
 }
 
 /* Assumption: There is no overlap in the regions */
@@ -908,7 +910,7 @@ static INT32 ReadDataPages (VOID *Arg)
                 if (Ret < 0) {
                         printf ("Disk read failed Line %d\n", __LINE__);
                         Info->Status = -1;
-                        return -1;
+                        goto err;
                 }
 
                 SrcPfn = (UINT64) Info->DiskReadBuffer >> PAGE_SHIFT;
@@ -939,9 +941,7 @@ static INT32 ReadDataPages (VOID *Arg)
                 }
         }
         Info->Status = 0;
-#if HIBERNATION_SUPPORT_AES
 err:
-#endif
         KernIntf->Sem->SemPost (Info->Sem, FALSE);
         return 0;
 }
@@ -1416,8 +1416,17 @@ static INT32 RestoreSnapshotImage (VOID)
          * No dynamic allocation beyond this point. If not honored it will
          * result in corruption of pages.
          */
-        GetConventionalMemoryRanges ();
-        PreallocateFreeRanges ();
+        Ret = GetConventionalMemoryRanges ();
+        if (Ret < 0) {
+                printf ("Error getting memory regions\n");
+                goto err;
+        }
+
+        Ret = PreallocateFreeRanges ();
+        if (Ret < 0) {
+                printf ("Error allocating memory\n");
+                goto err;
+        }
 
         Bti->FirstTable = (struct BounceTable *)
                                 (GetUnusedPfn () << PAGE_SHIFT);
