@@ -95,7 +95,7 @@ VOID BootIntoHibernationImage (BootInfo *Info,
 
 BccParams_t BccParamsRecvdFromAVB = {{0}};
 STATIC BOOLEAN BootReasonAlarm = FALSE;
-STATIC BOOLEAN BootIntoFastboot = FALSE;
+STATIC BOOLEAN BootIntoFastboot = TRUE;
 STATIC BOOLEAN BootIntoRecovery = FALSE;
 UINT64 FlashlessBootImageAddr = 0;
 STATIC DeviceInfo DevInfo;
