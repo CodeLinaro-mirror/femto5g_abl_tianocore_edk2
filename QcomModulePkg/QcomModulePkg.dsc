@@ -186,6 +186,12 @@
   !if $(DISABLE_MULTI_BOOT) == 1
       GCC:*_*_*_CC_FLAGS = -DDISABLE_MULTI_BOOT
   !endif
+  !if $(ENABLE_POWER_KEY_MULTIPLEX) == 1
+      GCC:*_*_*_CC_FLAGS = -DENABLE_POWER_KEY_MULTIPLEX
+  !endif
+  !if $(CLEAR_RESET_REASON) == 1
+      GCC:*_*_*_CC_FLAGS = -DCLEAR_RESET_REASON
+  !endif
   !if $(ENABLE_LV_ATOMIC_AB) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LV_ATOMIC_AB
   !endif
