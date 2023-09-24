@@ -279,6 +279,7 @@ BOOLEAN TargetBuildVariantUser (VOID);
 BOOLEAN IsLEVariant (VOID);
 BOOLEAN IsMultiBoot (VOID);
 BOOLEAN IsPowerKeyMultiplex (VOID);
+BOOLEAN ClearResetReason (VOID);
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
 VOID SetRecoveryHasNoKernel (VOID);

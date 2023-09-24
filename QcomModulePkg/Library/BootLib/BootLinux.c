@@ -2099,6 +2099,18 @@ BOOLEAN IsPowerKeyMultiplex (VOID)
 }
 #endif
 
+#ifdef CLEAR_RESET_REASON
+BOOLEAN ClearResetReason (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN ClearResetReason (VOID)
+{
+  return FALSE;
+}
+#endif
+
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr)
 {
    return BootParamlistPtr->RamdiskSize == 0;
