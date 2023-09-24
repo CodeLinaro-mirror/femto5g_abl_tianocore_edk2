@@ -101,7 +101,7 @@ typedef struct FreeRanges {
 #define NUM_PAGES_PER_GOLD_CORE ((NrCopyPages / 54) * 9)
 #define NUM_PAGES_PER_SILVER_CORE ((NrCopyPages / 54) * 4)
 
-static struct DecryptParam Dp;
+static struct DecryptParam *Dp;
 static CHAR8 *Authtags;
 static VOID *AuthCur[NUM_CORES];
 static VOID *TempOut[NUM_CORES];
@@ -113,8 +113,8 @@ static UINT8 UnwrappedKey[32];
 #else
 #define NUM_CORES 1
 #define NUM_SILVER_CORES 0
-#define NUM_PAGES_PER_GOLD_CORE ((NrCopyPages / 54) * 9)
-#define NUM_PAGES_PER_SILVER_CORE ((NrCopyPages / 54) * 4)
+#define NUM_PAGES_PER_GOLD_CORE 0
+#define NUM_PAGES_PER_SILVER_CORE 0
 #endif
 
 /* Holds free memory ranges read from UEFI memory map */
@@ -352,7 +352,7 @@ static UINT64 GetUnusedPfn ()
  * are kept unallocated for UEFI to use. If kernel has any destined pages in
  * this region, that will be bounced.
  */
-static VOID PreallocateFreeRanges (VOID)
+static INT32 PreallocateFreeRanges (VOID)
 {
         INT32 Iter = 0, Ret;
         INT32 ReservationDone = 0;
@@ -388,8 +388,10 @@ static VOID PreallocateFreeRanges (VOID)
                         printf (
                         "WARN: Prealloc falied LINE %d alloc_addr = 0x%lx\n",
                          __LINE__, AllocAddr);
+                        return Ret;
                 }
         }
+        return 0;
 }
 
 /* Assumption: There is no overlap in the regions */
@@ -698,24 +700,24 @@ static INT32 DecryptPage (VOID *EncryptData, CHAR8 *Auth, VOID *TempOut,
                 sizeof (UnwrappedKey), &Ctx[ThreadId])) {
                 return -1;
         }
-        IncrementIV (Iv, sizeof (Dp.Iv), 1);
-        if (SW_Cipher_SetParam (SW_CIPHER_PARAM_IV, Iv, sizeof (Dp.Iv),
+        IncrementIV (Iv, sizeof (Dp->Iv), 1);
+        if (SW_Cipher_SetParam (SW_CIPHER_PARAM_IV, Iv, sizeof (Dp->Iv),
                                 &Ctx[ThreadId])) {
                 return -1;
         }
-        if (SW_Cipher_SetParam (SW_CIPHER_PARAM_AAD, (VOID *)Dp.Aad,
-                sizeof (Dp.Aad), &Ctx[ThreadId])) {
+        if (SW_Cipher_SetParam (SW_CIPHER_PARAM_AAD, (VOID *)Dp->Aad,
+                sizeof (Dp->Aad), &Ctx[ThreadId])) {
                 return -1;
         }
         if (SW_CipherData (ioVecIn, &ioVecOut, &Ctx[ThreadId])) {
                 return -1;
         }
         if (SW_Cipher_GetParam (SW_CIPHER_PARAM_TAG, (VOID*)(AuthCurrent),
-                Dp.Authsize, &Ctx[ThreadId])) {
+                Dp->Authsize, &Ctx[ThreadId])) {
                 return -1;
         }
 
-        if (MemCmp (AuthCurrent, Auth, Dp.Authsize)) {
+        if (MemCmp (AuthCurrent, Auth, Dp->Authsize)) {
                 printf ("Auth Comparsion failed 0x%llx\n", Auth);
                 return -1;
         }
@@ -876,7 +878,7 @@ static UINT64* ReadKernelImagePfnIndexes (UINT64 *Offset)
                         printf ("Decryption failed for pfn array\n");
                         return NULL;
                 }
-                Authtags += Dp.Authsize;
+                Authtags += Dp->Authsize;
 #endif
                 PfnArrayStart = (CHAR8 *)PfnArrayStart + PAGE_SIZE;
                 PendingPages++;
@@ -894,7 +896,7 @@ static INT32 ReadDataPages (VOID *Arg)
         UINT64 SrcPfn, DstPfn;
         UINT64 PfnIndex = 0;
         INT32 Ret;
-
+        Thread* CurrentThread = KernIntf->Thread->GetCurrentThread ();
         RestoreInfo *Info = (RestoreInfo *) Arg;
 
         PendingPages = Info->NumPages;
@@ -929,7 +931,7 @@ static INT32 ReadDataPages (VOID *Arg)
                                         Info->Status = -1;
                                         goto err;
                                 }
-                                Info->Authtags += Dp.Authsize;
+                                Info->Authtags += Dp->Authsize;
 #endif
                                 CopyPageToDst (SrcPfn, DstPfn);
                         }
@@ -943,6 +945,8 @@ static INT32 ReadDataPages (VOID *Arg)
 err:
 #endif
         KernIntf->Sem->SemPost (Info->Sem, FALSE);
+        ThreadStackNodeRemove (CurrentThread);
+        KernIntf->Thread->ThreadExit (0);
         return 0;
 }
 
@@ -1226,12 +1230,12 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
                 RspLen = QSEECOM_ALIGN (RspLen);
         }
 
-        gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp.Iv), sizeof (Dp.Iv));
+        gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
 
         Req.Cmd = UNWRAP_KEY_CMD;
         Req.UnwrapkeyReq.WrappedKeySize = WRAPPED_KEY_SIZE;
         gBS->CopyMem ((VOID *)Req.UnwrapkeyReq.WrappedKeyBuffer,
-                        (VOID *)Dp.KeyBlob, sizeof (Dp.KeyBlob));
+                        (VOID *)Dp->KeyBlob, sizeof (Dp->KeyBlob));
         Req.UnwrapkeyReq.CurrTime.Hour = 4;
         Status = TaHandle->QseeComProtocol->QseecomSendCmd (
                 TaHandle->QseeComProtocol, TaHandle->AppId,
@@ -1253,15 +1257,21 @@ static INT32 InitAesDecrypt (VOID)
         Secs2dTaHandle TaHandle = {0};
         UINT32 NrSwapMapPages, i;
 
+        Dp = AllocatePages (1);
+        if (!Dp) {
+                printf ("Memory alloc failed Line %d\n", __LINE__);
+                return -1;
+        }
+
         NrSwapMapPages = (NrCopyPages + NrMetaPages) / ENTRIES_PER_SWAPMAP_PAGE;
         AuthslotStart = NrMetaPages + NrCopyPages + NrSwapMapPages +
                               HDR_SWP_INFO_NUM_PAGES;
 
-        if (ReadImage (AuthslotStart - 1, &Dp, sizeof (struct DecryptParam))) {
+        if (ReadImage (AuthslotStart - 1, Dp, 1)) {
                 return -1;
         }
 
-        AuthslotCount = Dp.AuthCount;
+        AuthslotCount = Dp->AuthCount;
         Authtags = AllocatePages (AuthslotCount);
         if (!Authtags) {
                 return -1;
@@ -1274,7 +1284,7 @@ static INT32 InitAesDecrypt (VOID)
                 if (!TempOut[i]) {
                         return -1;
                 }
-                AuthCur[i] = AllocateZeroPool (Dp.Authsize);
+                AuthCur[i] = AllocateZeroPool (Dp->Authsize);
                 if (!AuthCur[i]) {
                         return -1;
                 }
@@ -1295,7 +1305,7 @@ static INT32 InitAesDecrypt (VOID)
 
 static INT32 RestoreSnapshotImage (VOID)
 {
-        INT32 Ret, Iter1 = 0;
+        INT32 Ret = 0, Iter1 = 0;
         UINT64 StartMs, Offset, PfnOffset = 0;
         RestoreInfo Info[NUM_CORES];
         struct BounceTableIterator *Bti = &TableIterator;
@@ -1329,7 +1339,7 @@ static INT32 RestoreSnapshotImage (VOID)
         for (Iter1 = 0; Iter1 < NUM_SILVER_CORES; Iter1++) {
                 INT32 Iter2;
                 UINT64 Count = 0;
-                gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp.Iv));
+                gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp->Iv));
                 Info[Iter1].Offset = Offset;
                 Info[Iter1].Authtags = Authtags;
                 Info[Iter1].NumPages = NUM_PAGES_PER_SILVER_CORE;
@@ -1340,15 +1350,15 @@ static INT32 RestoreSnapshotImage (VOID)
                         }
                         Offset++;
                         PfnOffset++;
-                        Authtags += Dp.Authsize;
+                        Authtags += Dp->Authsize;
                         Count++;
                 }
-                IncrementIV (IvGlb, sizeof (Dp.Iv), Count);
+                IncrementIV (IvGlb, sizeof (Dp->Iv), Count);
         }
         for (Iter1 = NUM_SILVER_CORES; Iter1 < NUM_CORES - 1; Iter1++) {
                 INT32 Iter2;
                 UINT64 Count = 0;
-                gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp.Iv));
+                gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp->Iv));
                 Info[Iter1].Offset = Offset;
                 Info[Iter1].Authtags = Authtags;
                 Info[Iter1].NumPages = NUM_PAGES_PER_GOLD_CORE;
@@ -1359,13 +1369,13 @@ static INT32 RestoreSnapshotImage (VOID)
                         }
                         Offset++;
                         PfnOffset++;
-                        Authtags += Dp.Authsize;
+                        Authtags += Dp->Authsize;
                         Count++;
                 }
-                IncrementIV (IvGlb, sizeof (Dp.Iv), Count);
+                IncrementIV (IvGlb, sizeof (Dp->Iv), Count);
         }
         Info[Iter1].Authtags = Authtags;
-        gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp.Iv));
+        gBS->CopyMem (Info[Iter1].Iv, IvGlb, sizeof (Dp->Iv));
 #endif
         Info[Iter1].Offset = Offset;
         Info[Iter1].NumPages = NrCopyPages - (4 * NUM_PAGES_PER_SILVER_CORE) -
@@ -1408,6 +1418,7 @@ static INT32 RestoreSnapshotImage (VOID)
         Ret = UefiMapUnmapped ();
         if (Ret < 0) {
                 printf ("Error mapping unmapped regions\n");
+                Ret = -1;
                 goto err;
         }
 
@@ -1415,8 +1426,17 @@ static INT32 RestoreSnapshotImage (VOID)
          * No dynamic allocation beyond this point. If not honored it will
          * result in corruption of pages.
          */
-        GetConventionalMemoryRanges ();
-        PreallocateFreeRanges ();
+        Ret = GetConventionalMemoryRanges ();
+        if (Ret < 0) {
+                printf ("Error getting memory regions\n");
+                goto err;
+        }
+
+        Ret = PreallocateFreeRanges ();
+        if (Ret < 0) {
+                printf ("Error allocating memory\n");
+                goto err;
+        }
 
         Bti->FirstTable = (struct BounceTable *)
                                 (GetUnusedPfn () << PAGE_SHIFT);
@@ -1435,6 +1455,7 @@ static INT32 RestoreSnapshotImage (VOID)
         for (Iter1 = 0; Iter1 < NUM_CORES; Iter1++) {
                 if (Info[Iter1].Status != 0) {
                         printf ("error in restore_snapshot_image\n");
+                        Ret = -1;
                         goto err;
                 }
         }
@@ -1617,7 +1638,8 @@ static VOID EraseSwapSignature (VOID)
         }
 }
 
-VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState)
+VOID BootIntoHibernationImage (BootInfo *Info,
+                               BOOLEAN *SetRotAndBootStateAndVBH)
 {
         INT32 Ret;
         EFI_STATUS Status = EFI_SUCCESS;
@@ -1627,8 +1649,8 @@ VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState)
                 return;
         }
 
-        if (!SetRotAndBootState) {
-                printf ("SetRotAndBootState cannot be NULL.\n");
+        if (!SetRotAndBootStateAndVBH) {
+                printf ("SetRotAndBootStateAndVBH cannot be NULL.\n");
                 goto err;
         }
 
@@ -1642,12 +1664,12 @@ VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState)
                 goto err;
         }
 
-        /* ROT and BootState are set only once per boot.
-         * set variable to TRUE to Avoid setting second
-         * time incase hbernation resume fails at restore
-         * snapshot stage..
+        /* ROT, BootState and VBH are set only once per boot.
+         * set variable to TRUE to Avoid setting second time
+         * incase hbernation resume fails at restore snapshot
+         * stage.
          */
-         *SetRotAndBootState = TRUE;
+        *SetRotAndBootStateAndVBH = TRUE;
 
         Status = KeyMasterFbeSetSeed ();
         if (Status != EFI_SUCCESS) {

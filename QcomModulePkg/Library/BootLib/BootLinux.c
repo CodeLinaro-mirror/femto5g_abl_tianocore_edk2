@@ -1103,21 +1103,25 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
 #ifdef PVMFW_BCC
   UINT64 PvmFwLoadAddr = 0;
 #endif
-  UINT32 VRamdiskSizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
-    BootParamlistPtr->PageSize);
-  UINT32 VDtbSizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->DtSize,
-    BootParamlistPtr->PageSize);
-  UINT32 VRamdiskTablesizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskTableSize,
-    BootParamlistPtr->PageSize);
+  UINT32 VRamdiskSizePageAligned;
+  UINT32 VDtbSizePageAligned;
+  UINT32 VRamdiskTablesizePageAligned;
   VOID *RamdiskImageBuffer;
 
   if (BootParamlistPtr == NULL) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
     return EFI_INVALID_PARAMETER;
   }
+
+  VRamdiskSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
+    BootParamlistPtr->PageSize);
+  VDtbSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->DtSize,
+    BootParamlistPtr->PageSize);
+  VRamdiskTablesizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskTableSize,
+    BootParamlistPtr->PageSize);
 
   if ((Info->HasBootInitRamdisk) &&
          (Info->HeaderVersion >= BOOT_HEADER_VERSION_FOUR)) {
@@ -1493,7 +1497,8 @@ BootLinux (BootInfo *Info)
 
   if (!FlashlessBoot) {
     if (!StrnCmp (PartitionName, (CONST CHAR16 *)L"boot",
-                  StrLen ((CONST CHAR16 *)L"boot"))) {
+                  StrLen ((CONST CHAR16 *)L"boot")) &&
+                   !TargetBuildVariantUser ()) {
       Status = GetFfbmCommand (FfbmStr, FFBM_MODE_BUF_SIZE);
       if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_VERBOSE, "No Ffbm cookie found, ignore: %r\n", Status));
