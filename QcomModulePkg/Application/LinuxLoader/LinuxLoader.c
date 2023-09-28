@@ -85,6 +85,7 @@
 #include <Protocol/EFICardInfo.h>
 
 #include <Protocol/EFIClock.h>
+#include <Protocol/EFIPmicSdam.h>
 #include "RecoveryInfo.h"
 
 #define MAX_APP_STR_LEN 64
@@ -145,7 +146,8 @@ GetRebootReason (UINT32 *ResetReason)
   }
 
   RstReasonIf->GetResetReason (RstReasonIf, ResetReason, NULL, NULL);
-  if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION)
+  if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION &&
+      ClearResetReason ())
     RstReasonIf->ClearResetReason (RstReasonIf);
   return Status;
 }
@@ -275,6 +277,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   UINT32 Val = 0;
   UINT32 BootReason = NORMAL_MODE;
   UINT32 KeyPressed = SCAN_NULL;
+  UINT32 PowerKeyPressTime = 0;
   /* SilentMode Boot */
   CHAR8 SilentBootMode = NON_SILENT_MODE;
   /* MultiSlot Boot */
@@ -346,6 +349,18 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   if (MultiSlotBoot) {
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     FindPtnActiveSlot ();
+  }
+
+  /* Reading press and release time for power key from sdam register
+     for press time ranges between 3900msec to 4100msec, boot into fastboot */
+  if (IsPowerKeyMultiplex ()) {
+    Status = GetPowerKeyPressInfo (&PowerKeyPressTime);
+    if (Status == EFI_SUCCESS) {
+      if ( PowerKeyPressTime > 3900 &&
+        PowerKeyPressTime < 4100) {
+        BootIntoFastboot = TRUE;
+      }
+    }
   }
 
   Status = GetKeyPress (&KeyPressed);
