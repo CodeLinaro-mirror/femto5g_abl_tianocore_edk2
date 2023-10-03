@@ -72,6 +72,8 @@
 #include <Uefi/UefiBaseType.h>
 #include <Library/FdtRw.h>
 
+#define SUBSET_PART_CHIPINFO_BASE_REVISION 0x0000000000010002
+
 /* Look up table for cpu partial goods
  *
  * NOTE: Array size of PartialGoodsCpuType0 and
@@ -131,9 +133,6 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_GPU),
      "/soc",
      {"kgsl-smmu", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_GPU),
-     "/soc",
-     {"qcom,gpucc", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
      "/soc",
      {"qcom,kgsl-iommu", "status", "ok", "no"}},
@@ -344,6 +343,33 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,cam-sensor", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe_csid0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe_csid1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,lx7", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-cre", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cre", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe_csid2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe2", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,mdss_mdp", "status", "ok", "no"}},
@@ -472,6 +498,98 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,cvp", "status", "ok", "no"}},
 };
 
+static struct PartialGoods PartialGoodsMmTypeWithLabel[] = {
+    {BIT (EFICHIPINFO_PART_GPU),
+     "/soc",
+     {"gpucc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
+     "/soc",
+     {"gpu_cc_cx_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
+     "/soc",
+     {"gpu_cc_gx_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
+     "/soc",
+     {"funnel_gfx", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_bps_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_ife_0_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_ife_1_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_ife_2_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_ipe_0_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_sbi_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_sfe_0_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_sfe_1_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_cc_titan_top_gdsc", "status", "ok", "no"}},
+/*
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"camcc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+    {"cam_rsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
+    {"disp_rsc", "status", "ok", "no"}},
+*/
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
+    {"disp_cc_mdss_core_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
+    {"disp_cc_mdss_core_int2_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
+    {"dispcc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+     "/soc",
+    {"video_cc_mvs0_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+     "/soc",
+    {"video_cc_mvs0c_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+     "/soc",
+    {"video_cc_mvs1_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+     "/soc",
+    {"video_cc_mvs1c_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+     "/soc",
+    {"videocc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_EVA),
+     "/soc",
+    {"video_cc_mvs0_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_EVA),
+     "/soc",
+    {"video_cc_mvs0c_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_EVA),
+     "/soc",
+    {"video_cc_mvs1_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_EVA),
+     "/soc",
+    {"video_cc_mvs1c_gdsc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_EVA),
+     "/soc",
+    {"videocc", "status", "ok", "no"}},
+};
+
 STATIC EFI_STATUS
 CheckCPUType (VOID *fdt,
               UINT32 TableSz,
@@ -541,7 +659,7 @@ FindNodeAndUpdateProperty (VOID *fdt,
 
      /* Add/Replace the property with Replace string value */
     Ret = FdtSetProp (fdt, SubNodeOffset, SNode->PropertyName,
-                      (CONST VOID *)SNode->ReplaceStr,
+                     (CONST VOID *)SNode->ReplaceStr,
                       AsciiStrLen (SNode->ReplaceStr) + 1);
     if (!Ret) {
       DEBUG ((EFI_D_INFO, "Partial goods (%a) %a property disabled\n",
@@ -567,6 +685,66 @@ FindNodeAndUpdateProperty (VOID *fdt,
   }
 }
 
+STATIC VOID
+FindLabelAndUpdateProperty (VOID *fdt,
+                           UINT32 TableSz,
+                           struct PartialGoods *Table,
+                           UINT32 Value)
+{
+  struct SubNodeListNew *SNode = NULL;
+  INT32 ParentOffset = 0;
+  INT32 Ret = 0;
+  UINT32 Count;
+  INT32 PropLen = 0;
+  CONST CHAR8 *SymbolsDtNode = "/__symbols__";
+  CONST CHAR8 *Label, *LabelNodePath;
+  UINT32 SymbolsOffset, NodeOffset;
+
+  for (Count = 0; Count < TableSz; Count++, Table++) {
+    if (!(Value & Table->Val)) {
+      continue;
+    }
+
+    /* Find the parent node */
+    ParentOffset = FdtPathOffset (fdt, Table->ParentNode);
+    if (ParentOffset < 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to Get parent node: %a\terror: %d\n",
+              Table->ParentNode, ParentOffset));
+      continue;
+    }
+
+    SNode = &(Table->SubNode);
+    Label = SNode->SubNodeName;
+    SymbolsOffset = FdtPathOffset (fdt, SymbolsDtNode);
+    LabelNodePath = fdt_getprop (fdt, SymbolsOffset, Label,
+                                  &PropLen);
+    if (!LabelNodePath) {
+      continue;
+    }
+    NodeOffset = FdtPathOffset (fdt, LabelNodePath);
+    DEBUG ((EFI_D_INFO, "Label: %a, Node Path: %a, NodeOffset:%d\n",
+             Label, LabelNodePath, NodeOffset));
+
+    if (NodeOffset < 0) {
+      DEBUG ((EFI_D_INFO, "Node: %a is not present, ignore\n",
+              SNode->SubNodeName));
+      continue;
+    }
+
+     /* Add/Replace the property with Replace string value */
+    Ret = FdtSetProp (fdt, NodeOffset, SNode->PropertyName,
+                      (CONST VOID *)SNode->ReplaceStr,
+                      AsciiStrLen (SNode->ReplaceStr) + 1);
+    if (!Ret) {
+      DEBUG ((EFI_D_INFO, "Partial goods (%a) status property disabled\n",
+              SNode->SubNodeName));
+    } else {
+      DEBUG ((EFI_D_ERROR, "Failed to update property: %a, ret =%d \n",
+              SNode->PropertyName, Ret));
+    }
+  }
+}
+
 STATIC EFI_STATUS
 ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
@@ -576,9 +754,18 @@ ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
    /* Ensure to reset the Value before checking CPU subset */
   *Value = 0;
 
-  Status =
-      pChipInfoProtocol->GetSubsetCPUs (pChipInfoProtocol, CpuCluster,
-                                           Value);
+  if (pChipInfoProtocol->Revision >= EFI_CHIPINFO_PROTOCOL_REVISION_5) {
+    DEBUG ((EFI_D_VERBOSE, "Accessing new Partial APIs\n"));
+    Status =
+        pChipInfoProtocol->GetDisabledCPUs (pChipInfoProtocol, CpuCluster,
+                                             Value);
+  }
+  if (pChipInfoProtocol->Revision < EFI_CHIPINFO_PROTOCOL_REVISION_5 ||
+     Status == EFI_NOT_FOUND) {
+    Status =
+        pChipInfoProtocol->GetSubsetCPUs (pChipInfoProtocol, CpuCluster,
+                                             Value);
+  }
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_VERBOSE, "Failed to get subset[%d] CPU. %r\n",
             CpuCluster, Status));
@@ -594,16 +781,31 @@ STATIC EFI_STATUS
 ReadMMPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
   UINT32 i;
+  UINT32 SubsetVal = 0;
+  BOOLEAN SubsetBoolVal = FALSE;
   EFI_STATUS Status = EFI_SUCCESS;
-  UINT32 SubsetVal;
 
   *Value = 0;
   for (i = 1; i < EFICHIPINFO_NUM_PARTS; i++) {
-    /* Ensure to reset the Value before checking for Part Subset*/
-    SubsetVal = 0;
 
-    Status =
-        pChipInfoProtocol->GetSubsetPart (pChipInfoProtocol, i, &SubsetVal);
+    if (pChipInfoProtocol->Revision >= EFI_CHIPINFO_PROTOCOL_REVISION_5) {
+      /* Ensure to reset the Value before checking for Part Subset*/
+      SubsetBoolVal = FALSE;
+      Status =
+        pChipInfoProtocol->IsPartDisabled (pChipInfoProtocol,
+                                            i, 0, &SubsetBoolVal);
+      SubsetVal = (UINT32) SubsetBoolVal;
+
+    }
+    if (pChipInfoProtocol->Revision < EFI_CHIPINFO_PROTOCOL_REVISION_5 ||
+       Status == EFI_NOT_FOUND) {
+      /* Ensure to reset the Value before checking for Part Subset*/
+      SubsetVal = 0;
+      Status =
+          pChipInfoProtocol->GetSubsetPart (pChipInfoProtocol, i, &SubsetVal);
+
+    }
+
     if (EFI_ERROR (Status)) {
       DEBUG ((EFI_D_VERBOSE, "Failed to get MM subset[%d] part. %r\n", i,
               Status));
@@ -634,8 +836,9 @@ UpdatePartialGoodsNode (VOID *fdt)
   if (EFI_ERROR (Status))
     return Status;
 
-  if (pChipInfoProtocol->Revision < EFI_CHIPINFO_PROTOCOL_REVISION)
+  if (pChipInfoProtocol->Revision < SUBSET_PART_CHIPINFO_BASE_REVISION) {
     return Status;
+  }
 
   /* Read and update Multimedia Partial Goods Nodes */
   Status = ReadMMPartialGoods (pChipInfoProtocol, &PartialGoodsMMValue);
@@ -649,6 +852,11 @@ UpdatePartialGoodsNode (VOID *fdt)
 
     FindNodeAndUpdateProperty (fdt, ARRAY_SIZE (PartialGoodsMmType),
                                &PartialGoodsMmType[0], PartialGoodsMMValue);
+
+    FindLabelAndUpdateProperty (fdt, ARRAY_SIZE (PartialGoodsMmTypeWithLabel),
+                               &PartialGoodsMmTypeWithLabel[0],
+                               PartialGoodsMMValue);
+
   }
 
   /* Read and update CPU Partial Goods nodes */
