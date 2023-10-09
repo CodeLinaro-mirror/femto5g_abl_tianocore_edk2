@@ -89,7 +89,8 @@
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
 
 #if HIBERNATION_SUPPORT_NO_AES
-VOID BootIntoHibernationImage (BootInfo *Info, BOOLEAN *SetRotAndBootState);
+VOID BootIntoHibernationImage (BootInfo *Info,
+                               BOOLEAN *SetRotAndBootStateAndVBH);
 #endif
 
 BccParams_t BccParamsRecvdFromAVB = {{0}};
@@ -238,8 +239,9 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   /* Flashless Boot */
   BOOLEAN FlashlessBoot = FALSE;
   EFI_MEM_CARDINFO_PROTOCOL *CardInfo = NULL;
-  /* set ROT and BootSatte only once per boot*/
-  BOOLEAN SetRotAndBootState = FALSE;
+  /* set ROT, BootState and VBH only once per boot*/
+  BOOLEAN SetRotAndBootStateAndVBH = FALSE;
+  BOOLEAN FDRDetected = FALSE;
 
   DEBUG ((EFI_D_INFO, "Loader Build Info: %a %a\n", __DATE__, __TIME__));
   DEBUG ((EFI_D_VERBOSE, "LinuxLoader Load Address to debug ABL: 0x%llx\n",
@@ -377,6 +379,20 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   if (Status != EFI_SUCCESS)
     DEBUG ((EFI_D_VERBOSE, "RecoveryInit failed ignore: %r\n", Status));
 
+   if (BootIntoRecovery) {
+    Status = DetectFDR (&FDRDetected);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "DetectFDR failed: %r\n", Status));
+    }
+    if (FDRDetected) {
+      DEBUG ((EFI_D_INFO, "LinuxloaderEntry: FDRDetected\n"));
+      Status = SetFDRFlag ();
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "SetFDRFlag failed: %r\n", Status));
+      }
+    }
+  }
+
 flashless_boot:
   /* Populate board data required for fastboot, dtb selection and cmd line */
   Status = BoardInit ();
@@ -404,9 +420,9 @@ flashless_boot:
     Info.FlashlessBoot = FlashlessBoot;
     Info.SilentBootMode = SilentBootMode;
   #if HIBERNATION_SUPPORT_NO_AES
-    BootIntoHibernationImage (&Info, &SetRotAndBootState);
+    BootIntoHibernationImage (&Info, &SetRotAndBootStateAndVBH);
   #endif
-    Status = LoadImageAndAuth (&Info, FALSE, SetRotAndBootState
+    Status = LoadImageAndAuth (&Info, FALSE, SetRotAndBootStateAndVBH
   #ifndef USE_DUMMY_BCC
                                , &BccParamsRecvdFromAVB
   #endif
