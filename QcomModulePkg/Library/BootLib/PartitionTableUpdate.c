@@ -781,7 +781,7 @@ PartitionHasMultiSlot (CONST CHAR16 *Pname)
       } else if (PtnEntries[i].PartEntry.PartitionName[Len] == L'_' &&
                  (PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'b')) {
         if (IsRecoveryInfo ()) {
-          DEBUG (( EFI_D_INFO, "Multislot because RecoveryInfo Detected\n"));
+          DEBUG (( EFI_D_VERBOSE, "Multislot because RecoveryInfo Detected\n"));
           return TRUE;
         }
         SlotCount++;
@@ -1280,10 +1280,10 @@ GetBootPartitionEntry (Slot *BootSlot)
   if (StrnCmp ((CONST CHAR16 *)L"_a", BootSlot->Suffix,
                StrLen (BootSlot->Suffix)) == 0) {
     if (IsRecoveryInfo ()) {
-      DEBUG (( EFI_D_ERROR,  "Using boot parition for recoverinfo\n"));
+      DEBUG (( EFI_D_VERBOSE,  "Using boot parition for recoverinfo\n"));
       Index = GetPartitionIndex ((CHAR16 *)L"boot");
     } else {
-      DEBUG (( EFI_D_ERROR,  "using boot_a\n"));
+      DEBUG (( EFI_D_VERBOSE,  "using boot_a\n"));
       Index = GetPartitionIndex ((CHAR16 *)L"boot_a");
     }
   } else if (StrnCmp ((CONST CHAR16 *)L"_b", BootSlot->Suffix,
@@ -1442,6 +1442,12 @@ GetActiveSlot (Slot *ActiveSlot)
     return EFI_INVALID_PARAMETER;
   }
 
+  if ((IsSuffixEmpty (ActiveSlot) == TRUE) &&
+      (IsRecoveryInfo ())) {
+    Status = RI_GetActiveSlot (ActiveSlot);
+    return Status;
+  }
+
   for (UINTN SlotIndex = 0; SlotIndex < ARRAY_SIZE (Slots); SlotIndex++) {
     struct PartitionEntry *BootPartition =
         GetBootPartitionEntry (&Slots[SlotIndex]);
@@ -1471,12 +1477,6 @@ GetActiveSlot (Slot *ActiveSlot)
 
   if (AtomicABEnabled ()) {
     return GetAtomicABActiveSlot (ActiveSlot);
-  }
-
-  if ((IsSuffixEmpty (ActiveSlot) == TRUE) &&
-      (IsRecoveryInfo ())) {
-    Status = RI_GetActiveSlot (ActiveSlot);
-    return Status;
   }
 
   if (IsSuffixEmpty (ActiveSlot) == TRUE) {

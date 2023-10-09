@@ -9,6 +9,7 @@
 #include "PartitionTableUpdate.h"
 
 BOOLEAN IsRecoveryInfo ();
+BOOLEAN RI_IsGpioControlled ();
 EFI_STATUS RI_GetActiveSlot (Slot *);
 EFI_STATUS RI_HandleFailedSlot (Slot);
 
