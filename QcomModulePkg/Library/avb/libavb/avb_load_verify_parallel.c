@@ -256,11 +256,8 @@ INT32 PartitionLoad(VOID* Arg) {
 
   /* First stage */
 
-  /* One loop one chunk.
-   * Ensure the last chunk is larger than SplitImageSize, break out of
-   * loop when less than twice the SplitImageSize.
-   */
-  while(ThreadLoad->RemainImageSize >  (SplitImageSize << 1) ) {
+  /* One loop one chunk */
+  while(ThreadLoad->RemainImageSize >  SplitImageSize ) {
     Status = Load_partition_to_verify(ThreadLoad->ops,
               part_name,
               ImageOffset,
@@ -326,7 +323,7 @@ INT32 PartitionVerify(VOID* Arg) {
   SplitImageSize = ThreadVerify->SplitImageSize;
   CurrentChunkSize = SplitImageSize;
   /* First stage */
-  while(ThreadVerify->RemainImageSize >  (SplitImageSize << 1)) {
+  while(ThreadVerify->RemainImageSize >  SplitImageSize) {
     KernIntf->Sem->SemWait (SemLoadFirst);
     if(ThreadVerify->Sha256HashCheck == true)
     {
@@ -401,7 +398,7 @@ EFI_STATUS CreateReaderThreads(LoadVerifyInfo *ThreadLoadInfo, LoadVerifyInfo *T
   EFI_STATUS Status = EFI_SUCCESS;
   Thread* LoadThread = NULL;
   Thread* VerifyThread = NULL;
-  int corenum = 0;
+  int corenum = 4;
 
   LoadThread = KernIntf->Thread->ThreadCreate ("Executethreadwrapper_1",
                                         PartitionLoad, (VOID*)ThreadLoadInfo,
