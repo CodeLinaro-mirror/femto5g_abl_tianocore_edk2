@@ -352,12 +352,12 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   }
 
   /* Reading press and release time for power key from sdam register
-     for press time ranges between 3900msec to 4100msec, boot into fastboot */
+     for press time ranges between 3800msec to 4200msec, boot into fastboot */
   if (IsPowerKeyMultiplex ()) {
     Status = GetPowerKeyPressInfo (&PowerKeyPressTime);
     if (Status == EFI_SUCCESS) {
-      if ( PowerKeyPressTime > 3900 &&
-        PowerKeyPressTime < 4100) {
+      if ( PowerKeyPressTime > 3800 &&
+        PowerKeyPressTime < 4200) {
         BootIntoFastboot = TRUE;
       }
     }

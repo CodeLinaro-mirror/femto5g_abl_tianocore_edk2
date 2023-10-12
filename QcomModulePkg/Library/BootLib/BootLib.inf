@@ -111,6 +111,7 @@
 	EarlyUsbInit.c
 	RecoveryInfo.c
 	IntegrityIMA.c
+	SailLib.c
 
 [Packages]
 	ArmPkg/ArmPkg.dec
@@ -200,6 +201,7 @@
 	gEfiRecoveryInfoProtocolGuid
 	gEfiClockProtocolGuid
 	gQcomPmicSdamProtocolGuid
+	gEfiMailboxProtocolGuid
 
 [FixedPcd]
 	gArmTokenSpaceGuid.PcdSystemMemoryBase

@@ -60,12 +60,12 @@ TYPE DEFINITIONS
 @{ */
 /* Recovery status enum type */
 typedef enum {
-    RECOVERY_INFO_NO_RECOVERY    = 0x0,/* GPIO_BASED_BOOT_SELECTION fuse bit
+    RECOVERY_INFO_GPIO           = 0x0,/* GPIO_BASED_BOOT_SELECTION fuse bit
                                          is blown */
     RECOVERY_INFO_PARTITION_FAIL = 0x1,/* Recovery Info Partition not present
                                          or fail to read */
     RECOVERY_INFO_TRIAL_BOOT     = 0x2,/* Trial Boot is enabled */
-    RECOVERY_INFO_RECOVERY       = 0x3,/* Recovery Info is valid */
+    RECOVERY_INFO_NORMAL         = 0x3,/* Recovery Info is valid */
 }RECOVERY_STATUS_STATE;
 /** @} */
 
