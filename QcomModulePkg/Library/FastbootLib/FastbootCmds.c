@@ -101,6 +101,7 @@ found at
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/UnlockMenu.h>
 #include <Library/BootLinux.h>
+#include <Library/SailLib.h>
 #include <Uefi.h>
 
 #include <Guid/EventGroup.h>
@@ -291,24 +292,25 @@ BOOLEAN IsDisableParallelDownloadFlash (VOID)
 }
 #endif
 
-/* Clean up memory for the getvar variables during exit */
+/* Clean up memory for the getvar and cmdlist variables
+ * during exit.
+ */
 STATIC EFI_STATUS FastbootUnInit (VOID)
 {
   FASTBOOT_VAR *Var;
-  FASTBOOT_VAR *VarPrev = NULL;
+  FASTBOOT_CMD *cmd;
 
-  for (Var = Varlist; Var && Var->next; Var = Var->next) {
-    if (VarPrev) {
-      FreePool (VarPrev);
-      VarPrev = NULL;
-    }
-    VarPrev = Var;
-  }
-  if (Var) {
+  while (Varlist) {
+    Var = Varlist;
+    Varlist = Varlist->next;
     FreePool (Var);
-    Var = NULL;
   }
 
+  while (cmdlist) {
+    cmd = cmdlist;
+    cmdlist = cmdlist->next;
+    FreePool (cmd);
+  }
   return EFI_SUCCESS;
 }
 
@@ -1329,7 +1331,7 @@ HandleMetaImgFlash (IN CHAR16 *PartitionName,
   for (i = 0; i < images; i++) {
     PnameTerminated = FALSE;
 
-    if (img_header_entry[i].ptn_name == NULL ||
+    if (!img_header_entry[i].ptn_name[0] ||
         img_header_entry[i].start_offset == 0 || img_header_entry[i].size == 0)
       break;
 
@@ -1813,6 +1815,19 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
     return;
   }
   AsciiStrToUnicodeStr (arg, PartitionName);
+
+  #ifdef ENABLE_SAIL_FLASHING
+  if (CheckSailPartition (arg)) {
+    Status = SailFlash (arg, mFlashDataBuffer, sz);
+    if (Status != EFI_SUCCESS) {
+      FastbootFail ("Sail Flashing failed");
+       return;
+    } else {
+      FastbootOkay ("Sail Flashing succeeded");
+      return;
+    }
+  }
+  #endif
 
   if ((GetAVBVersion () == AVB_LE) ||
       ((GetAVBVersion () != AVB_LE) &&
@@ -2577,7 +2592,7 @@ STATIC VOID GetBufferSize (UINT64 *MaxBufferSize, UINT64 *MinBufferSize)
     return;
   }
 
-  if (DdrSize <= DDR_128MB) {
+  if (DdrSize <= DDR_512MB) {
     /* 35MB */
     *MaxBufferSize = 36700160;
     /* 16MB */
@@ -2906,6 +2921,41 @@ CmdGetVar (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   FastbootFail ("GetVar Variable Not found");
 }
 
+#ifdef ENABLE_SAIL_BOOT
+
+STATIC BOOLEAN EnableSailBoot = FALSE;
+
+STATIC VOID
+CmdOemSailBootEnable (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Sz)
+{
+  CHAR8 *Ptr = NULL;
+  CONST CHAR8 *Delim = " ";
+
+  if (Arg) {
+    Ptr = AsciiStrStr (Arg, Delim);
+    if (Ptr) {
+      Ptr++;
+      if (!AsciiStrCmp (Ptr, "0")) {
+        EnableSailBoot = FALSE;
+      } else if (!AsciiStrCmp (Ptr, "1")) {
+        EnableSailBoot = TRUE;
+      }  else {
+        FastbootFail ("Invalid input entered");
+        return;
+      }
+    } else {
+      FastbootFail ("Enter fastboot oem sail-boot-enable 0/1");
+      return;
+    }
+  } else {
+    FastbootFail ("Enter fastboot oem sail-boot-enable 0/1");
+    return;
+  }
+  FastbootOkay ("");
+  return;
+}
+#endif
+
 #ifdef ENABLE_BOOT_CMD
 STATIC VOID
 CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
@@ -2914,11 +2964,23 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   boot_img_hdr_v3 *HdrV3 = Data;
   EFI_STATUS Status = EFI_SUCCESS;
   UINT32 ImageSizeActual = 0;
-  UINT32 PageSize = 0;
   UINT32 SigActual = SIGACTUAL;
   CHAR8 Resp[MAX_RSP_SIZE];
   BOOLEAN MdtpActive = FALSE;
   BootInfo Info = {0};
+
+  #ifdef ENABLE_SAIL_BOOT
+  if (EnableSailBoot) {
+    Status = SailBoot (Data, Size, TRUE);
+    if (Status != EFI_SUCCESS) {
+      FastbootFail ("SAIL Booting Failed.");
+      return;
+    } else {
+      FastbootOkay ("");
+      return;
+    }
+  }
+  #endif
 
   if (FixedPcdGetBool (EnableMdtpSupport)) {
     Status = IsMdtpActive (&MdtpActive);
@@ -2982,8 +3044,9 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
     FastbootFail ("BootImage is Incomplete");
     goto out;
   }
-  if ((MaxDownLoadSize - (ImageSizeActual - SigActual)) < PageSize) {
-    FastbootFail ("BootImage: Size is greater than boot image buffer can hold");
+
+  if (MaxDownLoadSize < (ImageSizeActual - SigActual)) {
+    FastbootFail ("BootImage: Size is greater than max download size");
     goto out;
   }
 
@@ -3806,7 +3869,7 @@ PublishGetVarPartitionInfo (
 
   /* Loop will go through each partition entry
      and publish info for all partitions.*/
-  for (PtnLoopCount = 1; PtnLoopCount <= NumParts; PtnLoopCount++) {
+  for (PtnLoopCount = 0; PtnLoopCount < NumParts; PtnLoopCount++) {
     PublishType = FALSE;
     PublishSize = FALSE;
     PartitionNameUniCode = PtnEntries[PtnLoopCount].PartEntry.PartitionName;
@@ -3976,6 +4039,9 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
       {"oem device-info", CmdOemDevinfo},
 #if HIBERNATION_SUPPORT_NO_AES
       {"oem golden-snapshot", CmdGoldenSnapshot},
+#endif
+#ifdef ENABLE_SAIL_BOOT
+      {"oem sail-boot-enable", CmdOemSailBootEnable},
 #endif
       {"continue", CmdContinue},
       {"reboot", CmdReboot},
