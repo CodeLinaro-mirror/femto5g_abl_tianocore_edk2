@@ -1482,6 +1482,96 @@ AtomicABEnabled (VOID)
 }
 #endif
 
+#ifdef ENABLE_FASTBOOT_IF_LOADAUTH_FAIL
+BOOLEAN HandleCurrentSlotAttribute (VOID)
+{
+  Slot CurrentSlot = {{0}};
+  UINT64 RetryCount = 0;
+  UINT64 Unbootable = 0;
+  UINT64 BootSuccess = 0;
+
+  struct PartitionEntry *BootPartition = NULL;
+  EFI_STATUS Status = GetActiveSlot (&CurrentSlot);
+
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "GetActiveSlot: no active slots found!\n"));
+    return FALSE;
+  }
+
+  GUARD_OUT (FindBootableSlot (&CurrentSlot));
+
+  BootPartition = GetBootPartitionEntry (&CurrentSlot);
+  if (BootPartition == NULL) {
+    DEBUG ((EFI_D_ERROR, "GetBootPartitionEntry: No boot partition "
+                         "entry for slot %s\n",
+            CurrentSlot.Suffix));
+    return FALSE;
+  }
+
+  Unbootable = (BootPartition->PartEntry.Attributes &
+                PART_ATT_UNBOOTABLE_VAL) >> PART_ATT_UNBOOTABLE_BIT;
+  BootSuccess = (BootPartition->PartEntry.Attributes &
+                 PART_ATT_SUCCESSFUL_VAL) >> PART_ATT_SUCCESS_BIT;
+  RetryCount = (BootPartition->PartEntry.Attributes &
+                PART_ATT_MAX_RETRY_COUNT_VAL) >> PART_ATT_MAX_RETRY_CNT_BIT;
+
+  if (Unbootable == 0 &&
+      BootSuccess == 0 &&
+      RetryCount > 0) {
+      RetryCount--;
+      BootPartition->PartEntry.Attributes &= ~PART_ATT_MAX_RETRY_COUNT_VAL;
+      BootPartition->PartEntry.Attributes |= RetryCount
+                                         << PART_ATT_MAX_RETRY_CNT_BIT;
+      DEBUG ((EFI_D_INFO, "Current Slot is : %s, retry count %ld\n",
+              CurrentSlot.Suffix, RetryCount));
+      UpdatePartitionAttributes (PARTITION_ATTRIBUTES);
+  }
+
+  return TRUE;
+
+out:
+  return FALSE;
+}
+
+BOOLEAN IsExistBootablePartition (VOID)
+{
+  Slot Slots[] = {{L"_a"}, {L"_b"}};
+  BOOLEAN ExistBootableSlot[] = {TRUE, TRUE};
+  UINT64 Unbootable = 0;
+  UINT64 BootSuccess = 0;
+
+  for (UINTN SlotIndex = 0; SlotIndex < ARRAY_SIZE (Slots); SlotIndex++) {
+    struct PartitionEntry *BootPartition =
+        GetBootPartitionEntry (&Slots[SlotIndex]);
+    if (BootPartition == NULL) {
+      DEBUG ((EFI_D_ERROR, "GetBootPartitionEntry: No boot partition "
+                           "entry for slot %s\n",
+              Slots[SlotIndex].Suffix));
+      return FALSE;
+    }
+
+    Unbootable = (BootPartition->PartEntry.Attributes &
+                  PART_ATT_UNBOOTABLE_VAL) >> PART_ATT_UNBOOTABLE_BIT;
+    BootSuccess = (BootPartition->PartEntry.Attributes &
+                   PART_ATT_SUCCESSFUL_VAL) >> PART_ATT_SUCCESS_BIT;
+
+    if (Unbootable == 0 &&
+        BootSuccess == 1) {
+      ExistBootableSlot[SlotIndex] = TRUE;
+    } else {
+      ExistBootableSlot[SlotIndex] = FALSE;
+    }
+  }
+
+  if (ExistBootableSlot[0] == FALSE &&
+      ExistBootableSlot[1] == FALSE) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+#endif
+
 STATIC EFI_STATUS
 ReadMisc_boot (Slot *BootableSlot)
 {
