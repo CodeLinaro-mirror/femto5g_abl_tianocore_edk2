@@ -14,7 +14,7 @@
 STATIC EFI_RECOVERYINFO_PROTOCOL *pRecoveryInfoProtocol = NULL;
 STATIC INT64 HasRecoveryInfo = -1;
 STATIC INT64 HasGpioControl = -1;
-
+STATIC BootSetType BootSet = SET_INVALID;
 /*
 +----------+------------------+-----------------------------+----------------+
 | Protocol | GetRecoveryState |        RecoveryState        | IsRecoveryInfo |
@@ -59,8 +59,11 @@ EFI_STATUS RI_GetActiveSlot (Slot *ActiveSlot)
 {
   EFI_STATUS Status = EFI_SUCCESS ;
   EFI_RECOVERYINFO_PROTOCOL *pRecoveryInfoProtocol = NULL;
-  BootSetType BootSet;
   Slot Slots[] = {{L"_a"}, {L"_b"}};
+
+  if (BootSet != SET_INVALID ) {
+    goto found_bootset;
+  }
 
   Status = gBS->LocateProtocol (& gEfiRecoveryInfoProtocolGuid, NULL,
                                (VOID **) & pRecoveryInfoProtocol);
@@ -81,6 +84,7 @@ EFI_STATUS RI_GetActiveSlot (Slot *ActiveSlot)
     return EFI_UNSUPPORTED;
   }
 
+found_bootset :
   /* SET_A = 0 SET_B = 1 */
    GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
                     Slots[BootSet].Suffix,
