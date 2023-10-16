@@ -33,7 +33,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -75,14 +75,18 @@
 #include <Protocol/EFIChipInfoTypes.h>
 #include <Protocol/EFIPmicPon.h>
 #include <Protocol/Print2.h>
+#include <Library/EarlyUsbInit.h>
+#include <Library/IntegrityIMA.h>
 
 #include "AutoGen.h"
-#include <DeviceInfo.h>
+#include "DeviceInfo.h"
 #include "UpdateCmdLine.h"
 #include "Recovery.h"
 #include "LECmdLine.h"
 #include "EarlyEthernet.h"
+#include "RecoveryInfo.h"
 
+#define BOOT_CPU_PARAM_LEN 13
 #define SIZE_OF_DELIM 2
 #define PARAM_DELIM "\n"
 #define ADD_PARAM_LEN(BootConfigFlag, ParamLen, CmdLineL, BootConfigL) \
@@ -103,8 +107,10 @@ STATIC CONST CHAR8 *AndroidBootMode = " androidboot.mode=";
 STATIC CONST CHAR8 *LogLevel = " quite";
 STATIC CONST CHAR8 *BatteryChgPause = " androidboot.mode=charger";
 STATIC CONST CHAR8 *MdtpActiveFlag = " mdtp";
+STATIC CONST CHAR8 *PartActiveBoot = " part.activeboot=boot";
 STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
 STATIC CHAR8 SystemdSlotEnv[] = " systemd.setenv=\"SLOT_SUFFIX=_a\"";
+STATIC CONST CHAR8 RecoveryInfoGpio[] = " recoveryinfo_gpio=1";
 STATIC CONST CHAR8 *NoPasr = " mem_offline.nopasr=1";
 /*Silent Boot Mode */
 STATIC CHAR8 *SilentBootEnbCmdLine =
@@ -119,14 +125,22 @@ STATIC CHAR8 *SilentBootNForCmdLine =
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
+#if RW_ROOTFS
+STATIC CHAR8 *RootCmdLine = " rootwait rw init=";
+#else
 STATIC CHAR8 *RootCmdLine = " rootwait ro init=";
+#endif
 STATIC CHAR8 *InitCmdline = INIT_BIN;
 STATIC CHAR8 *SkipRamFs = " skip_initramfs";
 
 STATIC CHAR8 IPv4AddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IPv6AddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 MacEthAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
+STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
 /* Display command line related structures */
 #define MAX_DISPLAY_CMD_LINE 256
@@ -137,15 +151,27 @@ STATIC UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
 STATIC CHAR8 HwFenceCmdLine[MAX_HW_FENCE_CMD_LINE];
 STATIC UINTN HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
 
+/* GPU command line related structures */
+#define MAX_GPU_CMD_LINE 256
+STATIC CHAR8 GpuCmdLine[MAX_GPU_CMD_LINE];
+STATIC UINTN GpuCmdLineLen = sizeof (GpuCmdLine);
+
+#define MAX_AUDIO_CMD_LENGTH 64
+STATIC CHAR8 AudioFrameWork[MAX_AUDIO_FW_LENGTH];
+STATIC UINT32 AudioFWLen;
+STATIC CHAR8 *AndroidBootAudioFW = " androidboot.audio=";
+
 #define MAX_DTBO_IDX_STR 64
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
 STATIC CHAR8 *AndroidBootDtbIdx = " androidboot.dtb_idx=";
 
-STATIC CONST CHAR8 *AndroidBootForceNormalBoot =
-                                      " androidboot.force_normal_boot=1";
+STATIC CHAR8 *AndroidBootForceNormalBoot =
+                                      " androidboot.force_normal_boot=";
+CHAR8 BootForceNormalBoot = '0';
 STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
+STATIC CHAR8 *FstabSuffixNetworkBoot = "network_boot";
 STATIC CHAR8 *FstabSuffixDefault = "default";
 
 /* Memory offline arguments */
@@ -381,12 +407,48 @@ STATIC VOID GetHwFenceCmdline (VOID)
   }
 }
 
+STATIC EFI_STATUS GetGpuCmdline (VOID)
+{
+  EFI_STATUS Status;
+
+  Status = gRT->GetVariable ((CHAR16 *)L"GpuConfiguration",
+                             &gQcomTokenSpaceGuid, NULL, &GpuCmdLineLen,
+                             GpuCmdLine);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Unable to get GPU Preempt Config, %r\n", Status));
+  }
+
+  return Status;
+}
+
+
+STATIC VOID
+GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
+{
+  EFI_STATUS Status;
+  CHAR8 *Src;
+  CHAR8 *AUDIOFRAMEWORK;
+
+  AUDIOFRAMEWORK = GetAudioFw ();
+
+  if ((*Length = AsciiStrLen (AUDIOFRAMEWORK)) > 0) {
+      AsciiStrCpyS (FrameWork, *Length + 1, AUDIOFRAMEWORK);
+      Status = ReadAudioFrameWork (&Src, Length);
+    if (Status == EFI_SUCCESS) {
+      if (*Length) {
+        AsciiStrCpyS (FrameWork, *Length, Src);
+      }
+    }
+  }
+}
+
 /*
  * Returns length = 0 when there is failure.
  */
 UINT32
 GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
-                CHAR16 *ReqPartition, CHAR8 *Key, BOOLEAN FlashlessBoot)
+                CHAR16 *ReqPartition, CHAR8 *Key, BOOLEAN FlashlessBoot,
+                BOOLEAN NetworkBoot)
 {
   INT32 Index;
   UINT32 Lun;
@@ -401,10 +463,11 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
     return 0;
   }
 
-  if (FlashlessBoot) {
-     AsciiSPrint (*SysPath, MAX_PATH_SIZE,
-                     " rootfstype=squashfs root=/dev/ram0");
-     return AsciiStrLen (*SysPath);
+  if (FlashlessBoot ||
+      NetworkBoot) {
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+                 " rootfstype=squashfs root=/dev/ram0");
+    return AsciiStrLen (*SysPath);
   }
 
   if (ReqPartition == NULL ||
@@ -424,12 +487,25 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
             StrLen (ReqPartition));
   }
 
+  /* If it support Ubuntu ab ota, there are not system _a and _b slot.
+   * And there is only one system partition.*/
+#ifndef UBUNTU_AB_OTA
   /* Append slot info for A/B Variant */
   if (MultiSlotBoot &&
       NAND != CheckRootDeviceType ()) {
-     StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
-            StrLen (CurSlot.Suffix));
+    /* Skip slot suffix when RecoveryInfo and slot a*/
+    if (!StrCmp (CurSlot.Suffix, L"_a")) {
+      if (!IsRecoveryInfo ()) {
+        StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
+                  StrLen (CurSlot.Suffix));
+      }
+    } else {
+      /* Slots other than _a */
+      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
+                StrLen (CurSlot.Suffix));
+    }
   }
+#endif
 
   Index = GetPartitionIndex (PartitionName);
   if (Index == INVALID_PTN || Index >= MAX_NUM_PARTITIONS) {
@@ -469,9 +545,16 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
                    " rootfstype=squashfs root=/dev/mtdblock%d ubi.mtd=%d",
                    MtdBlkIndex, (Index - 1));
     } else {
-      AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+      Slot CurSlot = GetCurrentSlotSuffix ();
+      if (MultiSlotBoot) {
+        AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+         " rootfstype=ubifs rootflags=bulk_read root=ubi0:rootfs%s ubi.mtd=%d",
+                 CurSlot.Suffix, (Index - 1));
+      } else {
+        AsciiSPrint (*SysPath, MAX_PATH_SIZE,
           " rootfstype=ubifs rootflags=bulk_read root=ubi0:rootfs ubi.mtd=%d",
           (Index - 1));
+      }
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/sd%c%d",
@@ -495,14 +578,95 @@ GetResumeCmdLine (CHAR8 **ResumeCmdLine, CHAR16 *ReqPartition)
   BOOLEAN MultiSlotBoot;
   UINT32 Len = 0;
 
-  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"swap_a");
+  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)SWAP_PARTITION_NAME);
   Len = GetSystemPath (ResumeCmdLine, MultiSlotBoot, FALSE,
-                (CHAR16 *)L"swap_a", (CHAR8 *)"resume", FALSE);
+                (CHAR16 *)SWAP_PARTITION_NAME, (CHAR8 *)"resume", FALSE, FALSE);
   if (Len == 0) {
      DEBUG ((EFI_D_ERROR, "GetSystemPath failed\n"));
      return 0;
   }
   return Len;
+}
+
+/*
+ * Returns length = 0 when there is failure.
+ */
+UINT32
+GetSystemPathByPname (CHAR8 **SysPath, BOOLEAN MultiSlotBoot,
+                      BOOLEAN BootIntoRecovery,
+                      CHAR16 *ReqPartition, CHAR8 *Key)
+{
+  INT32 Index;
+  UINT32 Lun;
+  CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
+  Slot CurSlot = GetCurrentSlotSuffix ();
+  CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
+  CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
+
+  *SysPath = AllocateZeroPool (sizeof (CHAR8) * MAX_PATH_SIZE);
+  if (!*SysPath) {
+    DEBUG ((EFI_D_ERROR,
+      "GetSystemPathByPname: Failed to allocated memory System path query\n"));
+    return 0;
+  }
+
+  if (ReqPartition == NULL ||
+      Key == NULL) {
+     DEBUG ((EFI_D_ERROR, "GetSystemPathByPname: Invalid parameters: NULL\n"));
+     FreePool (*SysPath);
+     *SysPath = NULL;
+     return 0;
+  }
+
+  if (IsLEVariant () &&
+       BootIntoRecovery) {
+     StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, (CONST CHAR16 *)L"recoveryfs",
+               StrLen ((CONST CHAR16 *)L"recoveryfs"));
+  } else {
+     StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, ReqPartition,
+               StrLen (ReqPartition));
+  }
+
+  /* Append slot info for A/B Variant */
+  if (MultiSlotBoot) {
+     StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
+            StrLen (CurSlot.Suffix));
+  }
+
+  Index = GetPartitionIndex (PartitionName);
+  if (Index == INVALID_PTN ||
+      Index >= MAX_NUM_PARTITIONS) {
+    DEBUG ((EFI_D_ERROR,
+           "GetSystemPathByPname: System partition does not exist\n"));
+    FreePool (*SysPath);
+    *SysPath = NULL;
+    return 0;
+  }
+
+  Lun = GetPartitionLunFromIndex (Index);
+  GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
+  if (!AsciiStrCmp ("Unknown", RootDevStr)) {
+    FreePool (*SysPath);
+    *SysPath = NULL;
+    return 0;
+  }
+
+  if (!AsciiStrCmp ("EMMC", RootDevStr)) {
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/mmcblk0p%d", Key, Index);
+  } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/sd%c%d",
+                 Key,
+                 LunCharMapping[Lun],
+                 GetPartitionIdxInLun (PartitionName, Lun));
+  } else {
+    DEBUG ((EFI_D_ERROR, "GetSystemPathByPname: Unknown Device type\n"));
+    FreePool (*SysPath);
+    *SysPath = NULL;
+    return 0;
+  }
+  DEBUG ((EFI_D_ERROR, "GetSystemPathByPname: System Path - %a \n", *SysPath));
+
+  return AsciiStrLen (*SysPath);
 }
 
 STATIC
@@ -511,11 +675,13 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
 {
   UINT64 DdrSize = 0;
   UINT64 MemLimit;
-  UINT32 i = 0;
+  INT32 i = 0;
   INT32 MemOfflineOffset;
   UINT64 *MemTable;
   INT32 PropLen;
+  CONST CHAR8 *status = NULL;
   EFI_STATUS Status;
+  UINT64 UpdRamPartitionSize = 0;
 
   if (IsLEVariant ()) {
     goto Unsupported;
@@ -527,8 +693,19 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
     return Status;
   }
 
+  if (UpdRamPartitionsAvail) {
+    for (i =0; i < NumUpdPartitions; i++) {
+      UpdRamPartitionSize += UpdatedRamPartitions[i].AvailableLength;
+    }
+    DdrSize = UpdRamPartitionSize;
+  }
+
   MemLimit = DdrSize;
   MemOfflineOffset = FdtPathOffset (fdt, "/mem-offline");
+  status = fdt_getprop (fdt, MemOfflineOffset, "status", &PropLen);
+  if (status &&
+      (AsciiStrnCmp (status, "disabled", PropLen) == 0))
+    goto Unsupported;
 
   if (DdrSize < MEM_OFF_MIN ||
       MemOfflineOffset < 0) {
@@ -602,6 +779,13 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
 
   if (Param->FlashlessBoot) {
     Src = WarmResetArgs;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  } else if (Param->NetworkBoot) {
+    Src = WarmResetArgs;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->AndroidBootFstabSuffix;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->FstabSuffix;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -682,13 +866,31 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
   Src = Param->HwFenceCmdLine;
   AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
+  Src = Param->GpuCmdLine;
+  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+
   if (Param->MdtpActive) {
     Src = Param->MdtpActiveFlag;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if (Param->MultiSlotBoot &&
-     !IsBootDevImage ()) {
+  if (NAND == CheckRootDeviceType ()) {
+    Src = PartActiveBoot;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    if (Param->MultiSlotBoot) {
+      Slot CurrentSlot = GetCurrentSlotSuffix ();
+      if (!IsRecoveryInfo () ||
+         (StrCmp (CurrentSlot.Suffix, L"_a"))) {
+        char CurSlotSuffix[sizeof (CurrentSlot.Suffix)];
+        AsciiSPrint (CurSlotSuffix, sizeof (CurrentSlot.Suffix),
+                     "%s", CurrentSlot.Suffix);
+        AsciiStrCatS (Dst, MaxCmdLineLen, CurSlotSuffix);
+      }
+    }
+  }
+
+  if (Param->MultiSlotBoot) {
+      if (!IsBootDevImage ()) {
         UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
                               Param->SlotSuffixAscii);
         if (IsLEVariant () &&
@@ -698,26 +900,41 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
           SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
           Src = Param->SystemdSlotEnv;
           AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-        } else {
-          /* Slot suffix */
+      } else {
+           /* Slot suffix */
           if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
-                  Src = Param->AndroidSlotSuffix;
-                  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+            Src = Param->AndroidSlotSuffix;
+            AsciiStrCatS (Dst, MaxCmdLineLen, Src);
           }
           if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
-                  Src = Param->SlotSuffixAscii;
-                  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+            Src = Param->SlotSuffixAscii;
+            AsciiStrCatS (Dst, MaxCmdLineLen, Src);
           } else {
-                  BootConfigFlag = IsAndroidBootParam (Param->AndroidSlotSuffix,
-                  AsciiStrLen (Param->AndroidSlotSuffix),
+            BootConfigFlag = IsAndroidBootParam (Param->AndroidSlotSuffix,
+            AsciiStrLen (Param->AndroidSlotSuffix),
                                   Param->HeaderVersion);
-                  AddtoBootConfigList (BootConfigFlag, Param->AndroidSlotSuffix,
+            AddtoBootConfigList (BootConfigFlag, Param->AndroidSlotSuffix,
                                   Param->SlotSuffixAscii,
                                   BootConfigListHead,
                                   AsciiStrLen (Param->AndroidSlotSuffix),
                                   AsciiStrLen (Param->SlotSuffixAscii));
-          }
         }
+      }
+  } else if (IsRecoveryInfo() &&
+               IsLEVariant ()) {
+           /* Recoveryinfo needs LE slot suffix */
+           INT32 StrLen = 0;
+           UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
+                              Param->SlotSuffixAscii);
+           StrLen = AsciiStrLen (SystemdSlotEnv);
+           SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
+           Src = Param->SystemdSlotEnv;
+           AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+           if (RI_IsGpioControlled()) {
+             Src = Param->RecoveryInfoGpio;
+             AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+           }
+      }
   }
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
@@ -753,14 +970,19 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if (((IsBuildUseRecoveryAsBoot () ||
-      IsRecoveryHasNoKernel ()) &&
-      IsDynamicPartitionSupport () &&
-      !Param->Recovery) ||
-      (!Param->MultiSlotBoot &&
-       !IsBuildUseRecoveryAsBoot ())) {
+  if (!Param->Recovery &&
+      (((IsBuildUseRecoveryAsBoot () ||
+         IsRecoveryHasNoKernel ()) &&
+         IsDynamicPartitionSupport ()) ||
+         (!Param->MultiSlotBoot &&
+         !IsBuildUseRecoveryAsBoot ()))) {
+    if (Param->HeaderVersion < BOOT_HEADER_VERSION_THREE) {
+      BootForceNormalBoot = '1';
+    }
     if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
       Src = AndroidBootForceNormalBoot;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      Src = &BootForceNormalBoot;
       AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     }
   }
@@ -793,6 +1015,22 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyEthMacCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyPhyAddrCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyIFaceCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlySpeedCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (EarlyUsbInitEnabled ()) {
+    Src = Param->UsbCompCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (IsIntegrityIMAEnabled ()) {
+    Src = Param->IntegrityIMACmdline;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (IsHibernationEnabled ()) {
@@ -803,6 +1041,18 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
   if (Param->SilentBootModeCmdLine != NULL) {
     Src = Param->SilentBootModeCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (BootCpuSelectionEnabled ()) {
+    Src = Param->BootCpuCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
+  if (EarlyServicesEnabled ()) {
+    if (Param->ModemPathCmdLine) {
+        Src = Param->ModemPathCmdLine;
+        AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    }
   }
 
   return EFI_SUCCESS;
@@ -869,6 +1119,9 @@ AddtoBootConfigList (BOOLEAN BootConfigFlag,
   NewNode = (struct BootConfigParamNode *)
                AllocateBootConfigNode (ParamKeyLen + SIZE_OF_DELIM +
                SIZE_OF_DELIM + ParamValueLen);
+  if (!NewNode) {
+    return;
+  }
   gBS->CopyMem (NewNode->param, (CHAR8*)ParamKey, ParamKeyLen);
   if (ParamValue) {
     gBS->CopyMem (&NewNode->param[ParamKeyLen], (CHAR8*)ParamValue,
@@ -929,7 +1182,8 @@ UpdateBootConfigParams (LIST_ENTRY *BootConfigListHead,
   }
   Link = GetFirstNode (BootConfigListHead);
   if (!Link) {
-    DEBUG ((EFI_D_INFO, "Error in Node entry \n"));
+    DEBUG ((EFI_D_ERROR, "Error in Node entry \n"));
+    return EFI_D_ERROR;
   }
 
   gBS->CopyMem (Dst, "\n", SIZE_OF_DELIM);
@@ -965,7 +1219,8 @@ ClearBootConfigList (LIST_ENTRY* BootConfigListHead)
 
   Link = GetFirstNode (BootConfigListHead);
   if (!Link) {
-    DEBUG ((EFI_D_INFO, "Error in Node entry \n"));
+    DEBUG ((EFI_D_ERROR, "Error in Node entry \n"));
+    return;
   }
 
   while (!IsNull (BootConfigListHead, Link)) {
@@ -999,6 +1254,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                CHAR8 *FfbmStr,
                BOOLEAN Recovery,
                BOOLEAN FlashlessBoot,
+               BOOLEAN NetworkBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
                UINT32 HeaderVersion,
@@ -1027,6 +1283,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
   CHAR8 MemOffAmt[MEM_OFF_SIZE];
   BOOLEAN BootConfigFlag = FALSE;
+  CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
+  CHAR8 IntegrityIMACmdline[IMA_CMDLINE_LEN] = "\0";
 
   CONST CHAR8 *CmdLine = BootParamlistPtr->CmdLine;
   CHAR8 **FinalCmdLine = &BootParamlistPtr->FinalCmdLine;
@@ -1035,7 +1293,12 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   VOID *fdt = (VOID *)BootParamlistPtr->DeviceTreeLoadAddr;
 
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
+  if (BootConfigListHead == NULL) {
+    DEBUG ((EFI_D_ERROR, "BootConfigListHead: Out of resources\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
   InitializeListHead (BootConfigListHead);
+  CHAR8 *ModemPathStr = NULL;
 
   Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
   if (Status != EFI_SUCCESS) {
@@ -1196,26 +1459,56 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     AddtoBootConfigList (BootConfigFlag, MdtpActiveFlag, NULL,
                      BootConfigListHead, ParamLen, 0);
   }
+
+  if (NAND == CheckRootDeviceType ()) {
+    /* Add additional length for slot suffix */
+    ParamLen = AsciiStrLen (PartActiveBoot) + MAX_SLOT_SUFFIX_SZ;
+    BootConfigFlag = IsAndroidBootParam (PartActiveBoot,
+                               ParamLen, HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+                                         BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, PartActiveBoot, NULL,
+                     BootConfigListHead, ParamLen, 0);
+  }
+
   MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
-  if (MultiSlotBoot &&
-     !IsBootDevImage ()) {
-       if (IsLEVariant () &&
-          !IsLVBootslotEnabled ()) {
-         ParamLen = AsciiStrLen (SystemdSlotEnv);
-         BootConfigFlag = IsAndroidBootParam (SystemdSlotEnv,
+  if (MultiSlotBoot) {
+    if (!IsBootDevImage ()) {
+      if (IsLEVariant () &&
+        !IsLVBootslotEnabled ()) {
+        ParamLen = AsciiStrLen (SystemdSlotEnv);
+        BootConfigFlag = IsAndroidBootParam (SystemdSlotEnv,
                          ParamLen, HeaderVersion);
-         ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-         AddtoBootConfigList (BootConfigFlag, SystemdSlotEnv, NULL,
+        ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+        AddtoBootConfigList (BootConfigFlag, SystemdSlotEnv, NULL,
                          BootConfigListHead, ParamLen, 0);
        } else {
-         /* Add additional length for slot suffix */
+           /* Add additional length for slot suffix */
          ParamLen = AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
          BootConfigFlag = IsAndroidBootParam (AndroidSlotSuffix,
                          ParamLen, HeaderVersion);
          ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
                          BootConfigLen);
-       }
+      }
+    } else if (IsRecoveryInfo () &&
+               IsLEVariant ()) {
+        ParamLen = AsciiStrLen (SystemdSlotEnv);
+        BootConfigFlag = IsAndroidBootParam (SystemdSlotEnv,
+                         ParamLen, HeaderVersion);
+        ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+        AddtoBootConfigList (BootConfigFlag, SystemdSlotEnv, NULL,
+                         BootConfigListHead, ParamLen, 0);
+        if (RI_IsGpioControlled()) {
+          ParamLen = AsciiStrLen (RecoveryInfoGpio);
+          BootConfigFlag = IsAndroidBootParam (RecoveryInfoGpio, ParamLen,
+                                           HeaderVersion);
+          AddtoBootConfigList (BootConfigFlag, RecoveryInfoGpio, NULL,
+                              BootConfigListHead, ParamLen, 0);
+          ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+        }
+      }
   }
+
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
       !MultiSlotBoot) ||
@@ -1266,6 +1559,40 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   AddtoBootConfigList (BootConfigFlag, HwFenceCmdLine, NULL,
                    BootConfigListHead, ParamLen, 0);
 
+  if (EFI_SUCCESS == GetGpuCmdline ()) {
+      ParamLen = AsciiStrLen (GpuCmdLine);
+      BootConfigFlag = IsAndroidBootParam (GpuCmdLine,
+                              ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+                                          BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, GpuCmdLine, NULL,
+                        BootConfigListHead, ParamLen, 0);
+  }
+
+  if ( (!FlashlessBoot) &&
+       (!NetworkBoot) ) {
+    GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
+    if (AsciiStrLen (AudioFrameWork)) {
+       ParamLen = AsciiStrLen (AndroidBootAudioFW);
+       BootConfigFlag = IsAndroidBootParam (AndroidBootAudioFW,
+       ParamLen, HeaderVersion);
+       ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+       CmdLineLen, BootConfigLen);
+       AddtoBootConfigList (BootConfigFlag, AndroidBootAudioFW, AudioFrameWork,
+       BootConfigListHead, ParamLen, AsciiStrLen (AudioFrameWork));
+       ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (AudioFrameWork),
+       CmdLineLen, BootConfigLen);
+    }
+  }
+
+  if (EarlyServicesEnabled ()) {
+    CmdLineLen += GetSystemPathByPname (&ModemPathStr,
+                                        MultiSlotBoot,
+                                        Recovery,
+                                        (CHAR16 *)L"modem",
+                                        (CHAR8 *)"modem");
+  }
+
   if (!IsLEVariant ()) {
     DtboIdx = GetDtboIdx ();
     if (DtboIdx != INVALID_PTN) {
@@ -1294,19 +1621,28 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     }
   }
 
+  if (!IsRecoveryHasNoKernel () &&
+      !Recovery) {
+    BootForceNormalBoot = '1';
+  }
+
   if (((IsBuildUseRecoveryAsBoot () ||
       IsRecoveryHasNoKernel ()) &&
       IsDynamicPartitionSupport () &&
       !Recovery) ||
       (!MultiSlotBoot &&
-       !IsBuildUseRecoveryAsBoot ())) { 
+       !IsBuildUseRecoveryAsBoot ())) {
     ParamLen = AsciiStrLen (AndroidBootForceNormalBoot);
     BootConfigFlag = IsAndroidBootParam (AndroidBootForceNormalBoot,
                                            ParamLen, HeaderVersion);
     ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
                                          BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, AndroidBootForceNormalBoot, NULL,
-                    BootConfigListHead, ParamLen, 0);
+    AddtoBootConfigList (BootConfigFlag, AndroidBootForceNormalBoot,
+                    &BootForceNormalBoot,
+                    BootConfigListHead, ParamLen,
+                    sizeof (BootForceNormalBoot));
+    ADD_PARAM_LEN (BootConfigFlag, sizeof (BootForceNormalBoot),
+                   CmdLineLen, BootConfigLen);
   }
 
   ParamLen = AsciiStrLen (AndroidBootFstabSuffix);
@@ -1318,9 +1654,13 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) {
     Param.FstabSuffix = FstabSuffixEmmc;
+  } else if ((AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) &&
+             NetworkBoot) {
+    Param.FstabSuffix = FstabSuffixNetworkBoot;
   } else {
     Param.FstabSuffix = FstabSuffixDefault;
   }
+
   Param.AndroidBootFstabSuffix = AndroidBootFstabSuffix;
   AddtoBootConfigList (BootConfigFlag, AndroidBootFstabSuffix,
                   Param.FstabSuffix,
@@ -1368,6 +1708,15 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   } else {
     Param.MemOffAmt = NULL;
   }
+  if (FlashlessBoot ||
+       NetworkBoot) {
+    ParamLen = AsciiStrLen (WarmResetArgs);
+    BootConfigFlag = IsAndroidBootParam (WarmResetArgs,
+                    ParamLen, HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, WarmResetArgs, NULL,
+               BootConfigListHead, ParamLen, 0);
+  }
 
   if (SilentMode == SILENT_MODE) {
     CmdLineLen += AsciiStrLen (SilentBootEnbCmdLine);
@@ -1386,17 +1735,47 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   if (EarlyEthEnabled ()) {
     GetEarlyEthInfoFromPartition (IPv4AddrBufCmdLine,
                                  IPv6AddrBufCmdLine,
-                                 MacEthAddrBufCmdLine);
+                                 MacEthAddrBufCmdLine,
+                                 PhyAddrBufCmdLineCmdLine,
+                                 IFaceAddrBufCmdLine,
+                                 SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (PhyAddrBufCmdLineCmdLine);
+    CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
+  }
+
+  if (EarlyUsbInitEnabled ()) {
+    GetEarlyUsbCmdlineParam (UsbCompositionCmdline);
+    CmdLineLen += AsciiStrLen (UsbCompositionCmdline);
+  }
+
+  if (IsIntegrityIMAEnabled ()) {
+    GetIntegrityIMACmdline (IntegrityIMACmdline);
+    CmdLineLen += AsciiStrLen (IntegrityIMACmdline);
+  }
+
+  if (BootCpuSelectionEnabled ()) {
+    AsciiSPrint (BootCpuCmdLine, sizeof (BootCpuCmdLine), " boot_cpu=%d",
+                 BootCpuId);
+    ParamLen = AsciiStrLen (BootCpuCmdLine);
+    BootConfigFlag = IsAndroidBootParam (BootCpuCmdLine,
+                          ParamLen, HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                 CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, BootCpuCmdLine, NULL,
+                BootConfigListHead, ParamLen, 0);
+    Param.BootCpuCmdLine = BootCpuCmdLine;
   }
 
   /* 1 extra byte for NULL */
   CmdLineLen += 1;
 
   if (IsHibernationEnabled ()) {
-    CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, (CHAR16 *)L"swap_a");
+    CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, 
+                    (CHAR16 *)SWAP_PARTITION_NAME);
   }
 
   Param.Recovery = Recovery;
@@ -1404,6 +1783,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.AlarmBoot = AlarmBoot;
   Param.MdtpActive = MdtpActive;
   Param.FlashlessBoot = FlashlessBoot;
+  Param.NetworkBoot = NetworkBoot;
   Param.CmdLineLen = CmdLineLen;
   Param.HaveCmdLine = HaveCmdLine;
   Param.PauseAtBootUp = PauseAtBootUp;
@@ -1412,6 +1792,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.ChipBaseBand = ChipBaseBand;
   Param.DisplayCmdLine = DisplayCmdLine;
   Param.HwFenceCmdLine = HwFenceCmdLine;
+  Param.GpuCmdLine = GpuCmdLine;
   Param.CmdLine = CmdLine;
   Param.AlarmBootCmdLine = AlarmBootCmdLine;
   Param.MdtpActiveFlag = MdtpActiveFlag;
@@ -1432,11 +1813,24 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.LEVerityCmdLine = LEVerityCmdLine;
   Param.HeaderVersion = HeaderVersion;
   Param.SystemdSlotEnv = SystemdSlotEnv;
+  Param.RecoveryInfoGpio = RecoveryInfoGpio;
+  Param.ModemPathCmdLine = ModemPathStr;
 
   if (EarlyEthEnabled ()) {
     Param.EarlyIPv4CmdLine = IPv4AddrBufCmdLine;
     Param.EarlyIPv6CmdLine = IPv6AddrBufCmdLine;
     Param.EarlyEthMacCmdLine = MacEthAddrBufCmdLine;
+    Param.EarlyPhyAddrCmdLine = PhyAddrBufCmdLineCmdLine;
+    Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
+    Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
+  }
+
+  if (EarlyUsbInitEnabled ()) {
+    Param.UsbCompCmdLine = UsbCompositionCmdline;
+  }
+
+  if (IsIntegrityIMAEnabled ()) {
+    Param.IntegrityIMACmdline = IntegrityIMACmdline;
   }
 
   if (IsHibernationEnabled ()) {

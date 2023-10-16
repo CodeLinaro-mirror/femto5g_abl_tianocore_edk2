@@ -628,6 +628,7 @@ EFI_STATUS SetFuse (uint32_t FuseId)
   return Status;
 }
 
+#if AVB_ENABLE_LEGACY_FEATURE
 EFI_STATUS GetFuse (uint32_t FuseId, bool *get_fuse_id)
 {
   EFI_STATUS Status = EFI_SUCCESS;
@@ -664,6 +665,7 @@ EFI_STATUS GetFuse (uint32_t FuseId, bool *get_fuse_id)
   }
   return Status;
 }
+#endif
 
 STATIC EFI_STATUS ScmGetFeatureVersion (uint32_t FeatureId, uint32_t *Version)
 {
@@ -797,7 +799,7 @@ EFI_STATUS UpdateRollbackSyscall ()
     }
     if (SysCallRsp->status != 1) {
       Status = SysCallRsp->status;
-      DEBUG(( EFI_D_ERROR, "TZ_UPDATE_ROLLBACK_VERSION_ID failed, "
+      DEBUG (( EFI_D_ERROR, "TZ_UPDATE_ROLLBACK_VERSION_ID failed, "
                     "Status = (0x%x)\r\n", Status));
       return Status;
     }

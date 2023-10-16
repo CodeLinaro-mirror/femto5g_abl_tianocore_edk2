@@ -27,14 +27,74 @@ OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************/
 
+/*
+ *  Changes from Qualcomm Innovation Center are provided under the following
+ *  license:
+ *
+ *  Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights
+ *  reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted (subject to the limitations in the
+ *  disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *        contributors may be used to endorse or promote products derived
+ *        from this software without specific prior written permission.
+ *
+ *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ *  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #ifndef AES_PUBLIC_H
 #define AES_PUBLIC_H
 
 /*===========================================================================
                      INCLUDE FILES FOR MODULE
 ===========================================================================*/
-#include <stdint.h>
+#include <avb/libavb/libavb.h>
 #include "env_comdef.h"
+#include "utils.h"
+#include "modes.h"
+
+#define ARMV8_AES_MAXNR             14
+#define CIPHER_AES_BLK_SIZE         16
+
+#define CIPHER_AES_IV_SIZE          16                           /** bytes */
+#define CIPHER_MAX_IV_SIZE          60                           /** bytes */
+
+/**
+ * AES Key and IV sizes
+ */
+#define SW_AES128_KEY_SIZE          16
+#define SW_AES192_KEY_SIZE          24
+#define SW_AES256_KEY_SIZE          32
+#define CIPHER_MAX_KEY_SIZE         SW_AES256_KEY_SIZE
+#define CIPHER_INVALID_KEY_SIZE     0xFFFF                     /** invalid value for key size */
+
+
+#define SW_AES_IV_SIZE         CIPHER_AES_IV_SIZE
+#define SW_AES_BLOCK_BYTE_LEN  16
+#define SW_AES_MAX_IV_SIZE     60
 
 #ifndef IOVECDEF
 typedef  struct  {
@@ -108,6 +168,36 @@ typedef enum
   SW_CIPHER_KEY_SIZE_MAX         = 0x7FFFFFFF
 } SW_Cipher_Key_Size;
 
+typedef struct
+{
+  uint32_t  rd_key[4 * (ARMV8_AES_MAXNR + 1)];
+  int       rounds;
+} AES_KEY;
+
+typedef struct AES_GCM_ARMV8_ctx_s
+{
+  AES_KEY key;
+  GCM128_CONTEXT *ctx;
+  uint8_t  itag[CIPHER_AES_BLK_SIZE];
+  size_t   tag_sz;
+  uint32_t xcm_flags;
+  uint32_t flags;
+  unsigned char iv[CIPHER_MAX_IV_SIZE]; /** Pointer to IV buffer   */
+  size_t   iv_sz;
+  uint8_t  c_key[CIPHER_MAX_KEY_SIZE]; /** Pointer to Cipher Key  */
+  size_t   c_keysize;                  /** Key Size in byte   */
+  SW_Cipher_Alg_Type algo;
+  SW_CipherModeType        mode; /** currently supports GCM only*/
+  SW_CipherEncryptDir dir;
+} AES_GCM_ARMV8_CTX;
+
+/* MAX_GCM_CONTEXTS is the max number of contexts */
+typedef struct GcmAesStruct {
+  AES_GCM_ARMV8_CTX gAesGcmArmV8Ctx;
+  boolean gInitDone;
+  UINT32 InstanceId;
+}GcmAesStruct;
+
 #ifndef _DEFINED_CRYPTOCNTXHANDLE
 #define _DEFINED_CRYPTOCNTXHANDLE
 typedef void CryptoCntxHandle;
@@ -124,7 +214,7 @@ typedef void CryptoCntxHandle;
  *
  */
 
-sw_crypto_errno_enum_type SW_Cipher_Init( SW_Cipher_Alg_Type pAlgo);
+sw_crypto_errno_enum_type SW_Cipher_Init( SW_Cipher_Alg_Type pAlgo, GcmAesStruct *ctx);
 
 /**
  * @brief Deintialize a cipher context
@@ -135,7 +225,7 @@ sw_crypto_errno_enum_type SW_Cipher_Init( SW_Cipher_Alg_Type pAlgo);
  *
  */
 
-sw_crypto_errno_enum_type SW_Cipher_DeInit();
+sw_crypto_errno_enum_type SW_Cipher_DeInit(GcmAesStruct *ctx);
 
 /**
  * @brief This function encrypts/decrypts the passed message
@@ -149,7 +239,7 @@ sw_crypto_errno_enum_type SW_Cipher_DeInit();
  */
 
 sw_crypto_errno_enum_type SW_CipherData (               IovecListType    ioVecIn,
-                              IovecListType    *ioVecOut);
+                              IovecListType    *ioVecOut, const GcmAesStruct *ctx);
 
 
 
@@ -166,7 +256,8 @@ sw_crypto_errno_enum_type SW_CipherData (               IovecListType    ioVecIn
  */
 sw_crypto_errno_enum_type SW_Cipher_SetParam (                 SW_CipherParam  nParamID,
                                   const void           *pParam,
-                                  uint32               cParam );
+                                  uint32               cParam ,
+                                  const GcmAesStruct *ctx);
 
 /**
  * @brief This functions gets the Cipher paramaters created by
@@ -181,6 +272,7 @@ sw_crypto_errno_enum_type SW_Cipher_SetParam (                 SW_CipherParam  n
  */
 sw_crypto_errno_enum_type SW_Cipher_GetParam (                 SW_CipherParam       nParamID,
                                               void                 *pParam,
-                                              uint32               cParam );
+                                              uint32               cParam ,
+                                              const GcmAesStruct *ctx);
 
 #endif /* AES_SHARED */

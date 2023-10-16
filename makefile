@@ -1,5 +1,31 @@
 UEFI_TOP_DIR := .
 
+export BUILD_NATIVE_AARCH64 := ${BUILD_NATIVE_AARCH64}
+export SIGN_ABL_IMAGE := ${SIGN_ABL_IMAGE}
+# Standalone boot configuration for native building
+ifeq ($(BUILD_NATIVE_AARCH64),true)
+	export VERIFIED_BOOT := 0
+	export VERIFIED_BOOT_LE := false
+	export ENABLE_LE_VARIANT := false
+	export VERITY_LE := false
+	export DEFAULT_UNLOCK := true
+	export BUILD_SYSTEM_ROOT_IMAGE := false
+	export AB_RETRYCOUNT_DISABLE := false
+	export DISABLE_PARALLEL_DOWNLOAD_FLASH := false
+	export DYNAMIC_PARTITION_SUPPORT := 1
+	export USER_BUILD_VARIANT := false
+	export BOOTLOADER_OUT := $(pwd)/obj/ABL_OBJ
+	export CLANG_BIN := /usr/bin/
+	export CLANG_PREFIX := /usr/bin/aarch64-redhat-linux- 
+	export TARGET_ARCHITECTURE := arm64
+	export DISABLE_KERNEL_PROTOCOL := false
+	export DISABLE_MULTI_BOOT := false
+	export ENABLE_POWER_KEY_MULTIPLEX := false
+endif
+
+# Common boot configuration for all targets
+export CLEAR_RESET_REASON := true
+
 ifndef $(BOOTLOADER_OUT)
 	BOOTLOADER_OUT := $(shell pwd)
 endif
@@ -10,6 +36,13 @@ export WRAPPER := $(PREBUILT_PYTHON_PATH) $(BUILDDIR)/clang-wrapper.py
 export MAKEPATH := $(MAKEPATH)
 
 export CLANG35_BIN := $(CLANG_BIN)
+ifeq ($(BUILD_NATIVE_AARCH64),true)
+	export FUSE_LD := $(CLANG35_BIN)/ld
+	export EXTRA_GCC_ARG := -Wno-error=unused-command-line-argument
+else
+	export FUSE_LD := $(CLANG35_BIN)/ld.lld
+	export EXTRA_GCC_ARG :=
+endif
 export CLANG35_GCC_TOOLCHAIN := $(CLANG35_GCC_TOOLCHAIN)
 export $(BOARD_BOOTLOADER_PRODUCT_NAME)
 
@@ -51,11 +84,90 @@ define edk_tools_generate
   touch $(EDK_TOOLS_PATH_MARK_FILE)
 endef
 
+# Secure signing implementation for standalone native building
+ifeq ($(SIGN_ABL_IMAGE),true)
+	SECTOOL_DIR ?= /usr/bin/sectools
+	SECTOOL_PROJ ?= sdm855
+	SIGN_ID ?= abl
+	SOC_HW_VER ?= 0x60030000
+	SOC_VERS ?= 0x6003
+	SECIMAGE_XML ?= secimagev3
+	ABL_SIGNED ?= $(BUILDDIR)/signed_abl
+	USES_SEC_POLICY_MULTIPLE_DEFAULT_SIGN ?= 1
+	USES_SEC_POLICY_DEFAULT_SUBFOLDER_SIGN ?= ""
+	USES_SEC_POLICY_INTEGRITY_CHECK ?= 1
+endif
+
+# Check if build was success, and try to sign the image, if requested
+define validate-cum-sign
+	if [ "$(BUILD_NATIVE_AARCH64)" = "true" ]; then \
+		if [ ! -f $(ABL_FV_ELF) ]; then \
+			echo "Failed to generate unsigned ABL image, exiting !!"; \
+			exit 1; \
+		fi ;\
+		echo -------------------------------------------------------------- ;\
+		echo "Unsigned ABL Image: $(ABL_FV_ELF)"; \
+		echo -------------------------------------------------------------- ;\
+		if [ "$(SIGN_ABL_IMAGE)" = "true" ]; then \
+			echo "Signing requested, will attempt to sign the generated ABL image" ;\
+			if [ ! -d $(ABL_SIGNED) ]; then \
+				mkdir -p $(ABL_SIGNED); \
+			fi ;\
+			if [ ! -d $(ABL_SIGNED)/$(SECTOOL_PROJ) ]; then \
+				mkdir -p $(ABL_SIGNED)/$(SECTOOL_PROJ); \
+			fi ;\
+			SECIMAGE_LOCAL_DIR=$(SECTOOL_DIR) \
+			USES_SEC_POLICY_MULTIPLE_DEFAULT_SIGN=$(USES_SEC_POLICY_MULTIPLE_DEFAULT_SIGN) \
+			USES_SEC_POLICY_DEFAULT_SUBFOLDER_SIGN=$(USES_SEC_POLICY_DEFAULT_SUBFOLDER_SIGN) \
+			USES_SEC_POLICY_INTEGRITY_CHECK=$(USES_SEC_POLICY_INTEGRITY_CHECK) \
+			python3 $(SECTOOL_DIR)/sectools_builder.py \
+			-i $(ABL_FV_ELF) --install_file_name abl.elf \
+			-t $(SECTOOL_DIR)/$(SECTOOL_DIR)/signed \
+			-g $(SIGN_ID) \
+			--soc_hw_version $(SOC_HW_VER) \
+			--soc_vers $(SOC_VERS) \
+			--config=$(SECTOOL_DIR)/config/integration/$(SECIMAGE_XML).xml \
+			--install_base_dir=$(ABL_SIGNED)/$(SECTOOL_PROJ) \
+			> $(ABL_SIGNED)/$(SECTOOL_PROJ)/secimage.log 2>&1 ;\
+			echo Completed secimage signed appsbl \(logs in $(ABL_SIGNED)/$(SECTOOL_PROJ)/secimage.log\) ;\
+			if [ ! -f $(ABL_SIGNED)/$(SECTOOL_PROJ)/abl.elf ]; then \
+				echo "Failed to generate signed ABL Image !!"; \
+				exit 1 ; \
+			fi ;\
+			echo -------------------------------------------------------------- ;\
+			echo Signed ABL Image: $(ABL_SIGNED)/$(SECTOOL_PROJ)/abl.elf ;\
+			echo -------------------------------------------------------------- ;\
+		fi ;\
+	fi
+endef
+
+# SRPM Packaging
+PREFIX="abl-1.0"
+TARBALL="${PREFIX}.tar.gz"
+SPECFILE="srpm/abl.spec"
+RPM_DIR=rpmbuild
+RPMBUILDOPTS="-bs"
+GITID=$(shell git log --max-count=1 --pretty=format:%H HEAD)
+XZ_THREADS=$(rpm --eval %{_smp_mflags} | sed -e 's!^-j!--threads !')
+define package-srpm
+	rm -rf $(RPM_DIR) *.src.rpm $(TARBALL)
+	mkdir -p $(RPM_DIR)/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	git archive --prefix="$(PREFIX)"/ --format=tar "$(GITID)" | gzip -v > $(TARBALL) 
+	cp -f $(SPECFILE) $(RPM_DIR)/SPECS
+	cp -f $(TARBALL) $(RPM_DIR)/SOURCES  
+	rpmbuild --define "_sourcedir $(RPM_DIR)/SOURCES" --define "_builddir $(RPM_DIR)/BUILD" --define "_srcrpmdir $(RPM_DIR)/SRPMS" --define "_rpmdir $(RPM_DIR)/RPMS" --define "_specdir $(RPM_DIR)/SPECS" $(RPMBUILDOPTS) $(RPM_DIR)/SPECS/*.spec
+	mv $(RPM_DIR)/SRPMS/* .
+	rm -rf $(RPM_DIR) $(TARBALL)
+	@echo --------------------------------------------------------------
+	@echo ABL SRPM: abl-1.0-1.src.rpm 
+	@echo --------------------------------------------------------------
+endef
+
 # This function is to check version compatibility, used to control features based on the compiler version. \
 Arguments should be return value, current version and supported version in order. \
 It sets return value to true if the current version is equal or greater than the supported version.
 define check_version_compatibility
-	$(eval CURR_VERSION := $(shell $(2)/clang --version |& grep -i "clang version" |& sed 's/[^0-9.]//g'))
+	$(eval CURR_VERSION := $(shell $(2)/clang --version |& grep -i "clang version" |& sed 's/^.*[^0-9]\([0-9]*\.[0-9]*\)\..*/\1/'))
 	$(eval CURR_VERSION_MAJOR := $(shell echo $(CURR_VERSION) |& cut -d. -f1))
 	$(eval CURR_VERSION_MINOR := $(shell echo $(CURR_VERSION) |& cut -d. -f2))
 	$(eval SUPPORTED_VERSION := $(3))
@@ -95,16 +207,76 @@ else
 	ENABLE_LE_VARIANT := 0
 endif
 
+ifeq ($(DISABLE_MULTI_BOOT), true)
+	DISABLE_MULTI_BOOT := 1
+else
+	DISABLE_MULTI_BOOT := 0
+endif
+
+ifeq ($(ENABLE_POWER_KEY_MULTIPLEX), true)
+        ENABLE_POWER_KEY_MULTIPLEX := 1
+else
+        ENABLE_POWER_KEY_MULTIPLEX := 0
+endif
+
+ifeq ($(CLEAR_RESET_REASON), true)
+        CLEAR_RESET_REASON := 1
+else
+        CLEAR_RESET_REASON := 0
+endif
+
+ifeq ($(ENABLE_LV_ATOMIC_AB), 1)
+        ENABLE_LV_ATOMIC_AB := 1
+else
+        ENABLE_LV_ATOMIC_AB := 0
+endif
+
 ifeq ($(EARLY_ETH_ENABLED), 1)
 	EARLY_ETH_ENABLED := 1
 else
 	EARLY_ETH_ENABLED := 0
 endif
 
+ifeq ($(ENABLE_SAIL_FLASHING), 1)
+        ENABLE_SAIL_FLASHING := 1
+else
+        ENABLE_SAIL_FLASHING := 0
+endif
+
+ifeq ($(ENABLE_SAIL_BOOT), 1)
+        ENABLE_SAIL_BOOT := 1
+else
+        ENABLE_SAIL_BOOT := 0
+endif
+
 ifeq ($(EARLY_ETH_AS_DLKM), 1)
 	EARLY_ETH_AS_DLKM := 1
 else
 	EARLY_ETH_AS_DLKM := 0
+endif
+
+ifeq ($(TARGET_SUPPORTS_EARLY_USB_INIT), 1)
+	TARGET_SUPPORTS_EARLY_USB_INIT := 1
+else
+	TARGET_SUPPORTS_EARLY_USB_INIT := 0
+endif
+
+ifeq ($(BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL), 1)
+	BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL := 1
+else
+	BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL := 0
+endif
+
+ifeq ($(INTEGRITY_LE_IMA), 1)
+	INTEGRITY_LE_IMA := 1
+else
+	INTEGRITY_LE_IMA := 0
+endif
+
+ifeq ($(INTEGRITY_LE_EVM), 1)
+        INTEGRITY_LE_EVM := 1
+else
+        INTEGRITY_LE_EVM := 0
 endif
 
 ifeq "$(ABL_USE_SDLLVM)" "true"
@@ -121,6 +293,12 @@ else
 	INIT_BIN := "/init"
 endif
 
+ifneq "$(TARGET_AUDIO_FRAMEWORK)" ""
+	TARGET_AUDIO_FRAMEWORK := $(TARGET_AUDIO_FRAMEWORK)
+else
+	TARGET_AUDIO_FRAMEWORK := ""
+endif
+
 ifeq "$(BASE_ADDRESS)" ""
 	BASE_ADDRESS := 0x80000000
 endif
@@ -135,11 +313,17 @@ ifeq "$(TARGET_LINUX_BOOT_CPU_ID)" ""
 	TARGET_LINUX_BOOT_CPU_ID := 0
 endif
 
+ifneq "$(HIBERNATION_PARTITION_NAME)" ""
+	HIBERNATION_SWAP_PARTITION_NAME := $(HIBERNATION_PARTITION_NAME)
+endif
+
 export SDLLVM_COMPILE_ANALYZE := $(SDLLVM_COMPILE_ANALYZE)
 export SDLLVM_ANALYZE_REPORT := $(SDLLVM_ANALYZE_REPORT)
 
+ifdef $(SAFESTACK_SUPPORTED_CLANG_VERSION)
 CLANG_SUPPORTS_SAFESTACK := false
 $(eval $(call check_version_compatibility, CLANG_SUPPORTS_SAFESTACK, $(CLANG_BIN), $(SAFESTACK_SUPPORTED_CLANG_VERSION)))
+endif
 
 ifeq "$(ABL_SAFESTACK)" "true"
 	ifeq "$(CLANG_SUPPORTS_SAFESTACK)" "true"
@@ -156,9 +340,17 @@ export LLVM_ENABLE_SAFESTACK := $(LLVM_ENABLE_SAFESTACK)
 export LLVM_SAFESTACK_USE_PTR := $(LLVM_SAFESTACK_USE_PTR)
 export LLVM_SAFESTACK_COLORING := $(LLVM_SAFESTACK_COLORING)
 
-.PHONY: all cleanall
+CLANG_NEED_EXTRA_DLINK_FLAGS := false
+$(eval $(call check_version_compatibility, CLANG_NEED_EXTRA_DLINK_FLAGS, $(CLANG_BIN), 17.0))
+
+ifeq "$(CLANG_NEED_EXTRA_DLINK_FLAGS)" "true"
+	export CLANG_EXTRA_DLINK_FLAGS := -Wl,--no-relax -Wl,--apply-dynamic-relocs
+endif
+
+.PHONY: all cleanall srpm
 
 all: ABL_FV_ELF
+	$(call validate-cum-sign)
 
 cleanall:
 	@. ./edksetup.sh BaseTools && \
@@ -179,15 +371,24 @@ ABL_FV_IMG: $(EDK_TOOLS_PATH_MARK_FILE)
 	-D VERIFIED_BOOT_LE=$(VERIFIED_BOOT_LE) \
 	-D VERIFIED_BOOT_ENABLED=$(VERIFIED_BOOT_ENABLED) \
 	-D EARLY_ETH_ENABLED=$(EARLY_ETH_ENABLED) \
+	-D ENABLE_SAIL_FLASHING=$(ENABLE_SAIL_FLASHING) \
+	-D ENABLE_SAIL_BOOT=$(ENABLE_SAIL_BOOT) \
 	-D HIBERNATION_SUPPORT_NO_AES=$(HIBERNATION_SUPPORT_NO_AES) \
 	-D HIBERNATION_SUPPORT_AES=$(HIBERNATION_SUPPORT_AES) \
 	-D EARLY_ETH_AS_DLKM=$(EARLY_ETH_AS_DLKM) \
+	-D BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL=$(BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL) \
 	-D AB_RETRYCOUNT_DISABLE=$(AB_RETRYCOUNT_DISABLE) \
 	-D TARGET_BOARD_TYPE_AUTO=$(TARGET_BOARD_TYPE_AUTO) \
 	-D VERITY_LE=$(VERITY_LE) \
+	-D INTEGRITY_LE_IMA=$(INTEGRITY_LE_IMA) \
+	-D CLEAR_RESET_REASON=$(CLEAR_RESET_REASON) \
+	-D INTEGRITY_LE_EVM=$(INTEGRITY_LE_EVM) \
 	-D USER_BUILD_VARIANT=$(USER_BUILD_VARIANT) \
 	-D DISABLE_PARALLEL_DOWNLOAD_FLASH=$(DISABLE_PARALLEL_DOWNLOAD_FLASH) \
 	-D ENABLE_LE_VARIANT=$(ENABLE_LE_VARIANT) \
+	-D DISABLE_MULTI_BOOT=$(DISABLE_MULTI_BOOT) \
+	-D ENABLE_POWER_KEY_MULTIPLEX=$(ENABLE_POWER_KEY_MULTIPLEX) \
+	-D ENABLE_LV_ATOMIC_AB=$(ENABLE_LV_ATOMIC_AB) \
 	-D BUILD_USES_RECOVERY_AS_BOOT=$(BUILD_USES_RECOVERY_AS_BOOT) \
 	-D INIT_BIN=$(INIT_BIN) \
 	-D UBSAN_UEFI_GCC_FLAG_UNDEFINED=$(UBSAN_GCC_FLAG_UNDEFINED) \
@@ -196,7 +397,18 @@ ABL_FV_IMG: $(EDK_TOOLS_PATH_MARK_FILE)
 	-D BASE_ADDRESS=$(BASE_ADDRESS) \
 	-D LINUX_BOOT_CPU_SELECTION_ENABLED=$(LINUX_BOOT_CPU_SELECTION_ENABLED) \
 	-D TARGET_LINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID) \
+	-D HIBERNATION_SWAP_PARTITION_NAME=$(HIBERNATION_SWAP_PARTITION_NAME) \
 	-D SUPPORT_AB_BOOT_LXC=$(SUPPORT_AB_BOOT_LXC) \
+	-D TARGET_SUPPORTS_EARLY_USB_INIT=$(TARGET_SUPPORTS_EARLY_USB_INIT) \
+	-D TARGET_AUDIO_FRAMEWORK="\"$(TARGET_AUDIO_FRAMEWORK)\"" \
+        -D ENABLE_EARLY_SERVICES=$(ENABLE_EARLY_SERVICES) \
+        -D KERNEL_LOAD_ADDRESS=$(KERNEL_LOAD_ADDRESS) \
+        -D KERNEL_SIZE_RESERVED=$(KERNEL_SIZE_RESERVED) \
+	-D DISABLE_KERNEL_PROTOCOL=$(DISABLE_KERNEL_PROTOCOL) \
+	-D NAND_UBI_VOLUME_FLASHING_ENABLED=$(NAND_UBI_VOLUME_FLASHING_ENABLED) \
+	-D CMDLINE_SHOW_SECURE_BOOT_STATUS=$(CMDLINE_SHOW_SECURE_BOOT_STATUS) \
+	-D UBUNTU_AB_OTA=$(UBUNTU_AB_OTA) \
+	-D RW_ROOTFS=$(RW_ROOTFS) \
 	-j build_modulepkg.log $*
 
 	cp $(BUILD_ROOT)/FV/FVMAIN_COMPACT.Fv $(ABL_FV_IMG)
@@ -210,3 +422,6 @@ BASETOOLS_CLEAN: ABL_FV_IMG
 
 ABL_FV_ELF: BASETOOLS_CLEAN $(EDK_TOOLS_GENERATE_CLEAN)
 	python3 $(WORKSPACE)/QcomModulePkg/Tools/image_header.py $(ABL_FV_IMG) $(ABL_FV_ELF) $(LOAD_ADDRESS) elf 32 nohash
+
+srpm:
+	$(call package-srpm)

@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -83,6 +83,7 @@
 #define FILE_INFO_SIZE (SIZE_OF_EFI_FILE_INFO + 256)
 
 STATIC UINT32 TimerFreq, FactormS;
+STATIC MemCardType RootDeviceType = UNKNOWN;
 
 /* Returns 0 if the volume label matches otherwise non zero */
 STATIC UINTN
@@ -530,6 +531,13 @@ GetNandMiscPartiGuid (EFI_GUID *Ptype)
   return Status;
 }
 
+VOID StoreRootDeviceType (VOID)
+{
+    if (RootDeviceType == UNKNOWN) {
+        RootDeviceType = CheckRootDeviceType ();
+    }
+}
+
 EFI_STATUS
 WriteBlockToPartitionNoFlush (EFI_BLOCK_IO_PROTOCOL *BlockIo,
                    IN EFI_HANDLE *Handle,
@@ -562,7 +570,7 @@ WriteBlockToPartitionNoFlush (EFI_BLOCK_IO_PROTOCOL *BlockIo,
     * NOTE: For NAND Targets, BlockSize would be EraseLengthGranularity
     * aligned which is available in EFI_ERASE_BLOCK_PROTOCOL.
     */
-  if (CheckRootDeviceType () == NAND) {
+  if (RootDeviceType == NAND) {
     if (Handle == NULL) {
       DEBUG ((EFI_D_ERROR, "WriteBlockToPartition: Input Handle is Null.\n"));
       return EFI_INVALID_PARAMETER;
@@ -821,7 +829,7 @@ EFI_STATUS
 GetBootDevice (CHAR8 *BootDevBuf, UINT32 Len)
 {
   EFI_STATUS Status = EFI_SUCCESS;
-  UINTN BootDevAddr;
+  UINT64 BootDevAddr;
   UINTN DataSize = sizeof (BootDevAddr);
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
 

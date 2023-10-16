@@ -1,6 +1,7 @@
 load("//build/kernel/kleaf:directory_with_structure.bzl", dws = "directory_with_structure")
 load("//build/kernel/kleaf/impl:common_providers.bzl", "KernelEnvInfo")
 load("//msm-kernel:target_variants.bzl", "get_all_variants")
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load(
     "//build:abl_extensions.bzl",
     "extra_build_configs",
@@ -12,7 +13,10 @@ load(
 def _abl_impl(ctx):
     inputs = []
     inputs += ctx.files.srcs
-    inputs += ctx.attr.kernel_build[KernelEnvInfo].dependencies
+    inputs += ctx.files.deps
+    transitive_inputs = [ctx.attr.kernel_build[KernelEnvInfo].inputs]
+    tools = ctx.attr.kernel_build[KernelEnvInfo].tools
+
 
     output_files = [ctx.actions.declare_file("{}.tar.gz".format(ctx.label.name))]
 
@@ -56,6 +60,8 @@ def _abl_impl(ctx):
         exit 1
       fi
 
+      export TARGET_BUILD_VARIANT={target_build_variant}
+
       for extra_config in {extra_build_configs}; do
         source "${{extra_config}}"
       done
@@ -63,8 +69,6 @@ def _abl_impl(ctx):
       source "${{ABL_SRC}}/QcomModulePkg/{build_config}"
 
       [ -z "${{ABL_OUT_DIR}}" ] && ABL_OUT_DIR=${{COMMON_OUT_DIR}}
-
-      [ -z "${{TARGET_BUILD_VARIANT}}" ] && TARGET_BUILD_VARIANT=userdebug
 
       ABL_OUT_DIR=${{ABL_OUT_DIR}}/abl-${{TARGET_BUILD_VARIANT}}
       ABL_IMAGE_NAME=abl_${{TARGET_BUILD_VARIANT}}.elf
@@ -77,6 +81,7 @@ def _abl_impl(ctx):
     """.format(
         extra_build_configs = " ".join(ctx.attr.extra_build_configs),
         build_config = ctx.attr.abl_build_config,
+        target_build_variant = ctx.attr.target_build_variant[BuildSettingInfo].value,
     )
 
     for snippet in ctx.attr.extra_post_gen_snippets:
@@ -95,8 +100,9 @@ def _abl_impl(ctx):
 
     ctx.actions.run_shell(
         mnemonic = "Abl",
-        inputs = inputs,
+        inputs = depset(inputs, transitive = transitive_inputs),
         outputs = output_files,
+        tools = tools,
         command = command,
         progress_message = "Building {}".format(ctx.label),
     )
@@ -145,7 +151,9 @@ abl = rule(
             mandatory = True,
             allow_files = True,
         ),
+        "deps": attr.label_list(),
         "abl_build_config": attr.string(),
+        "target_build_variant": attr.label(default = ":target_build_variant"),
         "extra_function_snippets": attr.string_list(),
         "extra_post_gen_snippets": attr.string_list(),
         "extra_build_configs": attr.string_list(),
@@ -163,13 +171,19 @@ def define_abl_targets():
 def define_abl(msm_target, variant):
     target = msm_target + "_" + variant
 
+    if msm_target == "pineapple" or msm_target == "pineapple-allyes" or msm_target == "gen3auto":
+        extra_deps = ["//prebuilts/clang/host/linux-x86/clang-r458507:binaries"]
+    else:
+        extra_deps = []
+
     abl(
         name = "{}_abl".format(target),
         kernel_build = "//msm-kernel:{}_env".format(target),
-        abl_build_config = "build.config.msm.{}".format(msm_target),
+        abl_build_config = "build.config.msm.{}".format(msm_target.replace("-", ".")),
         srcs = native.glob(["**"]) + extra_srcs,
         extra_function_snippets = extra_function_snippets,
         extra_post_gen_snippets = extra_post_gen_snippets,
         extra_build_configs = extra_build_configs,
+        deps = extra_deps,
         visibility = ["//visibility:public"],
     )

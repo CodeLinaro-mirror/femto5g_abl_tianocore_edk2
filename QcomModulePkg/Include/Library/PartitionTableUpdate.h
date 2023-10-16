@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -85,6 +85,13 @@ typedef enum {
   PARTITION_GUID,
   PARTITION_ALL,
 } UPDATE_TYPE;
+
+typedef enum {
+  PTN_ENTRIES_TO_MISC = 1,
+  PTN_ENTRIES_FROM_MISC,
+} NANDAB_UPDATE_TYPE;
+
+#define NANDAB_MAX_SLOTNAME_LEN 7
 
 #define PARTITION_ATTRIBUTES_MASK 0x1
 #define PARTITION_GUID_MASK 0x2
@@ -233,6 +240,22 @@ struct BootPartsLinkedList {
   struct BootPartsLinkedList *Next;
 };
 
+
+/*
+  CHAR8 priority     : 2;
+  CHAR8 active       : 1;
+  CHAR8 try_count    : 3;
+  CHAR8 boot_success : 1;
+  CHAR8 unbootable   : 1;
+*/
+typedef struct NandABPtnHeader {
+  CHAR8 Attributes;
+  CHAR16 SlotName[NANDAB_MAX_SLOTNAME_LEN];
+} NandABPtnHeader;
+typedef struct NandABAttr {
+  NandABPtnHeader Slots[MAX_SLOTS];
+} NandABAttr;
+
 EFI_STATUS
 UpdatePartitionTable (UINT8 *GptImage,
                       UINT32 Sz,
@@ -247,6 +270,7 @@ BOOLEAN
 PartitionHasMultiSlot (CONST CHAR16 *Pname);
 EFI_STATUS EnumeratePartitions (VOID);
 VOID UpdatePartitionEntries (VOID);
+EFI_STATUS NandABUpdatePartition (UINT32 UpdateType);
 VOID UpdatePartitionAttributes (UINT32 UpdateType);
 VOID FindPtnActiveSlot (VOID);
 EFI_STATUS
@@ -256,9 +280,10 @@ IsSuffixEmpty (Slot *CheckSlot);
 EFI_STATUS
 SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit);
 BOOLEAN IsCurrentSlotBootable (VOID);
-EFI_STATUS HandleActiveSlotUnbootable (VOID);
+EFI_STATUS HandleActiveSlotUnbootable (BOOLEAN ForceBootAlternateSlot);
 EFI_STATUS ClearUnbootable (VOID);
 BOOLEAN IsABRetryCountUpdateRequired (VOID);
 UINT32 PartitionVerifyMibibImage (UINT8 *Image);
 UINT64 GetPartitionSize (EFI_BLOCK_IO_PROTOCOL *BlockIo);
+BOOLEAN IsSlotsUbootable (VOID);
 #endif

@@ -34,7 +34,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -99,6 +99,7 @@ typedef struct UpdateCmdLineParamList {
   BOOLEAN AlarmBoot;
   BOOLEAN MdtpActive;
   BOOLEAN FlashlessBoot;
+  BOOLEAN NetworkBoot;
   UINT32 CmdLineLen;
   UINT32 HaveCmdLine;
   UINT32 PauseAtBootUp;
@@ -107,6 +108,7 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *ChipBaseBand;
   CHAR8 *DisplayCmdLine;
   CHAR8 *HwFenceCmdLine;
+  CHAR8 *GpuCmdLine;
   CONST CHAR8 *CmdLine;
   CONST CHAR8 *AlarmBootCmdLine;
   CONST CHAR8 *MdtpActiveFlag;
@@ -133,9 +135,18 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *EarlyIPv4CmdLine;
   CHAR8 *EarlyIPv6CmdLine;
   CHAR8 *EarlyEthMacCmdLine;
+  CHAR8 *EarlyPhyAddrCmdLine;
+  CHAR8 *EarlyIFaceCmdLine;
+  CHAR8 *EarlySpeedCmdLine;
+  CHAR8 *UsbCompCmdLine;
   CHAR8 *ResumeCmdLine;
   CONST CHAR8 *SystemdSlotEnv;
+  CONST CHAR8 *RecoveryInfoGpio;
   CHAR8 *SilentBootModeCmdLine;
+  CHAR8 *BootCpuCmdLine;
+  CHAR8 *AudioFrameWork;
+  CHAR8 *ModemPathCmdLine;
+  CHAR8 *IntegrityIMACmdline;
 } UpdateCmdLineParamList;
 
 
@@ -150,6 +161,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                CHAR8 *FfbmStr,
                BOOLEAN Recovery,
                BOOLEAN FlashlessBoot,
+               BOOLEAN NetworkBoot,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
                UINT32 HeaderVersion,
@@ -163,7 +175,15 @@ GetSystemPath (CHAR8 **SysPath,
                BOOLEAN BootIntoRecovery,
                CHAR16 *ReqPartition,
                CHAR8 *Key,
-               BOOLEAN FlashlessBoot);
+               BOOLEAN FlashlessBoot,
+               BOOLEAN NetworkBoot);
+
+UINT32
+GetSystemPathByPname (CHAR8 **SysPath,
+                      BOOLEAN MultiSlotBoot,
+                      BOOLEAN BootIntoRecovery,
+                      CHAR16 *ReqPartition,
+                      CHAR8 *Key);
 
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus);
