@@ -1,8 +1,5 @@
 #include "libufdt.h"
 
-#include "fdt_internal.h"
-#include "ufdt_util.h"
-
 
 struct ufdt *ufdt_construct(void *fdtp) {
   struct ufdt *res_ufdt = dto_malloc(sizeof(struct ufdt));

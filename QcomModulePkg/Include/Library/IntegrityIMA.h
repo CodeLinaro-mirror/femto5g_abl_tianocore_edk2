@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,14 +26,15 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef __KEYPAD_H__
-#define __KEYPAD_H__
+#ifndef __INTEGRITY_IMA__
+#define __INTEGRITY_IMA__
 
-#include <Protocol/SimpleTextIn.h>
+/* Maximum IMA command line parameter length */
+#define IMA_CMDLINE_LEN 48
 
-EFI_STATUS
-GetKeyPress (UINT32 *KeyPressed);
+BOOLEAN
+IsIntegrityIMAEnabled (VOID);
 
-EFI_STATUS
-GetPowerKeyPressInfo (UINT32 *PowerKeyPressTime);
+VOID
+GetIntegrityIMACmdline (CHAR8 *IntegrityIMACmdlinePtr);
 #endif

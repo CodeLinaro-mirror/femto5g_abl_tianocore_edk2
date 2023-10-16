@@ -109,6 +109,9 @@
         Bootconfig.c
 	EarlyEthernet.c
 	EarlyUsbInit.c
+	RecoveryInfo.c
+	IntegrityIMA.c
+	SailLib.c
 
 [Packages]
 	ArmPkg/ArmPkg.dec
@@ -197,6 +200,8 @@
 	gEfiDisplayPowerStateProtocolGuid
 	gEfiRecoveryInfoProtocolGuid
 	gEfiClockProtocolGuid
+	gQcomPmicSdamProtocolGuid
+	gEfiMailboxProtocolGuid
 
 [FixedPcd]
 	gArmTokenSpaceGuid.PcdSystemMemoryBase

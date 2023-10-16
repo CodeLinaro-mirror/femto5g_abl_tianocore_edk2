@@ -113,8 +113,8 @@ static UINT8 UnwrappedKey[32];
 #else
 #define NUM_CORES 1
 #define NUM_SILVER_CORES 0
-#define NUM_PAGES_PER_GOLD_CORE ((NrCopyPages / 54) * 9)
-#define NUM_PAGES_PER_SILVER_CORE ((NrCopyPages / 54) * 4)
+#define NUM_PAGES_PER_GOLD_CORE 0
+#define NUM_PAGES_PER_SILVER_CORE 0
 #endif
 
 /* Holds free memory ranges read from UEFI memory map */
@@ -352,7 +352,7 @@ static UINT64 GetUnusedPfn ()
  * are kept unallocated for UEFI to use. If kernel has any destined pages in
  * this region, that will be bounced.
  */
-static VOID PreallocateFreeRanges (VOID)
+static INT32 PreallocateFreeRanges (VOID)
 {
         INT32 Iter = 0, Ret;
         INT32 ReservationDone = 0;
@@ -388,8 +388,10 @@ static VOID PreallocateFreeRanges (VOID)
                         printf (
                         "WARN: Prealloc falied LINE %d alloc_addr = 0x%lx\n",
                          __LINE__, AllocAddr);
+                        return Ret;
                 }
         }
+        return 0;
 }
 
 /* Assumption: There is no overlap in the regions */
@@ -908,7 +910,7 @@ static INT32 ReadDataPages (VOID *Arg)
                 if (Ret < 0) {
                         printf ("Disk read failed Line %d\n", __LINE__);
                         Info->Status = -1;
-                        return -1;
+                        goto err;
                 }
 
                 SrcPfn = (UINT64) Info->DiskReadBuffer >> PAGE_SHIFT;
@@ -939,9 +941,7 @@ static INT32 ReadDataPages (VOID *Arg)
                 }
         }
         Info->Status = 0;
-#if HIBERNATION_SUPPORT_AES
 err:
-#endif
         KernIntf->Sem->SemPost (Info->Sem, FALSE);
         return 0;
 }
@@ -1295,7 +1295,7 @@ static INT32 InitAesDecrypt (VOID)
 
 static INT32 RestoreSnapshotImage (VOID)
 {
-        INT32 Ret, Iter1 = 0;
+        INT32 Ret = 0, Iter1 = 0;
         UINT64 StartMs, Offset, PfnOffset = 0;
         RestoreInfo Info[NUM_CORES];
         struct BounceTableIterator *Bti = &TableIterator;
@@ -1408,6 +1408,7 @@ static INT32 RestoreSnapshotImage (VOID)
         Ret = UefiMapUnmapped ();
         if (Ret < 0) {
                 printf ("Error mapping unmapped regions\n");
+                Ret = -1;
                 goto err;
         }
 
@@ -1415,8 +1416,17 @@ static INT32 RestoreSnapshotImage (VOID)
          * No dynamic allocation beyond this point. If not honored it will
          * result in corruption of pages.
          */
-        GetConventionalMemoryRanges ();
-        PreallocateFreeRanges ();
+        Ret = GetConventionalMemoryRanges ();
+        if (Ret < 0) {
+                printf ("Error getting memory regions\n");
+                goto err;
+        }
+
+        Ret = PreallocateFreeRanges ();
+        if (Ret < 0) {
+                printf ("Error allocating memory\n");
+                goto err;
+        }
 
         Bti->FirstTable = (struct BounceTable *)
                                 (GetUnusedPfn () << PAGE_SHIFT);
@@ -1435,6 +1445,7 @@ static INT32 RestoreSnapshotImage (VOID)
         for (Iter1 = 0; Iter1 < NUM_CORES; Iter1++) {
                 if (Info[Iter1].Status != 0) {
                         printf ("error in restore_snapshot_image\n");
+                        Ret = -1;
                         goto err;
                 }
         }
