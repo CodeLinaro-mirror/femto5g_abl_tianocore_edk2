@@ -1055,8 +1055,7 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
   chunk_header_t *chunk_header;
   EFI_STATUS Status;
   UbiHeader_t *UbiHeader;
-  BOOLEAN IsUbiImage;
-
+  BOOLEAN IsUbiImage = FALSE;
   CHAR8 PartitionNameAscii[MAX_GPT_NAME_SIZE] = {'\0'};
   SparseImgParam SparseImgData = {0};
 
