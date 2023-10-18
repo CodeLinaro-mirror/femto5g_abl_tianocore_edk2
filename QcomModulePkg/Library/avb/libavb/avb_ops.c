@@ -363,12 +363,14 @@ out:
         return Result;
 }
 
+#if AVB_ENABLE_LEGACY_FEATURE
 AvbIOResult AvbWriteToPartition(AvbOps *Ops, const char *Partition, int64_t Offset,
                                 size_t NumBytes, const void *Buffer)
 {
 	/* unsupported api */
 	return AVB_IO_RESULT_ERROR_IO;
 }
+#endif
 
 AvbIOResult
 AvbValidateVbmetaPublicKey(AvbOps *Ops, const uint8_t *PublicKeyData,
@@ -736,7 +738,9 @@ AvbOps *AvbOpsNew(VOID *UserData)
 
   Ops->user_data = UserData;
   Ops->read_from_partition = AvbReadFromPartition;
+#if AVB_ENABLE_LEGACY_FEATURE
   Ops->write_to_partition = AvbWriteToPartition;
+#endif
   Ops->validate_vbmeta_public_key = AvbValidateVbmetaPublicKey;
   Ops->validate_public_key_for_partition = AvbValidatePartitionPublicKey;
   Ops->read_rollback_index = AvbReadRollbackIndex;

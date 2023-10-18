@@ -85,6 +85,7 @@
 #include <Protocol/EFICardInfo.h>
 
 #include <Protocol/EFIClock.h>
+#include <Protocol/EFIPmicSdam.h>
 #include "RecoveryInfo.h"
 
 #define MAX_APP_STR_LEN 64
@@ -145,7 +146,8 @@ GetRebootReason (UINT32 *ResetReason)
   }
 
   RstReasonIf->GetResetReason (RstReasonIf, ResetReason, NULL, NULL);
-  if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION)
+  if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION &&
+      ClearResetReason ())
     RstReasonIf->ClearResetReason (RstReasonIf);
   return Status;
 }
@@ -164,6 +166,11 @@ SetDefaultAudioFw ()
    * devmem Src is empty or not same as default.
   */
   AUDIOFRAMEWORK = GetAudioFw ();
+  if (AUDIOFRAMEWORK == NULL) {
+     DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NULL\n"));
+     return;
+  }
+
   if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
   Status = ReadAudioFrameWork (&Src, &Length);
     if (Status == EFI_SUCCESS) {
@@ -275,6 +282,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   UINT32 Val = 0;
   UINT32 BootReason = NORMAL_MODE;
   UINT32 KeyPressed = SCAN_NULL;
+  UINT32 PowerKeyPressTime = 0;
   /* SilentMode Boot */
   CHAR8 SilentBootMode = NON_SILENT_MODE;
   /* MultiSlot Boot */
@@ -346,6 +354,18 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   if (MultiSlotBoot) {
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     FindPtnActiveSlot ();
+  }
+
+  /* Reading press and release time for power key from sdam register
+     for press time ranges between 3800msec to 4200msec, boot into fastboot */
+  if (IsPowerKeyMultiplex ()) {
+    Status = GetPowerKeyPressInfo (&PowerKeyPressTime);
+    if (Status == EFI_SUCCESS) {
+      if ( PowerKeyPressTime > 3800 &&
+        PowerKeyPressTime < 4200) {
+        BootIntoFastboot = TRUE;
+      }
+    }
   }
 
   Status = GetKeyPress (&KeyPressed);

@@ -14,7 +14,7 @@
 STATIC EFI_RECOVERYINFO_PROTOCOL *pRecoveryInfoProtocol = NULL;
 STATIC INT64 HasRecoveryInfo = -1;
 STATIC INT64 HasGpioControl = -1;
-
+STATIC BootSetType BootSet = SET_INVALID;
 /*
 +----------+------------------+-----------------------------+----------------+
 | Protocol | GetRecoveryState |        RecoveryState        | IsRecoveryInfo |
@@ -22,10 +22,15 @@ STATIC INT64 HasGpioControl = -1;
 | False    | X                | X                           | False          |
 | True     | False            | X                           | False          |
 | True     | True             | RECOVERY_INFO_PARTITION_FAIL| False          |
-| True     | True             | RECOVERY_INFO_NO_RECOVERY   | True(gpio)     |
-| True     | True             | RECOVERY_INFO_RECOVERY      | True           |
+| True     | True             | RECOVERY_INFO_GPIO          | True(gpio)     |
+| True     | True             | RECOVERY_INFO_NORMAL        | True           |
 +----------+------------------+-----------------------------+----------------+
 */
+
+BOOLEAN RI_IsGpioControlled ()
+{
+  return (HasGpioControl == 1);
+}
 
 BOOLEAN IsRecoveryInfo ()
 {
@@ -38,19 +43,28 @@ BOOLEAN IsRecoveryInfo ()
                                   (VOID **) & pRecoveryInfoProtocol);
     if (Status != EFI_SUCCESS) {
       HasRecoveryInfo = 0;
+      DEBUG ((EFI_D_ERROR, "Failed to get recovery status, %r\n", Status));
       return FALSE;
     }
 
     Status = pRecoveryInfoProtocol -> GetRecoveryState (pRecoveryInfoProtocol,
                                                         &RecoveryState);
     if (Status != EFI_SUCCESS) {
-      HasRecoveryInfo = 1;
-    } else if ((RecoveryState != RECOVERY_INFO_PARTITION_FAIL) &&
-         (Status == EFI_SUCCESS)) {
-      DEBUG (( EFI_D_INFO,  "RecoveryInfo is enabled\n"));
-      HasRecoveryInfo = 1;
-    }
-
+      DEBUG (( EFI_D_ERROR,  "GetRecoveryState failed\n"));
+      HasRecoveryInfo = 0;
+    } else {
+       if (RecoveryState == RECOVERY_INFO_PARTITION_FAIL) {
+         DEBUG (( EFI_D_ERROR,  "recoveryinfo partition not found\n"));
+         HasRecoveryInfo = 0;
+       } else if (RecoveryState == RECOVERY_INFO_GPIO) {
+         HasGpioControl = 1;
+         DEBUG (( EFI_D_INFO,  "Slot switching is GPIO controlled\n"));
+       } else {
+         HasGpioControl = 0;
+       }
+       DEBUG (( EFI_D_VERBOSE,  "RecoveryInfo is enabled\n"));
+       HasRecoveryInfo = 1;
+     }
   }
   return (HasRecoveryInfo == 1);
 }
@@ -59,8 +73,11 @@ EFI_STATUS RI_GetActiveSlot (Slot *ActiveSlot)
 {
   EFI_STATUS Status = EFI_SUCCESS ;
   EFI_RECOVERYINFO_PROTOCOL *pRecoveryInfoProtocol = NULL;
-  BootSetType BootSet;
   Slot Slots[] = {{L"_a"}, {L"_b"}};
+
+  if (BootSet != SET_INVALID ) {
+    goto found_bootset;
+  }
 
   Status = gBS->LocateProtocol (& gEfiRecoveryInfoProtocolGuid, NULL,
                                (VOID **) & pRecoveryInfoProtocol);
@@ -76,6 +93,7 @@ EFI_STATUS RI_GetActiveSlot (Slot *ActiveSlot)
     return Status;
   }
 
+found_bootset :
   if (BootSet >= (sizeof (Slots) / sizeof (Slot))) {
     DEBUG ((EFI_D_ERROR, "GetBootSet: Invalid BootSet chosen"));
     return EFI_UNSUPPORTED;
