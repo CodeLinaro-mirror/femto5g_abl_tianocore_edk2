@@ -551,9 +551,17 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
          " rootfstype=ubifs rootflags=bulk_read root=ubi0:rootfs%s ubi.mtd=%d",
                  CurSlot.Suffix, (Index - 1));
       } else {
-        AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+        if (IsLEVerity () &&
+          !BootIntoRecovery ) {
+           AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+           " rootfstype=ext4  rootflags=bluk_read ubi.mtd=%d ubi.block=0,0 root=/dev/dm-0",
+            (Index - 1));
+          }
+        else {
+          AsciiSPrint (*SysPath, MAX_PATH_SIZE,
           " rootfstype=ubifs rootflags=bulk_read root=ubi0:rootfs ubi.mtd=%d",
           (Index - 1));
+        }
       }
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
@@ -1333,7 +1341,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   }
 
   if (HaveCmdLine) {
-    if (IsLEVerity ()) {
+    if (IsLEVerity () &&
+        !Recovery) {
       Status = GetLEVerityCmdLine (CmdLine, &LEVerityCmdLine,
                                    &LEVerityCmdLineLen);
       if (Status != EFI_SUCCESS) {
