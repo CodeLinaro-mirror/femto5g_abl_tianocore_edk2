@@ -132,6 +132,33 @@ BootCpuSelectionEnabled (VOID)
 }
 #endif
 
+#ifdef KERNEL_LOAD_ADDRESS
+BOOLEAN KernelLoadAddr_defined (UINT64 *KernelLoadAddr)
+{
+  *KernelLoadAddr = KERNEL_LOAD_ADDRESS;
+  return TRUE;
+}
+#else
+BOOLEAN KernelLoadAddr_defined (UINT64 *KernelLoadAddr)
+{
+  return FALSE;
+}
+#endif
+
+#ifdef KERNEL_SIZE_RESERVED
+BOOLEAN KernelSize_defined (UINT64 *KernelSizeReserved)
+{
+  *KernelSizeReserved = KERNEL_SIZE_RESERVED;
+  return TRUE;
+}
+#else
+BOOLEAN KernelSize_defined (UINT64 *KernelSizeReserved)
+{
+  return FALSE;
+}
+#endif
+
+
 /* To set load addresses, callers should make sure to initialize the
  * BootParamlistPtr before calling this function */
 UINT64 SetandGetLoadAddr (BootParamlist *BootParamlistPtr, AddrType Type)
@@ -163,39 +190,27 @@ UINT64 SetandGetLoadAddr (BootParamlist *BootParamlistPtr, AddrType Type)
 STATIC BOOLEAN
 QueryBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
 {
-  EFI_STATUS Status;
-  EFI_STATUS SizeStatus;
+  EFI_STATUS Status = EFI_SUCCESS;
+  EFI_STATUS SizeStatus = EFI_SUCCESS;
   UINTN DataSize = 0;
 
-  DataSize = sizeof (*KernelLoadAddr);
-  Status = gRT->GetVariable ((CHAR16 *)L"KernelBaseAddr", &gQcomTokenSpaceGuid,
+  if (!KernelLoadAddr_defined (KernelLoadAddr)) {
+    DataSize = sizeof (*KernelLoadAddr);
+    Status = gRT->GetVariable ((CHAR16 *)L"KernelBaseAddr",
+                               &gQcomTokenSpaceGuid,
                           NULL, &DataSize, KernelLoadAddr);
+  }
 
-  DataSize = sizeof (*KernelSizeReserved);
-  SizeStatus = gRT->GetVariable ((CHAR16 *)L"KernelSize", &gQcomTokenSpaceGuid,
+  if (!KernelSize_defined (KernelSizeReserved)) {
+    DataSize = sizeof (*KernelSizeReserved);
+    SizeStatus = gRT->GetVariable ((CHAR16 *)L"KernelSize",
+                                   &gQcomTokenSpaceGuid,
                               NULL, &DataSize, KernelSizeReserved);
-
+  }
   return (Status == EFI_SUCCESS &&
           SizeStatus == EFI_SUCCESS);
 }
 
-#ifdef ENABLE_EARLY_SERVICES
-STATIC VOID
-QueryEarlyServiceBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
-{
-  *KernelLoadAddr = KERNEL_LOAD_ADDRESS;
-  *KernelSizeReserved = KERNEL_SIZE_RESERVED;
-  return;
-}
-#else
-STATIC VOID
-QueryEarlyServiceBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
-{
-  *KernelLoadAddr = 0;
-  *KernelSizeReserved = 0;
-  return;
-}
-#endif
 
 STATIC EFI_STATUS
 UpdateBootParams (BootParamlist *BootParamlistPtr)
@@ -203,24 +218,17 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
   UINT64 KernelSizeReserved;
   UINT64 KernelLoadAddr;
   Kernel64Hdr *Kptr = NULL;
-  UINT64 KernelLoadAddr_new = 0;
-  UINT64 KernelSizeReserved_new = 0;
 
   if (BootParamlistPtr == NULL ) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
     return EFI_INVALID_PARAMETER;
   }
-  QueryEarlyServiceBootParams (&KernelLoadAddr_new, &KernelSizeReserved_new);
 
   /* The three regions Kernel, Ramdisk and DT should be reserved in memory map
    * Query the kernel load address and size from UEFI core, if it's not
    * successful use the predefined load addresses */
   if (QueryBootParams (&KernelLoadAddr, &KernelSizeReserved)) {
-    if (EarlyServicesEnabled ()) {
-      BootParamlistPtr->KernelLoadAddr = KernelLoadAddr_new;
-    } else {
       BootParamlistPtr->KernelLoadAddr = KernelLoadAddr;
-    }
     if (BootParamlistPtr->BootingWith32BitKernel) {
       BootParamlistPtr->KernelLoadAddr += KERNEL_32BIT_LOAD_OFFSET;
     } else {
@@ -234,12 +242,7 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
       }
     }
 
-    if (EarlyServicesEnabled ()) {
-      BootParamlistPtr->KernelEndAddr =
-          KernelLoadAddr_new + KernelSizeReserved_new;
-    } else {
-      BootParamlistPtr->KernelEndAddr = KernelLoadAddr + KernelSizeReserved;
-    }
+    BootParamlistPtr->KernelEndAddr = KernelLoadAddr + KernelSizeReserved;
   } else {
     DEBUG ((EFI_D_VERBOSE, "QueryBootParams Failed: "));
     /* If Query of boot params fails, RamdiskEndAddress is end of the
@@ -250,36 +253,19 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
       /* For 32-bit Not all memory is accessible as defined by
          RamdiskEndAddress. Using pre-defined offset for backward
          compatability */
-    if (EarlyServicesEnabled ()) {
-      BootParamlistPtr->KernelLoadAddr =
-            (EFI_PHYSICAL_ADDRESS) (KernelLoadAddr_new |
-                                    PcdGet32 (KernelLoadAddress32));
-    } else {
       BootParamlistPtr->KernelLoadAddr =
             (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr->BaseMemory |
                                     PcdGet32 (KernelLoadAddress32));
-    }
       KernelSizeReserved = PcdGet32 (RamdiskEndAddress32);
     } else {
-      if (EarlyServicesEnabled ()) {
-         BootParamlistPtr->KernelLoadAddr =
-            (EFI_PHYSICAL_ADDRESS) (KernelLoadAddr_new |
-                                    PcdGet32 (KernelLoadAddress));
-      } else {
       BootParamlistPtr->KernelLoadAddr =
             (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr->BaseMemory |
                                     PcdGet32 (KernelLoadAddress));
-      }
       KernelSizeReserved = PcdGet32 (RamdiskEndAddress);
     }
 
-    if (EarlyServicesEnabled ()) {
-      BootParamlistPtr->KernelEndAddr = KernelLoadAddr_new +
-                                       KernelSizeReserved;
-    } else {
       BootParamlistPtr->KernelEndAddr = BootParamlistPtr->BaseMemory +
                                        KernelSizeReserved;
-    }
     DEBUG ((EFI_D_VERBOSE, "calculating dynamic offsets\n"));
   }
 
