@@ -230,8 +230,13 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       goto ErrLEVerityout;
     }
 
-    /* Get HashSize which is always greater by 8 bytes to DataSize */
-    HashSize = AsciiStrDecimalToUintn ((CHAR8 *) &DataSize[0]) + 8;
+    /* Get HashSize which is always greater by 8 bytes to DataSize.
+     * When using the  veritysetup utlity we see that it should be
+     * like  + 1 from address of DataSize,Going fwd 5.15 + kernel
+     * will use this approch so correcting from +8 ->+1
+     * */
+
+    HashSize = AsciiStrDecimalToUintn ((CHAR8 *) &DataSize[0]) + 1;
 
     /* Get system partition index */
     MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
