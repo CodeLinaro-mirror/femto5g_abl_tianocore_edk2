@@ -71,6 +71,9 @@ UINT32 GetMaxLuns (VOID)
 UINT32
 GetPartitionLunFromIndex (UINT32 Index)
 {
+  /* Ensure we do not cross array boundary */
+  if (Index >= MAX_NUM_PARTITIONS)
+    Index = MAX_NUM_PARTITIONS - 1;
   return PtnEntries[Index].lun;
 }
 
