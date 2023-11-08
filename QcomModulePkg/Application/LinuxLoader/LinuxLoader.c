@@ -166,6 +166,11 @@ SetDefaultAudioFw ()
    * devmem Src is empty or not same as default.
   */
   AUDIOFRAMEWORK = GetAudioFw ();
+  if (AUDIOFRAMEWORK == NULL) {
+     DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NULL\n"));
+     return;
+  }
+
   if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
   Status = ReadAudioFrameWork (&Src, &Length);
     if (Status == EFI_SUCCESS) {

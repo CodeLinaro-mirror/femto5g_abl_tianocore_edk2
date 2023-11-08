@@ -125,6 +125,7 @@ SendToSailMailBox (IN CONST CHAR8 *Partition,
   UINT64        StartTime, EndTime;
   UINT32        NumItems = 1;
   UINT32        BufAdr = 0;
+  UINT32        BufferLen = 0;
   EFI_EVENT     TimeoutEvent;
   UINTN         Timeout = 0;
   UINTN         EventIndex =0;
@@ -170,8 +171,9 @@ SendToSailMailBox (IN CONST CHAR8 *Partition,
 
   StartTime = GetTimerCountms ();
   // Header CRC
-  Status = XCrc32Generate (1, (UINT8 *)&SourceBuf,
-         sizeof (sailUpdaterMsgHeaderType), (UINT32 *)&SourceBuf.HeaderCrc);
+  BufferLen = sizeof (SourceBuf) / sizeof (SourceBuf.HeaderSize);
+  Status = XCrc32Generate (1, (UINT8 *)&SourceBuf, BufferLen,
+                                         (UINT32 *)&SourceBuf.HeaderCrc);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Header CRC Calculation Failed:%r\n", Status));
     return Status;
@@ -288,6 +290,11 @@ SailFlash (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
 
   UINT8 Iter = 0;
   CHAR8 *Argument = AllocateZeroPool (SAIL_UPD_IMG_NAME_LEN);
+  if (!Argument) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate buffer\n"));
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
   for (Iter = 0;  Iter < SAIL_UPD_IMG_NAME_LEN ||
                                 Arg[Iter] != '\0'; Iter++) {
         Argument[Iter] = AsciiCharToUpper (Arg[Iter]);
@@ -359,6 +366,7 @@ SailBoot (IN VOID *Data, IN UINT32 Size, BOOLEAN Fastboot)
   EFI_STATUS Status = EFI_FAILURE;
 
   UINT32        NumItems = 1;
+  UINT32        BufferLen = 0;
   INT32         Ret = 0;
   UINT64        BufAddr = 0x0;
   EFI_EVENT     TimeoutEvent;
@@ -443,8 +451,9 @@ SailBoot (IN VOID *Data, IN UINT32 Size, BOOLEAN Fastboot)
   }
 
   // Header CRC
-  Status = XCrc32Generate (1, (UINT8 *)&SourceBuf,
-           sizeof (sailUpdaterMsgHeaderType), (UINT32 *)&SourceBuf.HeaderCrc);
+  BufferLen = sizeof (SourceBuf) / sizeof (SourceBuf.HeaderSize);
+  Status = XCrc32Generate (1, (UINT8 *)&SourceBuf, BufferLen,
+                                     (UINT32 *)&SourceBuf.HeaderCrc);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Header CRC calculation failed:%r\n", Status));
     return Status;
