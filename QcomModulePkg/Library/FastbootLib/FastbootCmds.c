@@ -2592,7 +2592,7 @@ STATIC VOID GetBufferSize (UINT64 *MaxBufferSize, UINT64 *MinBufferSize)
     return;
   }
 
-  if (DdrSize <= DDR_512MB) {
+  if (DdrSize <= DDR_128MB) {
     /* 35MB */
     *MaxBufferSize = 36700160;
     /* 16MB */
