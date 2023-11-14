@@ -1570,7 +1570,6 @@ BootLinux (BootInfo *Info)
     goto Exit;
   }
 
-
 #ifdef DISABLE_KERNEL_PROTOCOL
   PreparePlatformHardware ();
 #else
@@ -1582,10 +1581,6 @@ BootLinux (BootInfo *Info)
                   (VOID *)StackCurrent, (UINTN)StackBase);
 #endif
   BootStatsSetTimeStamp (BS_BL_END);
-
-  if (IsVmEnabled ()) {
-    DisableHypUartUsageForLogging ();
-  }
 
   //
   // Start the Linux Kernel
