@@ -290,24 +290,25 @@ BOOLEAN IsDisableParallelDownloadFlash (VOID)
 }
 #endif
 
-/* Clean up memory for the getvar variables during exit */
+/* Clean up memory for the getvar and cmdlist variables
+ * during exit.
+ */
 STATIC EFI_STATUS FastbootUnInit (VOID)
 {
   FASTBOOT_VAR *Var;
-  FASTBOOT_VAR *VarPrev = NULL;
+  FASTBOOT_CMD *cmd;
 
-  for (Var = Varlist; Var && Var->next; Var = Var->next) {
-    if (VarPrev) {
-      FreePool (VarPrev);
-      VarPrev = NULL;
-    }
-    VarPrev = Var;
-  }
-  if (Var) {
+  while (Varlist) {
+    Var = Varlist;
+    Varlist = Varlist->next;
     FreePool (Var);
-    Var = NULL;
   }
 
+  while (cmdlist) {
+    cmd = cmdlist;
+    cmdlist = cmdlist->next;
+    FreePool (cmd);
+  }
   return EFI_SUCCESS;
 }
 
@@ -1328,7 +1329,7 @@ HandleMetaImgFlash (IN CHAR16 *PartitionName,
   for (i = 0; i < images; i++) {
     PnameTerminated = FALSE;
 
-    if (img_header_entry[i].ptn_name == NULL ||
+    if (!img_header_entry[i].ptn_name[0] ||
         img_header_entry[i].start_offset == 0 || img_header_entry[i].size == 0)
       break;
 
@@ -2785,7 +2786,7 @@ CmdContinue (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
   #ifndef USE_DUMMY_BCC
                             , &BccParamsRecvdFromAVB
   #endif
-                            , FALSE);
+                            );
   if (Status != EFI_SUCCESS) {
     AsciiSPrint (Resp, sizeof (Resp), "Failed to load image from partition: %r",
                  Status);
@@ -2971,7 +2972,7 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   #ifndef USE_DUMMY_BCC
                             , &BccParamsRecvdFromAVB
   #endif
-                            , FALSE);
+                            );
   if (Status != EFI_SUCCESS) {
     AsciiSPrint (Resp, sizeof (Resp),
                  "Failed to load/authenticate boot image: %r", Status);

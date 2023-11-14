@@ -99,15 +99,12 @@ GetAVBVersion ();
  * for cold boot sequence and TRUE
  * for Hibernation Resume
  *
- * @param[in] SetRotAndBootState FALSE by
- * default and TRUE incase of ROT and
- * BootState already set
+ * @param[in] SetRotAndBootStateAndVBH FALSE
+ * by default and TRUE incase of ROT ,
+ * BootState and VBH already set
  *
  * @param[in] BccParamsRecvdFromAVB
  * It will contain populated BCC parameters
- *
- * @param[in]  SetVerifiedBootHash FALSE by
- * default and TRUE incase of VBH already set
  *
  * @return EFI_STATUS
  */
@@ -117,7 +114,7 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
 #ifndef USE_DUMMY_BCC
                   , BccParams_t *BccParamsRecvdFromAVB
 #endif
-                  , BOOLEAN SetVerifiedBootHash);
+                 );
 
 /**
  *  Free resources/memory allocated by

@@ -92,6 +92,7 @@
 
 #define HLOS_VMID   3
 #define RM_VMID     255
+#define PVMFW_CONFIG_MAX_BLOBS 2
 
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
@@ -578,6 +579,7 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   VOID* ImageBuffer = NULL;
   UINT32 ImageSize = 0;
   CHAR8 *TempHypBootInfo[HYP_MAX_NUM_DTBOS];
+  CHAR8 *TempAvfDpDtbo = NULL;
 
   if (Info == NULL ||
       BootParamlistPtr == NULL) {
@@ -825,6 +827,32 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
       }
     }
 
+    // Add AVF DP dtbo to DtsList. This will be applied to HLOS DT.
+   if (BootParamlistPtr->AvfDpDtboBaseAddr != NULL) {
+     /* Allocate buffer temporarily */
+     TempAvfDpDtbo = AllocateZeroPool (
+                         fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr));
+     if (!TempAvfDpDtbo) {
+       DEBUG ((EFI_D_ERROR,
+               "Failed to allocate temp memory for DP dtbo\n"));
+       return EFI_OUT_OF_RESOURCES;
+     }
+
+     gBS-> CopyMem ((VOID *)TempAvfDpDtbo,
+                    (VOID *)BootParamlistPtr->AvfDpDtboBaseAddr,
+                    fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr));
+
+     if (!AppendToDtList (&DtsList,
+                          (fdt64_t)TempAvfDpDtbo,
+                          fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr)
+                         )) {
+       DEBUG ((EFI_D_ERROR, "Unable to allocate buffer for DP dtbo\n"));
+       FreePool ((VOID *)TempAvfDpDtbo);
+       DeleteDtList (&DtsList);
+       return EFI_OUT_OF_RESOURCES;
+     }
+   }
+
     Status = ApplyOverlay (BootParamlistPtr,
                            SocDtb,
                            DtsList);
@@ -1012,20 +1040,25 @@ RmRegisterPvmFwRegion (BootInfo *Info, BootParamlist *BootParamlistPtr)
 }
 
 STATIC VOID
-CreatePvmFwConfig (PvmFwConfigHeader *Hdr, size_t BccSize) {
+CreatePvmFwConfig (PvmFwConfigHeader *Hdr, UINT32 *EntrySizes,
+                   UINT32 NumEntries) {
   PvmFwConfigHeader Header;
+  UINT32 EntryOffset = sizeof (Header);
 
   //ASCII of characters in "pvmf"
   Header.Magic = 0x666D7670;
   //version 1,0
   Header.Version = ((UINT32) 1 << 16) | (UINT32) 0;
-  //BCC Handover blob: 8 byte alligned
-  Header.Entries[0].Offset = 0x20;
-  Header.Entries[0].Size = BccSize;
-  //DP (Debug Ploicy) blob (Optional): 8 byte alligned
-  Header.Entries[1].Offset = 0;
-  Header.Entries[1].Size = 0;
-  Header.TotalSize = sizeof (Header) + Header.Entries[0].Size;
+  //Feature flags; currently reserved and must be zero.
+  Header.Flags = 0;
+  for (UINTN Index = 0 ; Index < NumEntries ; Index++ ) {
+    Header.Entries[Index].Offset = EntryOffset;
+    Header.Entries[Index].Size = EntrySizes[Index];
+    // 8 byte aligned offset
+    EntryOffset += (EntrySizes[Index] + 7) & ~7;
+  }
+  Header.TotalSize = Header.Entries[NumEntries - 1].Offset +
+                      Header.Entries[NumEntries - 1].Size;
   memcpy (Hdr, &Header, sizeof (Header));
 }
 
@@ -1033,6 +1066,7 @@ STATIC EFI_STATUS
 AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   UINT8 *FinalEncodedBccArtifacts = NULL;
   UINT8 *PvmFwCfgLoadAddr = NULL;
+  UINT32 EntrySizes[PVMFW_CONFIG_MAX_BLOBS] = {0};
   PvmFwConfigHeader PvmFwCgfHdr = {0};
   size_t  BccArtifactsValidSize = 0;
   UINT8 Ret;
@@ -1060,19 +1094,24 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
     DEBUG ((EFI_D_ERROR, "BCC handover data generation failed\n"));
     return EFI_FAILURE;
   }
+  EntrySizes[0] = BccArtifactsValidSize;
 
-  CreatePvmFwConfig (&PvmFwCgfHdr, BccArtifactsValidSize);
+  if (BootParamlistPtr->AvfDpDtboBaseAddr) {
+    EntrySizes[1] = fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr);
+  }
+
+  CreatePvmFwConfig (&PvmFwCgfHdr, EntrySizes, PVMFW_CONFIG_MAX_BLOBS);
   PvmFwCfgLoadAddr = (UINT8*)((((BootParamlistPtr->PvmFwLoadAddr +
                      Info->PvmFwRawSize) / 4096) * 4096) + 4096);
 
   DEBUG ((EFI_D_VERBOSE, "PvmFwCfgLoadAddr: 0x%lx\n",
                           PvmFwCfgLoadAddr));
-  DEBUG ((EFI_D_VERBOSE, "PvmFwCgfHdr.Entries[0].Offset: 0x%lx\n",
-                          PvmFwCgfHdr.Entries[0].Offset));
-  DEBUG ((EFI_D_VERBOSE, "PvmFwCgfHdr.Entries[0].Size: 0x%lx\n",
-                          PvmFwCgfHdr.Entries[0].Size));
-  DEBUG ((EFI_D_VERBOSE, "BccArtifactsValidSize: 0x%lx\n",
-                          BccArtifactsValidSize));
+  for (UINT32 Index = 0; Index < PVMFW_CONFIG_MAX_BLOBS; Index++) {
+    DEBUG ((EFI_D_VERBOSE, "PvmFwCgfHdr.Entries[%d].Offset: 0x%lx\n", Index,
+           PvmFwCgfHdr.Entries[Index].Offset));
+    DEBUG ((EFI_D_VERBOSE, "PvmFwCgfHdr.Entries[%d].Size: 0x%lx\n", Index,
+           PvmFwCgfHdr.Entries[Index].Size));
+  }
 
   /* Write PvmFwCgfHdr to the page alligned end of
    * pvmfw raw binary in golden region. */
@@ -1083,8 +1122,18 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   gBS->CopyMem ((CHAR8 *)(PvmFwCfgLoadAddr +
                          PvmFwCgfHdr.Entries[0].Offset),
                          FinalEncodedBccArtifacts,
-                         BccArtifactsValidSize);
-  /* No need to write DP blob as it is optional in Android-U. */
+                         EntrySizes[0]);
+
+  /* Write DP blob to pVM firmware config */
+  if (PvmFwCgfHdr.Entries[1].Offset &&
+      BootParamlistPtr->AvfDpDtboBaseAddr &&
+      fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr)) {
+    gBS->CopyMem ((CHAR8 *)(PvmFwCfgLoadAddr +
+                           PvmFwCgfHdr.Entries[1].Offset),
+                           (CHAR8 *)(BootParamlistPtr->AvfDpDtboBaseAddr),
+                           fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr));
+  }
+
   FreePool (FinalEncodedBccArtifacts);
 
   return EFI_SUCCESS;
@@ -1103,21 +1152,25 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
 #ifdef PVMFW_BCC
   UINT64 PvmFwLoadAddr = 0;
 #endif
-  UINT32 VRamdiskSizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
-    BootParamlistPtr->PageSize);
-  UINT32 VDtbSizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->DtSize,
-    BootParamlistPtr->PageSize);
-  UINT32 VRamdiskTablesizePageAligned =
-    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskTableSize,
-    BootParamlistPtr->PageSize);
+  UINT32 VRamdiskSizePageAligned;
+  UINT32 VDtbSizePageAligned;
+  UINT32 VRamdiskTablesizePageAligned;
   VOID *RamdiskImageBuffer;
 
   if (BootParamlistPtr == NULL) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
     return EFI_INVALID_PARAMETER;
   }
+
+  VRamdiskSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
+    BootParamlistPtr->PageSize);
+  VDtbSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->DtSize,
+    BootParamlistPtr->PageSize);
+  VRamdiskTablesizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskTableSize,
+    BootParamlistPtr->PageSize);
 
   if ((Info->HasBootInitRamdisk) &&
          (Info->HeaderVersion >= BOOT_HEADER_VERSION_FOUR)) {
@@ -1466,6 +1519,11 @@ BootLinux (BootInfo *Info)
 
   RamPartitionEntry *RamPartitions = NULL;
   UINT32 NumPartitions = 0;
+  UINT32 *Prop = NULL;
+  VOID *Fdt;
+  INT32 PropLen = 0;
+  INT32 Fragment = 0;
+  INT32 Node = 0;
 
   if (Info == NULL) {
     DEBUG ((EFI_D_ERROR, "BootLinux: invalid parameter Info\n"));
@@ -1606,6 +1664,36 @@ BootLinux (BootInfo *Info)
     } else {
         DEBUG ((EFI_D_VERBOSE, "pvmfw size fetched from partition = 0x%x\n",
                BootParamlistPtr.PvmFwSize));
+    }
+
+    // Load DP DTBO if device is unlocked
+    if (!TargetBuildVariantUser () &&
+        IsUnlocked ()) {
+      Status = GetAvfDpDtbo (&BootParamlistPtr.AvfDpDtboBaseAddr);
+      if (Status == EFI_SUCCESS) {
+        DEBUG ((EFI_D_VERBOSE, "Loaded DP dtbo partition\n"));
+        /* AVF Ramdump is not supported.
+         * So warn if ramdump property is enabled */
+        Fdt = BootParamlistPtr.AvfDpDtboBaseAddr;
+        /* Search fragments */
+        fdt_for_each_subnode (Fragment, Fdt, 0) {
+          if (Fragment >= 0) {
+            //Search for ramdump property in each node of the fragment.
+            for (Node = fdt_next_node (Fdt, Fragment, NULL);
+                 Node >= 0;
+                 Node = fdt_next_node (Fdt, Node, NULL)) {
+              Prop = (UINT32*) fdt_getprop (Fdt, Node, "ramdump", &PropLen);
+              if (Prop &&
+                  *Prop != 0) {
+                DEBUG ((EFI_D_ERROR,
+                       "AVF debug dtbo: ramdump property is not supported\n"));
+              }
+            }
+          }
+        }
+      } else {
+        DEBUG ((EFI_D_INFO, "Not loading AVF debug policy\n"));
+      }
     }
   }
 
@@ -1784,10 +1872,6 @@ BootLinux (BootInfo *Info)
             "ERROR: Can not shutdown UEFI boot services. Status=0x%X\n",
             Status));
     goto Exit;
-  }
-
-  if (IsVmEnabled ()) {
-    DisableHypUartUsageForLogging ();
   }
 
 #ifdef DISABLE_KERNEL_PROTOCOL
