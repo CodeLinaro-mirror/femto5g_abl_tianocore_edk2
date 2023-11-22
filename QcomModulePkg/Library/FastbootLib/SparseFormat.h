@@ -88,19 +88,6 @@ typedef struct chunk_header {
  *  For a Fill chunk, it's 4 bytes of the fill data.
  */
 
-typedef struct BufferInfo {
-  VOID *Buffer;
-  UINT32 BytesWritten;
-  UINT32 Size;
-} BufferInfo_t;
-
-typedef struct UbiFlasherInfo {
-  UBI_FLASHER_HANDLE UbiFlasherHandle;
-  EFI_UBI_FLASHER_PROTOCOL *Ubi;
-  UINT32 UbiBlkSize;
-  UINT32 UbiFrameNo;
-} UbiFlasherInfo_t;
-
 typedef struct SparseImgParams {
   UINT32 Chunk;
   UINT32 TotalBlocks;
@@ -111,6 +98,4 @@ typedef struct SparseImgParams {
   UINT64 PartitionSize;
   EFI_BLOCK_IO_PROTOCOL *BlockIo;
   EFI_HANDLE *Handle;
-  UbiFlasherInfo_t UbiFlasher;
-  BufferInfo_t UbiInputBufferInfo;
 } SparseImgParam;
