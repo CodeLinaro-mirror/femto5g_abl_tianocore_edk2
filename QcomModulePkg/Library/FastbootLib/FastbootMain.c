@@ -222,9 +222,9 @@ STATIC EFI_STATUS FastbootUsbDeviceStart (VOID)
   }
 
   DescSet.DeviceDescriptor = DevDesc;
-  DescSet.Descriptors = &Descriptors;
+  DescSet.Descriptors = Descriptors;
   DescSet.SSDeviceDescriptor = SSDevDesc;
-  DescSet.SSDescriptors = &SSDescriptors;
+  DescSet.SSDescriptors = SSDescriptors;
   DescSet.DeviceQualifierDescriptor = &DeviceQualifier;
   DescSet.BinaryDeviceOjectStore = (VOID *)&BinaryObjectStore;
   DescSet.StringDescriptorCount = 5;
@@ -279,6 +279,8 @@ FastbootUsbDeviceStop (VOID)
     return Status;
   }
 
+  FreePool ((DescSet.Descriptors));
+  FreePool ((DescSet.SSDescriptors));
   return Status;
 }
 
