@@ -190,6 +190,9 @@
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
   !endif
+  !if $(PRIMARY_PMIC_INDEX_SUPPORTED) == 1
+      GCC:*_*_*_CC_FLAGS = -DPRIMARY_PMIC_INDEX_SUPPORTED
+  !endif
   !if $(DISABLE_MULTI_BOOT) == 1
       GCC:*_*_*_CC_FLAGS = -DDISABLE_MULTI_BOOT
   !endif

@@ -20,7 +20,7 @@
 #
 
 [BuildOptions.AARCH64]
-  GCC:*_*_*_CC_FLAGS = -Oz -O2
+  GCC:*_*_*_CC_FLAGS = -Oz -O2 -Wno-unused-function
 
 [Sources]
   libfdt_internal.h
