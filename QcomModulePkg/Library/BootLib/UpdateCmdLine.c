@@ -1068,7 +1068,9 @@ CHAR8* RemoveSpace (CHAR8* param, UINT32 ParamLen)
           NewParam[NewIter] = param[Iter];
         }
         else {
-          NewIter--;
+          if (NewIter > 0) {
+            NewIter--;
+          }
         }
     }
     NewParam[NewIter] = '\0';
