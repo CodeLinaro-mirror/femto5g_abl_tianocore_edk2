@@ -789,7 +789,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if (Param->BootDevBuf) {
+  if ((Param->BootDevBuf) &&
+      (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE)) {
     Src = Param->BootDeviceCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
