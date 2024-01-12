@@ -132,7 +132,7 @@
 #define KERNEL_32BIT_LOAD_OFFSET 0x8000
 #define KERNEL_64BIT_LOAD_OFFSET 0x80000
 
-#define NUM_NOMAP_REGIONS 40
+#define NUM_NOMAP_REGIONS 50
 #define NUM_RAM_PARTITIONS 30
 
 #ifdef TARGET_LINUX_BOOT_CPU_ID
@@ -222,6 +222,7 @@ typedef struct BootLinuxParamlist {
   UINT64 PvmFwLoadAddr;
   UINT64 *HypDtboBaseAddr;
   UINT32 NumHypDtbos;
+  VOID *AvfDpDtboBaseAddr;
 
  //Get the below fields info from the bootimage header
   UINT32 PageSize;
