@@ -7,6 +7,7 @@ TARGET_BOARD_TYPE_AUTO=0
 DISABLE_PARALLEL_DOWNLOAD_FLASH=0
 BUILD_USES_RECOVERY_AS_BOOT=0
 DISABLE_KERNEL_PROTOCOL=1
+PRIMARY_PMIC_INDEX_SUPPORTED=false
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common
