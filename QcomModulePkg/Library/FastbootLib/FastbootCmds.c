@@ -1177,10 +1177,12 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
 
     /* Detect if this is UBi image */
     UbiHeader = (UbiHeader_t *)Image;
-    if (!AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
-      DEBUG ((EFI_D_ERROR, "handlesparse Detected UBI in sparse!\n"));
-      if (SparseImgData.WrittenBlockCount == 0) {
-        DEBUG ((EFI_D_ERROR, "Start of ubi image\n"));
+    if (SparseImgData.WrittenBlockCount == 0) {
+      CHAR8 CopyMagic[5];
+      CopyMagic[4] = '\0';
+      gBS->CopyMem (CopyMagic, UbiHeader, 4);
+      if (!AsciiStrnCmp (CopyMagic, UBI_HEADER_MAGIC, 4)) {
+        DEBUG ((EFI_D_ERROR, "handlesparse Detected UBI in sparse!\n"));
         IsUbiImage = 1;
       }
     }
