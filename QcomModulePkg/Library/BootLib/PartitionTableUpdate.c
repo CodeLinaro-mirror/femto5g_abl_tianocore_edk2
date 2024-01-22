@@ -74,6 +74,8 @@
 #include <Uefi.h>
 #include <Uefi/UefiSpec.h>
 #include <VerifiedBoot.h>
+#include <Protocol/EFIRecoveryInfo.h>
+#include "RecoveryInfo.h"
 
 STATIC BOOLEAN FlashingGpt;
 STATIC BOOLEAN ParseSecondaryGpt;
@@ -170,6 +172,9 @@ VOID UpdatePartitionEntries (VOID)
       gBS->CopyMem ((&PtnEntries[Index]), PartEntry, sizeof (PartEntry[0]));
       PtnEntries[Index].lun = i;
     }
+  }
+  if (NAND == CheckRootDeviceType ()) {
+    NandABUpdatePartition (PTN_ENTRIES_FROM_MISC);
   }
   /* Back up the ptn entries */
   gBS->CopyMem (PtnEntriesBak, PtnEntries, sizeof (PtnEntries));
@@ -303,7 +308,10 @@ VOID UpdatePartitionAttributes (UINT32 UpdateType)
     } else if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
       Status = GetStorageHandle (Lun, BlockIoHandle, &MaxHandles);
     } else if (!AsciiStrnCmp (BootDeviceType, "NAND", AsciiStrLen ("NAND"))) {
-      DEBUG ((EFI_D_ERROR, "Skip setting if boot device type is NAND\n"));
+      if (UpdateType & PARTITION_ATTRIBUTES_MASK) {
+         NandABUpdatePartition (PTN_ENTRIES_TO_MISC);
+         gBS->CopyMem (PtnEntriesBak, PtnEntries, sizeof (PtnEntries));
+      }
       return;
     } else {
       DEBUG ((EFI_D_ERROR, "Unsupported  boot device type\n"));
@@ -774,11 +782,20 @@ PartitionHasMultiSlot (CONST CHAR16 *Pname)
   for (i = 0; i < PartitionCount; i++) {
     if (!(StrnCmp (PtnEntries[i].PartEntry.PartitionName, Pname, Len))) {
       if (PtnEntries[i].PartEntry.PartitionName[Len] == L'_' &&
-          (PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'a' ||
-           PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'b'))
-        if (++SlotCount > MIN_SLOTS) {
+          (PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'a')) {
+        SlotCount++;
+      } else if (PtnEntries[i].PartEntry.PartitionName[Len] == L'_' &&
+                 (PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'b')) {
+        if (IsRecoveryInfo ()) {
+          DEBUG (( EFI_D_VERBOSE, "Multislot because RecoveryInfo Detected\n"));
           return TRUE;
         }
+        SlotCount++;
+      }
+    }
+
+    if (SlotCount > MIN_SLOTS) {
+      return TRUE;
     }
   }
   return FALSE;
@@ -1268,7 +1285,13 @@ GetBootPartitionEntry (Slot *BootSlot)
 
   if (StrnCmp ((CONST CHAR16 *)L"_a", BootSlot->Suffix,
                StrLen (BootSlot->Suffix)) == 0) {
-    Index = GetPartitionIndex ((CHAR16 *)L"boot_a");
+    if (IsRecoveryInfo ()) {
+      DEBUG (( EFI_D_VERBOSE,  "Using boot parition for recoverinfo\n"));
+      Index = GetPartitionIndex ((CHAR16 *)L"boot");
+    } else {
+      DEBUG (( EFI_D_VERBOSE,  "using boot_a\n"));
+      Index = GetPartitionIndex ((CHAR16 *)L"boot_a");
+    }
   } else if (StrnCmp ((CONST CHAR16 *)L"_b", BootSlot->Suffix,
                       StrLen (BootSlot->Suffix)) == 0) {
     Index = GetPartitionIndex ((CHAR16 *)L"boot_b");
@@ -1423,6 +1446,12 @@ GetActiveSlot (Slot *ActiveSlot)
   if (ActiveSlot == NULL) {
     DEBUG ((EFI_D_ERROR, "GetActiveSlot: bad parameter\n"));
     return EFI_INVALID_PARAMETER;
+  }
+
+  if ((IsSuffixEmpty (ActiveSlot) == TRUE) &&
+      (IsRecoveryInfo ())) {
+    Status = RI_GetActiveSlot (ActiveSlot);
+    return Status;
   }
 
   for (UINTN SlotIndex = 0; SlotIndex < ARRAY_SIZE (Slots); SlotIndex++) {
@@ -1781,6 +1810,10 @@ FindBootableSlot (Slot *BootableSlot)
             BootableSlot->Suffix));
     return EFI_NOT_FOUND;
   }
+  /* Rely on uefi that returned bootset is */
+  if (IsRecoveryInfo ()) {
+    goto out;
+  }
 
   Unbootable = (BootEntry->PartEntry.Attributes & PART_ATT_UNBOOTABLE_VAL) >>
                PART_ATT_UNBOOTABLE_BIT;
@@ -1990,4 +2023,68 @@ LoadAndValidateDtboImg (BootInfo *Info,
   }
 
   return TRUE;
+}
+
+EFI_STATUS NandABUpdatePartition (UINT32 UpdateType)
+{
+  Slot Slots[] = {{L"_a"}, {L"_b"}};
+  NandABAttr *NandAttr = NULL;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  EFI_STATUS Status;
+  UINT32 PageSize;
+  size_t Size1 = sizeof (PtnEntries[0].PartEntry.PartitionName);
+  size_t Size2 = sizeof (NandAttr->Slots[0].SlotName);
+
+  GetPageSize (&PageSize);
+  Status = GetNandMiscPartiGuid (&Ptype);
+  if (Status != EFI_SUCCESS) {
+    return Status;
+  }
+
+  Status = ReadFromPartition (&Ptype, (VOID **)&NandAttr, PageSize);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error Reading from misc partition: %r\n", Status));
+    return Status;
+  }
+
+  if (!NandAttr) {
+    DEBUG ((EFI_D_ERROR, "Error in loading Data from misc partition\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  for (UINTN SlotIndex = 0; SlotIndex < ARRAY_SIZE (Slots); SlotIndex++) {
+    struct PartitionEntry *BootPartition =
+                      GetBootPartitionEntry (&Slots[SlotIndex]);
+    if (BootPartition == NULL) {
+      DEBUG ((EFI_D_ERROR, "GetActiveSlot: No boot partition "
+                    "entry for slot %s\n", Slots[SlotIndex].Suffix));
+      Status = EFI_NOT_FOUND;
+      goto Exit;
+    }
+
+    if (UpdateType == PTN_ENTRIES_TO_MISC) {
+      NandAttr->Slots[SlotIndex].Attributes =
+         (CHAR8)((BootPartition->PartEntry.Attributes >>
+                                 PART_ATT_PRIORITY_BIT)&0xff);
+      StrnCpyS (NandAttr->Slots[SlotIndex].SlotName, Size2 ,
+                    (BootPartition->PartEntry.PartitionName), Size1);
+    } else if (!StrnCmp (BootPartition->PartEntry.PartitionName,
+                       NandAttr->Slots[SlotIndex].SlotName, Size2)) {
+        BootPartition->PartEntry.Attributes =
+               (((UINT64)((NandAttr->Slots[SlotIndex].Attributes)&0xff)) <<
+                                                       PART_ATT_PRIORITY_BIT);
+    }
+  }
+
+  if (UpdateType == PTN_ENTRIES_TO_MISC) {
+    WriteToPartition (&Ptype, NandAttr, sizeof (struct NandABAttr));
+  }
+
+Exit:
+  if (NandAttr) {
+    FreePool (NandAttr);
+    NandAttr = NULL;
+  }
+
+  return Status;
 }

@@ -131,7 +131,7 @@
 #define KERNEL_32BIT_LOAD_OFFSET 0x8000
 #define KERNEL_64BIT_LOAD_OFFSET 0x80000
 
-#define NUM_NOMAP_REGIONS 40
+#define NUM_NOMAP_REGIONS 50
 #define NUM_RAM_PARTITIONS 30
 
 #ifdef TARGET_LINUX_BOOT_CPU_ID
@@ -277,6 +277,9 @@ EFI_STATUS
 LaunchApp (IN UINT32 Argc, IN CHAR8 **Argv);
 BOOLEAN TargetBuildVariantUser (VOID);
 BOOLEAN IsLEVariant (VOID);
+BOOLEAN IsMultiBoot (VOID);
+BOOLEAN IsPowerKeyMultiplex (VOID);
+BOOLEAN ClearResetReason (VOID);
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
 VOID SetRecoveryHasNoKernel (VOID);

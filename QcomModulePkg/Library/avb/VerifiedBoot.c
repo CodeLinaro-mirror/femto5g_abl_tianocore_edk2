@@ -71,6 +71,7 @@
 #include <Library/MenuKeysDetection.h>
 #include <Library/VerifiedBootMenu.h>
 #include <Library/LEOEMCertificate.h>
+#include "RecoveryInfo.h"
 
 STATIC CONST CHAR8 *VerityMode = " androidboot.veritymode=";
 STATIC CONST CHAR8 *VerifiedState = " androidboot.verifiedbootstate=";
@@ -220,8 +221,12 @@ NoAVBLoadReqImage (BootInfo *Info, VOID **DtboImage,
 
   if (Info->MultiSlotBoot) {
       CurrentSlot = GetCurrentSlotSuffix ();
-      GUARD ( StrnCatS (Pname, MAX_GPT_NAME_SIZE,
+      /* Fixup suffix in case of recoveryinfo */
+      if (!IsRecoveryInfo () ||
+          (StrCmp (CurrentSlot.Suffix, L"_a"))) {
+        GUARD ( StrnCatS (Pname, MAX_GPT_NAME_SIZE,
                   CurrentSlot.Suffix, StrLen (CurrentSlot.Suffix)));
+      }
   }
   if (GetPartitionIndex (Pname) == INVALID_PTN) {
     Status = EFI_NO_MEDIA;
@@ -282,6 +287,11 @@ NoAVBLoadReqImage (BootInfo *Info, VOID **DtboImage,
   }
   Status = LoadImageFromPartition (*DtboImage, DtboSize, Pname);
 
+  if (Status != EFI_SUCCESS &&
+      IsRecoveryInfo ()) {
+    RI_HandleFailedSlot (CurrentSlot);
+    /*No return*/
+  }
 out:
   if (Ops != NULL) {
     AvbOpsFree (Ops);
@@ -437,8 +447,8 @@ LoadPartitionImageHeader (BootInfo *Info, CHAR16 *PartName,
   EFI_STATUS Status = EFI_SUCCESS;
   CHAR16 Pname[MAX_GPT_NAME_SIZE] = {0};
 
-  StrnCpyS (Pname, ARRAY_SIZE (Pname),
-            PartName, StrLen (PartName));
+  GUARD (StrnCpyS (Pname, ARRAY_SIZE (Pname),
+                   PartName, StrLen (PartName)));
 
   if (Info->MultiSlotBoot) {
     GUARD (StrnCatS (Pname, ARRAY_SIZE (Pname),
@@ -514,7 +524,8 @@ LoadBootImageNoAuth (BootInfo *Info, UINT32 *PageSize, BOOLEAN *FastbootPath)
     } else if (ImageHdrSize < sizeof (boot_img_hdr)) {
       DEBUG ((EFI_D_ERROR,
               "ERROR: Invalid image header size: %u\n", ImageHdrSize));
-      return EFI_BAD_BUFFER_SIZE;
+      Status =  EFI_BAD_BUFFER_SIZE;
+      goto ErrV3;
     }
 
     BootIntoRecovery = Info->BootIntoRecovery;
@@ -750,11 +761,15 @@ LoadImageNoAuthWrapper (BootInfo *Info)
                                    Info->NetworkBoot);
     if (SystemPathLen == 0 || SystemPath == NULL) {
       DEBUG ((EFI_D_ERROR, "GetSystemPath failed!\n"));
-      return EFI_LOAD_ERROR;
+      Status = EFI_LOAD_ERROR;
+      goto Err;
     }
-    GUARD (AppendVBCmdLine (Info, SystemPath));
+    Status = AppendVBCmdLine (Info, SystemPath);
   }
-
+Err:
+  if (SystemPath) {
+    FreePool (SystemPath);
+  }
   return Status;
 }
 
@@ -981,6 +996,7 @@ STATIC EFI_STATUS LEGetRSAPublicKeyInfoFromCertificate (
 exit:
     return Status;
 }
+
 STATIC EFI_STATUS LEVerifyHashWithRSASignature (
                 UINT8 *ImgHash,
                 VB_HASH HashAlgorithm,
@@ -1138,8 +1154,9 @@ static BOOLEAN GetHeaderVersion (AvbSlotVerifyData *SlotData)
   UINTN LoadedIndex = 0;
   for (LoadedIndex = 0; LoadedIndex < SlotData->num_loaded_partitions;
          LoadedIndex++) {
-    if (avb_strcmp (SlotData->loaded_partitions[LoadedIndex].partition_name,
-      "recovery") == 0 )
+    if ((!SlotData->loaded_partitions[LoadedIndex].partition_name) && 
+      (avb_strcmp (SlotData->loaded_partitions[LoadedIndex].partition_name,
+      "recovery") == 0))
       return ( (boot_img_hdr *)
         (SlotData->loaded_partitions[LoadedIndex].data))->header_version;
   }
@@ -1352,12 +1369,19 @@ IsValidPartition (Slot *Slot, CONST CHAR16 *Name)
   EFI_STATUS Status;
   INT32 Index;
 
-  GUARD (StrnCpyS (PartiName, (UINTN)MAX_GPT_NAME_SIZE, Name, StrLen (Name)));
-
+  Status = StrnCpyS (PartiName, (UINTN)MAX_GPT_NAME_SIZE, Name, StrLen (Name));
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Copy failed for Partition Name\n"));
+    goto out;
+  }
   /* If *Slot is filled, it means that it's for multi-slot */
   if (Slot) {
-     GUARD (StrnCatS (PartiName, MAX_GPT_NAME_SIZE,
-                      Slot->Suffix, StrLen (Slot->Suffix)));
+     Status = StrnCatS (PartiName, MAX_GPT_NAME_SIZE,
+                      Slot->Suffix, StrLen (Slot->Suffix));
+     if (Status != EFI_SUCCESS) {
+       DEBUG ((EFI_D_ERROR, "Issue in Partition Name or slot suffix\n"));
+       goto out;
+     }
   }
 
   Index = GetPartitionIndex (PartiName);
@@ -1365,6 +1389,8 @@ IsValidPartition (Slot *Slot, CONST CHAR16 *Name)
   return (Index == INVALID_PTN ||
           Index >= MAX_NUM_PARTITIONS) ?
           FALSE : TRUE;
+out:
+  return FALSE;
 }
 
 
@@ -1381,7 +1407,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   CHAR8 PnameAscii[MAX_GPT_NAME_SIZE] = {0};
   CHAR8 *SlotSuffix = NULL;
   BOOLEAN AllowVerificationError = IsUnlocked ();
-  CHAR8 *RequestedPartitionAll[MAX_NUM_REQ_PARTITION] = {NULL};
+  CHAR8 *RequestedPartitionAll[MAX_NUM_REQ_PARTITION + 1] = {NULL};
   CHAR8 **RequestedPartition = NULL;
   UINTN NumRequestedPartition = 0;
   UINT32 ImageHdrSize = BOOT_IMG_MAX_PAGE_SIZE;
@@ -1449,7 +1475,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuthVB2: Error int TZ Rollback Version "
                "syscall; ScmCall Status: (0x%x)\r\n", Status));
-      return Status;
+      goto out;
     }
   }
 
@@ -1535,6 +1561,8 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
         DEBUG ((EFI_D_ERROR,
                 "ERROR: Invalid image header size: %u\n", ImageHdrSize));
         Info->BootState = RED;
+        FreePages (ImageHdrBuffer,
+                   ALIGN_PAGES (BOOT_IMG_MAX_PAGE_SIZE, ALIGNMENT_MASK_4KB));
         Status = EFI_BAD_BUFFER_SIZE;
         goto out;
       }
@@ -1584,6 +1612,10 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
 
     Result = avb_slot_verify (Ops, (CONST CHAR8 *CONST *)RequestedPartition,
                 SlotSuffix, VerifyFlags, VerityFlags, &SlotData);
+    if (ImageHdrBuffer) {
+       FreePages (ImageHdrBuffer,
+                  ALIGN_PAGES (BOOT_IMG_MAX_PAGE_SIZE, ALIGNMENT_MASK_4KB));
+    }
   }
 
   if (SlotData == NULL) {
@@ -1613,30 +1645,32 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
             RequestedPartition[ReqIndex]));
     for (UINTN LoadedIndex = 0; LoadedIndex < SlotData->num_loaded_partitions;
          LoadedIndex++) {
-      DEBUG ((EFI_D_VERBOSE, "Loaded Partition: %a\n",
-              SlotData->loaded_partitions[LoadedIndex].partition_name));
-      if (!AsciiStrnCmp (
+      if (SlotData->loaded_partitions[LoadedIndex].partition_name) {
+        DEBUG ((EFI_D_VERBOSE, "Loaded Partition: %a\n",
+                SlotData->loaded_partitions[LoadedIndex].partition_name));
+        if (!AsciiStrnCmp (
               RequestedPartition[ReqIndex],
               SlotData->loaded_partitions[LoadedIndex].partition_name,
               AsciiStrLen (
                   SlotData->loaded_partitions[LoadedIndex].partition_name))) {
-        if (Info->NumLoadedImages >= ARRAY_SIZE (Info->Images)) {
-          DEBUG ((EFI_D_ERROR, "NumLoadedPartition"
+          if (Info->NumLoadedImages >= ARRAY_SIZE (Info->Images)) {
+            DEBUG ((EFI_D_ERROR, "NumLoadedPartition"
                                "(%d) too large "
                                "max images(%d)\n",
-                  Info->NumLoadedImages, ARRAY_SIZE (Info->Images)));
-          Status = EFI_LOAD_ERROR;
-          Info->BootState = RED;
-          goto out;
+                    Info->NumLoadedImages, ARRAY_SIZE (Info->Images)));
+            Status = EFI_LOAD_ERROR;
+            Info->BootState = RED;
+            goto out;
+          }
+          Info->Images[Info->NumLoadedImages].Name =
+              SlotData->loaded_partitions[LoadedIndex].partition_name;
+          Info->Images[Info->NumLoadedImages].ImageBuffer =
+              SlotData->loaded_partitions[LoadedIndex].data;
+          Info->Images[Info->NumLoadedImages].ImageSize =
+              SlotData->loaded_partitions[LoadedIndex].data_size;
+          Info->NumLoadedImages++;
+          break;
         }
-        Info->Images[Info->NumLoadedImages].Name =
-            SlotData->loaded_partitions[LoadedIndex].partition_name;
-        Info->Images[Info->NumLoadedImages].ImageBuffer =
-            SlotData->loaded_partitions[LoadedIndex].data;
-        Info->Images[Info->NumLoadedImages].ImageSize =
-            SlotData->loaded_partitions[LoadedIndex].data_size;
-        Info->NumLoadedImages++;
-        break;
       }
     }
   }
@@ -1771,9 +1805,6 @@ out:
     if (Ops != NULL) {
       AvbOpsFree (Ops);
     }
-    if (UserData != NULL) {
-      avb_free (UserData);
-    }
     if (VBData != NULL) {
       avb_free (VBData);
     }
@@ -1790,6 +1821,9 @@ out:
     }
   }
 
+  if (UserData) {
+    avb_free (UserData);
+  }
   DEBUG ((EFI_D_INFO, "VB2: boot state: %a(%d)\n",
         VbSn[Info->BootState].name, Info->BootState));
   return Status;
@@ -1887,6 +1921,9 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     secasn1_data_type Modulus = {NULL};
     secasn1_data_type PublicExp = {NULL};
     UINT32 PaddingType = 0;
+#ifdef CMDLINE_SHOW_SECURE_BOOT_STATUS
+    CHAR8 *SecureCmdline = NULL;
+#endif /* CMDLINE_SHOW_SECURE_BOOT_STATUS */
 
     /*Load image*/
     GUARD (VBAllocateCmdLine (Info));
@@ -1897,6 +1934,15 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
         return Status;
     }
+
+    /* If secure device,append cmdline */
+#ifdef CMDLINE_SHOW_SECURE_BOOT_STATUS
+    if (SecureDevice == TRUE) {
+        DEBUG ((EFI_D_ERROR, "VB: Secure Boot enabled: %r\n", Status));
+        SecureCmdline = " secure=1";
+        GUARD (AppendVBCmdLine (Info, SecureCmdline));
+    }
+#endif /* CMDLINE_SHOW_SECURE_BOOT_STATUS */
 
     /* In case of flashless LE devices images are already loaded and verified
      * by previous bootloaders, so just fill the BootInfo structure with
@@ -2046,6 +2092,7 @@ skip_verification:
         }
         GUARD (AppendVBCmdLine (Info, SystemPath));
     }
+
     return Status;
 }
 
@@ -2069,6 +2116,7 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
   UINT32 RecoveryHdrSz = 0;
   VOID *InitBootHdr = NULL;
   UINT32 InitBootHdrSz = 0;
+  Slot CurrentSlot = {{0}};
 
   WaitForFlashFinished ();
 
@@ -2131,8 +2179,8 @@ get_ptn_name:
     if (Info->BootIntoRecovery &&
         !IsRecoveryHasNoKernel ()) {
       DEBUG ((EFI_D_INFO, "Booting Into Recovery Mode\n"));
-      StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"recovery",
-                StrLen (L"recovery"));
+      GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"recovery",
+                StrLen (L"recovery")));
     } else {
       if (Info->BootIntoRecovery &&
           IsRecoveryHasNoKernel ()) {
@@ -2140,11 +2188,11 @@ get_ptn_name:
       } else {
         DEBUG ((EFI_D_INFO, "Booting Into Mission Mode\n"));
       }
-      StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"boot",
-                StrLen (L"boot"));
+      GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"boot",
+                StrLen (L"boot")));
     }
   } else {
-    Slot CurrentSlot = {{0}};
+
 
     GUARD (FindBootableSlot (&CurrentSlot));
     if (IsSuffixEmpty (&CurrentSlot)) {
@@ -2156,8 +2204,8 @@ get_ptn_name:
           Info->BootIntoRecovery &&
           !IsRecoveryHasNoKernel ()) {
       DEBUG ((EFI_D_INFO, "Booting Into Recovery Mode\n"));
-      StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"recovery",
-                     StrLen (L"recovery"));
+      GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"recovery",
+                     StrLen (L"recovery")));
     } else {
       if (Info->BootIntoRecovery &&
           IsRecoveryHasNoKernel ()) {
@@ -2171,6 +2219,13 @@ get_ptn_name:
 
     GUARD (StrnCatS (Info->Pname, ARRAY_SIZE (Info->Pname), CurrentSlot.Suffix,
                      StrLen (CurrentSlot.Suffix)));
+    /* For RecoveryInfo skip _a suffix */
+    if (IsRecoveryInfo () &&
+        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) {
+      GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"boot",
+                         StrLen (L"boot")));
+    }
+
   }
 
   DEBUG ((EFI_D_VERBOSE, "MultiSlot %a, partition name %s\n",
@@ -2214,6 +2269,12 @@ get_ptn_name:
 
   if (HibernationResume) {
     return Status;
+  }
+
+  if ((Status != EFI_SUCCESS) &&
+      IsRecoveryInfo ()) {
+    RI_HandleFailedSlot (CurrentSlot);
+    /*No Return*/
   }
 
   // if MDTP is active Display Recovery UI

@@ -33,4 +33,7 @@
 
 EFI_STATUS
 GetKeyPress (UINT32 *KeyPressed);
+
+EFI_STATUS
+GetPowerKeyPressInfo (UINT32 *PowerKeyPressTime);
 #endif
