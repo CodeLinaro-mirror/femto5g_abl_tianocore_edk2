@@ -220,7 +220,6 @@ STATIC VOID PrintCpuFrequency (VOID)
       }
       status = ClockProtocol->GetCpuPerfLevelFrequency (ClockProtocol, i,
                      pnPerfLevel, &pnFrequencyHz, &pnRequiredVoltage);
->>>>>>> c631d5eef89206045795c83c491b3a9ad0a1b37b
     }
   }
 }
