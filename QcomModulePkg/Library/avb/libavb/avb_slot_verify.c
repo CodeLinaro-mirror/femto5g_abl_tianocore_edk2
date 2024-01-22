@@ -428,7 +428,7 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
       ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
       goto out;
     }
-    ret = LoadAndVerifyBootHashPartition (ops,
+    ret = LoadAndVerifyHashPartitionInParallel (ops,
                                           hash_desc,
                                           part_name,
                                           desc_digest,
