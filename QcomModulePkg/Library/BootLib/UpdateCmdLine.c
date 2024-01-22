@@ -123,11 +123,6 @@ STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 DisplayCmdLine[MAX_DISPLAY_CMD_LINE];
 STATIC UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
 
-#define MAX_AUDIO_CMD_LENGTH 64
-STATIC CHAR8 AudioFrameWork[MAX_AUDIO_FW_LENGTH];
-STATIC UINT32 AudioFWLen;
-STATIC CHAR8 *AndroidBootAudioFW = " androidboot.audio=";
-
 #define MAX_DTBO_IDX_STR 64
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
 STATIC CHAR8 *AndroidBootDtbIdx = " androidboot.dtb_idx=";
@@ -344,16 +339,6 @@ STATIC VOID GetDisplayCmdline (VOID)
   }
 }
 
-STATIC VOID GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
-{
-  EFI_STATUS Status;
-  CHAR8 *Src;
-
-  Status = ReadAudioFrameWork (&Src, Length);
-  if ((Status == EFI_SUCCESS) && *Length) {
-     AsciiStrCatS (FrameWork, MAX_AUDIO_FW_LENGTH, Src);
-  }
-}
 
 /*
  * Returns length = 0 when there is failure.
@@ -639,9 +624,6 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
   Src = Param->DisplayCmdLine;
   AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
-  Src = Param->AudioFrameWork;
-  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-
   if (Param->MdtpActive) {
     Src = Param->MdtpActiveFlag;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
@@ -773,7 +755,6 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   CHAR8 *LEVerityCmdLine = NULL;
   UINT32 LEVerityCmdLineLen = 0;
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
-  CHAR8 AudioFWStr[MAX_AUDIO_CMD_LENGTH] = "\0";
   CHAR8 *ModemPathStr = NULL;
 
   Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
@@ -896,14 +877,6 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   GetDisplayCmdline ();
   CmdLineLen += AsciiStrLen (DisplayCmdLine);
 
-  GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
-  if (AudioFWLen) {
-    DEBUG((EFI_D_INFO, "Audio FrameWork is %s\n",AudioFrameWork));
-    AsciiSPrint(AudioFWStr, (MAX_AUDIO_CMD_LENGTH-1), "%a", AndroidBootAudioFW);
-    AsciiStrCatS(AudioFWStr, MAX_AUDIO_CMD_LENGTH, AudioFrameWork);
-    CmdLineLen += AudioFWLen + AsciiStrLen (AudioFWStr);
-  }
-
   if (EarlyServicesEnabled ()) {
     CmdLineLen += GetSystemPathByPname(&ModemPathStr,
                                         MultiSlotBoot,
@@ -1007,7 +980,6 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   Param.LEVerityCmdLine = LEVerityCmdLine;
   Param.HeaderVersion = HeaderVersion;
   Param.SystemdSlotEnv = SystemdSlotEnv;
-  Param.AudioFrameWork = AudioFWStr;
   Param.ModemPathCmdLine = ModemPathStr;
 
   if (EarlyEthEnabled ()) {
