@@ -235,7 +235,13 @@ typedef EFI_STATUS (EFIAPI *EFI_PM_GET_PMIC_INFO_EXT) (
 struct _EFI_QCOM_PMIC_VERSION_PROTOCOL {
   UINT64 Revision;
   EFI_PM_GET_PMIC_INFO GetPmicInfo;
+/*
+   Add a check here to maintain backward compatibility with the firmware where
+   GetPrimaryPmicIndex field is not supported.
+ */
+#ifdef PRIMARY_PMIC_INDEX_SUPPORTED
   EFI_PM_GET_PRIMARY_PMIC_INDEX GetPrimaryPmicIndex;
+#endif
   EFI_PM_GET_PMIC_INFO_EXT GetPmicInfoExt;
 };
 

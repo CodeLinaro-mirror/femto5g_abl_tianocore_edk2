@@ -49,7 +49,7 @@ found at
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -1177,10 +1177,12 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
 
     /* Detect if this is UBi image */
     UbiHeader = (UbiHeader_t *)Image;
-    if (!AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
-      DEBUG ((EFI_D_ERROR, "handlesparse Detected UBI in sparse!\n"));
-      if (SparseImgData.WrittenBlockCount == 0) {
-        DEBUG ((EFI_D_ERROR, "Start of ubi image\n"));
+    if (SparseImgData.WrittenBlockCount == 0) {
+      CHAR8 CopyMagic[5];
+      CopyMagic[4] = '\0';
+      gBS->CopyMem (CopyMagic, UbiHeader, 4);
+      if (!AsciiStrnCmp (CopyMagic, UBI_HEADER_MAGIC, 4)) {
+        DEBUG ((EFI_D_ERROR, "handlesparse Detected UBI in sparse!\n"));
         IsUbiImage = 1;
       }
     }
@@ -1193,6 +1195,7 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
       gBS->CopyMem (&SparseImgData.UbiInputBufferInfo, &BufferInfoBackup,
            sizeof (struct BufferInfo));
       FlasherBackup.Ubi = NULL;
+      IsUbiImage = 1;
     } else if (IsUbiImage == 1 &&
                !SparseImgData.UbiFlasher.Ubi ) {
       /*open flasher and save it in the sparseImage data structure*/
