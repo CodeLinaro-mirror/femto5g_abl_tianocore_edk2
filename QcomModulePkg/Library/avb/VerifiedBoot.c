@@ -29,7 +29,7 @@
  /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -619,7 +619,8 @@ SkipImageVerification:
     }
   }
 
-  return EFI_SUCCESS;
+  Status = EFI_SUCCESS;
+  goto Err;
 
 ErrRecImgName:
   if (Info->Images[1].Name) {
@@ -1163,16 +1164,20 @@ static BOOLEAN GetHeaderVersion (AvbSlotVerifyData *SlotData)
   return HeaderVersion;
 }
 
-static VOID AddRequestedPartition (CHAR8 **RequestedPartititon, UINT32 Index)
+static EFI_STATUS AddRequestedPartition (CHAR8 **RequestedPartititon,
+                                         UINT32 Index)
 {
   UINTN PartIndex = 0;
+  EFI_STATUS Status = EFI_FAILURE;
   for (PartIndex = 0; PartIndex < MAX_NUM_REQ_PARTITION; PartIndex++) {
     if (RequestedPartititon[PartIndex] == NULL) {
       RequestedPartititon[PartIndex] =
         avb_verify_partition_name[Index];
+      Status = EFI_SUCCESS;
       break;
     }
   }
+  return Status;
 }
 
 STATIC VOID
@@ -1500,7 +1505,10 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
            !IsRecoveryHasNoKernel ())) {
     if (!Info->MultiSlotBoot)
               VerifyFlags = VerifyFlags | AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION;
-    AddRequestedPartition (RequestedPartitionAll, IMG_RECOVERY);
+    if (AddRequestedPartition (RequestedPartitionAll, IMG_RECOVERY)
+        != EFI_SUCCESS) {
+       goto out;
+    }
     NumRequestedPartition += 1;
     Result = avb_slot_verify (Ops, (CONST CHAR8 *CONST *)RequestedPartition,
                SlotSuffix, VerifyFlags, VerityFlags, &SlotData);
@@ -1530,12 +1538,17 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
                     "Recovery HeaderVersion %d \n", Info->HeaderVersion));
 
     if (Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
-       AddRequestedPartition (RequestedPartitionAll, IMG_DTBO);
+       if (AddRequestedPartition (RequestedPartitionAll, IMG_DTBO)
+           != EFI_SUCCESS) {
+          goto out;
+       }
        NumRequestedPartition += 1;
-
        if (!HibernationResume) {
-         AddRequestedPartition (RequestedPartitionAll, IMG_DTBO);
-         NumRequestedPartition += 1;
+          if (AddRequestedPartition (RequestedPartitionAll, IMG_DTBO)
+              != EFI_SUCCESS) {
+             goto out;
+          }
+          NumRequestedPartition += 1;
        }
        if (SlotData != NULL) {
           avb_slot_verify_data_free (SlotData);
@@ -1571,13 +1584,19 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
     DEBUG ((EFI_D_VERBOSE, "Header version  %d\n", Info->HeaderVersion));
 
     if (!Info->NumLoadedImages) {
-      AddRequestedPartition (RequestedPartitionAll, IMG_BOOT);
-      NumRequestedPartition += 1;
+       if (AddRequestedPartition (RequestedPartitionAll, IMG_BOOT)
+           != EFI_SUCCESS) {
+          goto out;
+       }
+       NumRequestedPartition += 1;
     }
 
     if (!HibernationResume) {
-      AddRequestedPartition (RequestedPartitionAll, IMG_DTBO);
-      NumRequestedPartition += 1;
+       if (AddRequestedPartition (RequestedPartitionAll, IMG_DTBO)
+           != EFI_SUCCESS) {
+          goto out;
+       }
+       NumRequestedPartition += 1;
     }
 
     if (Info->MultiSlotBoot) {
@@ -1591,8 +1610,11 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
 
     if (IsValidPartition (&CurrentSlot, L"vendor_boot") &&
        Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
-      AddRequestedPartition (RequestedPartitionAll, IMG_VENDOR_BOOT);
-      NumRequestedPartition += 1;
+       if (AddRequestedPartition (RequestedPartitionAll, IMG_VENDOR_BOOT)
+           != EFI_SUCCESS) {
+          goto out;
+       }
+       NumRequestedPartition += 1;
     } else {
       DEBUG ((EFI_D_VERBOSE, "Invalid vendor_boot partition. Skipping\n"));
     }
@@ -1600,14 +1622,20 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
     if (Info->BootIntoRecovery &&
         !IsBuildUseRecoveryAsBoot () &&
         IsRecoveryHasNoKernel ()) {
-      AddRequestedPartition (RequestedPartitionAll, IMG_RECOVERY);
-      NumRequestedPartition += 1;
+       if (AddRequestedPartition (RequestedPartitionAll, IMG_RECOVERY)
+           != EFI_SUCCESS) {
+          goto out;
+       }
+       NumRequestedPartition += 1;
     }
 
     if ((Info->HasBootInitRamdisk) &&
        (Info->HeaderVersion >= BOOT_HEADER_VERSION_FOUR)) {
-      AddRequestedPartition (RequestedPartitionAll, IMG_INIT_BOOT);
-      NumRequestedPartition += 1;
+       if (AddRequestedPartition (RequestedPartitionAll, IMG_INIT_BOOT)
+           != EFI_SUCCESS) {
+          goto out;
+       }
+       NumRequestedPartition += 1;
     }
 
     Result = avb_slot_verify (Ops, (CONST CHAR8 *CONST *)RequestedPartition,
