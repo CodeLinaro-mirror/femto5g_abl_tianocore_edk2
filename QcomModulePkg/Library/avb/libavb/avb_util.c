@@ -799,7 +799,7 @@ EFI_STATUS UpdateRollbackSyscall ()
     }
     if (SysCallRsp->status != 1) {
       Status = SysCallRsp->status;
-      DEBUG (( EFI_D_ERROR, "TZ_UPDATE_ROLLBACK_VERSION_ID failed, "
+      DEBUG(( EFI_D_ERROR, "TZ_UPDATE_ROLLBACK_VERSION_ID failed, "
                     "Status = (0x%x)\r\n", Status));
       return Status;
     }

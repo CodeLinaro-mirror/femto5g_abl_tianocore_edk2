@@ -73,6 +73,8 @@
 #include <Protocol/LoadedImage.h>
 #include <Protocol/scm_sip_interface.h>
 #include <Protocol/EFISPSS.h>
+#include <Library/LinuxLoaderLib.h>
+#include <Library/DeviceInfo.h>
 
 typedef struct {
   QCOM_QSEECOM_PROTOCOL *QseeComProtocol;
@@ -129,6 +131,7 @@ typedef enum {
   KEYMASTER_SET_VBH = (KEYMASTER_UTILS_CMD_ID + 17UL),
   KEYMASTER_GET_DATE_SUPPORT = (KEYMASTER_UTILS_CMD_ID + 21UL),
   KEYMASTER_FBE_SET_SEED = (KEYMASTER_UTILS_CMD_ID + 24UL),
+  KEYMINT_GENERATE_FRS_AND_UDS = (KEYMASTER_UTILS_CMD_ID + 25UL),
 
   KEYMASTER_LAST_CMD_ENTRY = (int)0xFFFFFFFFULL
 } KeyMasterCmd;
@@ -177,6 +180,27 @@ typedef struct {
 typedef struct {
   INT32 Status;
 } __attribute__ ((packed)) KMFbeSetSeedRsp;
+
+typedef struct {
+  UINT32 FrsSecLen; /*Holds length of FRS secret*/
+  uint8_t FrsSec[DICE_HIDDEN_SIZE]; /*Holds plain secret*/
+} __attribute__ ((packed)) KMFrsSec;
+
+typedef struct {
+  UINT32 CmdId;
+  UINT32 FdrFlag;
+  KMFrsSec FrsSecData;
+} __attribute__ ((packed)) KMGetFRSUDSReq;
+
+typedef struct {
+  INT32 Status;
+  UINT32 FrsLen;
+  UINT32 UdsLen;
+  uint8_t Frs[DICE_HIDDEN_SIZE];/*Factory reset Secret */
+  uint8_t Uds[DICE_CDI_SIZE];/*Unique Device Secret*/
+  UINT32 FrsSecLen; /*Holds length of FRS secret*/
+  uint8_t FrsSec[DICE_HIDDEN_SIZE]; /*Holds plain secret*/
+} __attribute__ ((packed)) KMGetFRSUDSRsp;
 
 STATIC EFI_STATUS ShareKeyMintInfoWithSPU (VOID);
 
@@ -534,5 +558,108 @@ STATIC EFI_STATUS ShareKeyMintInfoWithSPU (VOID)
   // Clear data from memory
   SetMem ( (VOID*) (&SPUKeymintSharedInfo), sizeof (SPUKeymintSharedInfo), 0);
 
+  return Status;
+}
+
+/* KeyMasterGetFRSAndUDS will fetch Unique Device Secret(UDS) and
+ * Factory Reset Sequence(FRS) from Keymint.
+ */
+EFI_STATUS KeyMasterGetFRSAndUDS (BccParams_t *bcc_params)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  KMGetFRSUDSReq FRSUDSReq = {0};
+  KMGetFRSUDSRsp FRSUDSRsp = {0};
+  DeviceInfo *Devinfo = NULL;
+
+  if (bcc_params == NULL ||
+      bcc_params->FRS == NULL ||
+      bcc_params->UDS == NULL) {
+        DEBUG ((EFI_D_ERROR, "KeyMasterGetFRSAndUDS: Parameter received"
+                "is NULL"));
+        Status = EFI_INVALID_PARAMETER;
+        goto out;
+  }
+
+  Devinfo = AllocateZeroPool (sizeof (DeviceInfo));
+  if (Devinfo == NULL) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate zero pool for device info.\n"));
+    goto out;
+  }
+
+  GUARD (KeyMasterStartApp (&Handle));
+  FRSUDSReq.CmdId = KEYMINT_GENERATE_FRS_AND_UDS;
+
+  /* Read FDR Flag and FRS secret from DevInfo */
+  Status = ReadWriteDeviceInfo (READ_CONFIG, (VOID *)Devinfo,
+                                sizeof (DeviceInfo));
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "KeyMasterGetFRSAndUDS: Unable to Read Device Info:"
+            " %r\n", Status));
+    goto out;
+  }
+
+  FRSUDSReq.FdrFlag = Devinfo->FdrFlag;
+  if (Devinfo->FrsSecLen != 0) {
+    /* If any FRS secret is maintained in DevInfo,
+     * copy it into request buffer.
+     */
+    FRSUDSReq.FrsSecData.FrsSecLen = Devinfo->FrsSecLen;
+    CopyMem (FRSUDSReq.FrsSecData.FrsSec, Devinfo->FrsSec,
+             FRSUDSReq.FrsSecData.FrsSecLen);
+  }
+
+  Status = Handle.QseeComProtocol->QseecomSendCmd (
+           Handle.QseeComProtocol, Handle.AppId, (UINT8 *)&FRSUDSReq,
+           sizeof (FRSUDSReq), (UINT8 *)&FRSUDSRsp, sizeof (FRSUDSRsp));
+  if (Status != EFI_SUCCESS ||
+      FRSUDSRsp.Status != 0) {
+      DEBUG ((EFI_D_ERROR, "KeyMasterGetFRSAndUDS: Get FRSAndUDS err, "
+              "Status: %r, response status: %d\n",
+              Status, FRSUDSRsp.Status));
+      Status = EFI_LOAD_ERROR;
+      goto out;
+  }
+
+  if (FRSUDSRsp.FrsLen != DICE_HIDDEN_SIZE &&
+      FRSUDSRsp.UdsLen != DICE_CDI_SIZE) {
+      DEBUG ((EFI_D_ERROR, "KeyMasterGetFRSAndUDS: Invalid Length Received:"
+              " FrsLen=%d UdsLen=%d\n", FRSUDSRsp.FrsLen,
+              FRSUDSRsp.UdsLen));
+      Status = EFI_LOAD_ERROR;
+      goto out;
+  }
+  if (!FRSUDSRsp.Frs &&
+      !FRSUDSRsp.Uds) {
+      DEBUG ((EFI_D_ERROR, "KeyMasterGetFRSAndUDS: Response not received\n"));
+      Status = EFI_LOAD_ERROR;
+      goto out;
+  }
+
+  /* Reset the FDR flag in DevInfo */
+  if (Devinfo->FdrFlag == 1) {
+    Devinfo->FdrFlag = 0;
+  }
+
+  /* Copy FRS secret on devinfo populated by Keymint in response.*/
+  Devinfo->FrsSecLen = FRSUDSRsp.FrsSecLen;
+  CopyMem (Devinfo->FrsSec, FRSUDSRsp.FrsSec, FRSUDSRsp.FrsSecLen);
+
+  /* Write in devinfo, only when secret is updated or FDR flag is set*/
+  Status = ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)Devinfo,
+                                sizeof (DeviceInfo));
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "KeyMasterGetFRSAndUDS: Unable to Write in"
+            " Device Info: %r\n", Status));
+    goto out;
+  }
+
+  CopyMem (bcc_params->FRS, FRSUDSRsp.Frs, FRSUDSRsp.FrsLen);
+  CopyMem (bcc_params->UDS, FRSUDSRsp.Uds, FRSUDSRsp.UdsLen);
+
+out:
+  if (Devinfo) {
+    avb_free (Devinfo);
+    Devinfo = NULL;
+  }
   return Status;
 }

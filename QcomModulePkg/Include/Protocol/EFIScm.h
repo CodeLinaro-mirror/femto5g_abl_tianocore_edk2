@@ -48,7 +48,7 @@
 /** @ingroup efi_scm_constants
   Protocol version.
 */
-#define QCOM_SCM_PROTOCOL_REVISION 0x0000000000010001
+#define QCOM_SCM_PROTOCOL_REVISION 0x0000000000040001
 
 /*===========================================================================
   EXTERNAL VARIABLES
@@ -298,7 +298,6 @@ typedef EFI_STATUS (EFIAPI *QCOM_SCM_REGISTER_CALLBACK) (
    EFI_SUCCESS  -- Function completed successfully. \n
    Other values -- Failure.
 */
-
 typedef
 EFI_STATUS
 (EFIAPI * QCOM_SCM_DEREGISTER_CALLBACK)(
@@ -316,7 +315,6 @@ EFI_STATUS
   EFI_SUCCESS  -- Function completed successfully. \n
   Other values -- Failure.
 */
-
 typedef EFI_STATUS (EFIAPI *QCOM_SCM_EXIT_BOOT_SERVICES) (
     IN QCOM_SCM_PROTOCOL *This);
 

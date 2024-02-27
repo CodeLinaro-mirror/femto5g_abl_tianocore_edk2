@@ -1,6 +1,5 @@
 #include "libufdt.h"
 #include "ufdt_util.h"
-#include "fdt_internal.h"
 
 
 int node_cmp(const void *a, const void *b) {

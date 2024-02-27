@@ -163,8 +163,9 @@ ReadAudioFrameWork (CHAR8 **CmdLine, UINT32 *CmdLineLen)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
-  if (FirstReadDevInfo == TRUE) {
-    Status = EFI_NOT_STARTED;
+  Status =
+      ReadWriteDeviceInfo (READ_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
+  if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to read audio framework: %r\n", Status));
     return Status;
   }
@@ -643,5 +644,23 @@ SetSnapshotGolden (UINTN Val)
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to Write Device Info: %r\n", Status));
   }
+  return Status;
+}
+
+/* Set FDR Flag and clear FRS secret from DevInfo*/
+EFI_STATUS
+SetFDRFlag (VOID)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  DevInfo.FdrFlag = 1;
+  DevInfo.FrsSecLen = 0;
+  gBS->SetMem (DevInfo.FrsSec, sizeof (DevInfo.FrsSec), 0);
+  Status = ReadWriteDeviceInfo (WRITE_CONFIG,
+                        (VOID *)&DevInfo, sizeof (DevInfo));
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Unable to Write Device Info: %r\n", Status));
+  }
+
   return Status;
 }

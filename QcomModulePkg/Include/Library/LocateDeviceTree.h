@@ -341,8 +341,7 @@ VOID *
 DeviceTreeAppended (void *kernel,
                     UINT32 kernel_size,
                     UINT32 dtb_offset,
-                    VOID *Tags,
-                    UINT32 *DtbSize);
+                    void *tags);
 VOID *
 GetSocDtb (void *kernel, UINT32 kernel_size, UINT32 dtb_offset, void *tags);
 BOOLEAN GetDtboNeeded (VOID);
@@ -350,6 +349,8 @@ VOID *
 GetBoardDtb (BootInfo *Info, VOID *DtboImgBuffer);
 EFI_STATUS
 GetOvrdDtb (VOID **DtboImgBuffer);
+EFI_STATUS
+GetAvfDpDtbo ( VOID **DtboImgBuffer);
 VOID
 PopulateBoardParams ();
 

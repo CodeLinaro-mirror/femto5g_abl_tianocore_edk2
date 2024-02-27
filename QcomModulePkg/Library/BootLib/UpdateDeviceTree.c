@@ -625,26 +625,17 @@ QueryMemoryCellSize (IN VOID *Fdt, OUT UINT32 *MemoryCellLen)
   return EFI_SUCCESS;
 }
 
-BOOLEAN IsCarveoutRemovalEnabled (VOID *Fdt)
+#ifdef REMOVE_CARVEOUT_REGION
+BOOLEAN IsCarveoutRemovalEnabled (VOID)
 {
-  INT32 ResMemOffset = 0;
-  CONST struct fdt_property *Prop = NULL;
-  INT32 PropLen = 0;
-
-  ResMemOffset = FdtPathOffset (Fdt, "/reserved-memory");
-  if (ResMemOffset < 0) {
-    DEBUG ((EFI_D_ERROR, "reserved-memory node not found in device tree\n"));
-    return FALSE;
-  } else {
-    Prop = fdt_get_property (Fdt, ResMemOffset, "removes_carveout_region",
-                             &PropLen);
-    if (!Prop) {
-      return FALSE;
-    }
-  }
-
   return TRUE;
 }
+#else
+BOOLEAN IsCarveoutRemovalEnabled (VOID)
+{
+  return FALSE;
+}
+#endif
 
 STATIC
 EFI_STATUS
@@ -1335,34 +1326,6 @@ Out:
   DdrRegionsDataInfo = NULL;
 
   return NumRank;
-}
-
-UINT64 GetInitrdStartAddr (VOID *Fdt)
-{
-  INT32 Ret = 0;
-  CONST CHAR8 *InitrdStartProp = NULL;
-  INT32 InitrdStartLen;
-  UINT32 Offset;
-  UINT32 InitrdStartAddr;
-
-  /* Get offset of the chosen node */
-  Ret = fdt_path_offset (Fdt, "/chosen");
-  if (Ret < 0) {
-    DEBUG ((EFI_D_ERROR, "ERROR: Could not find chosen node ...\n"));
-    return 0;
-  }
-  Offset = Ret;
-
-  InitrdStartProp = (CONST CHAR8 *)fdt_getprop (Fdt, Offset,
-                                   (CONST CHAR8 *)"linux,initrd-start",
-                                   &InitrdStartLen);
-  if (InitrdStartProp &&
-     (InitrdStartLen > 0)) {
-    InitrdStartAddr = fdt32_to_cpu (
-                ((struct InitrdStartNode *)InitrdStartProp)->InitrdStartAddr);
-    return InitrdStartAddr;
-  }
-  return 0;
 }
 
 /* Top level function that updates the device tree. */

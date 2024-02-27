@@ -30,6 +30,7 @@
 #define __VERIFIEDBOOT_H__
 
 #include <Uefi.h>
+#include <Library/QcBcc.h>
 
 enum
 {
@@ -72,6 +73,7 @@ typedef enum {
 
 /* forward declare BootInfo */
 typedef struct BootInfo BootInfo;
+extern BccParams_t BccParamsRecvdFromAVB;
 
 BOOLEAN
 VerifiedBootEnbled ();
@@ -97,15 +99,22 @@ GetAVBVersion ();
  * for cold boot sequence and TRUE
  * for Hibernation Resume
  *
- * @param[in] SetRotAndBootState FALSE by
- * default and TRUE incase of ROT and
- * BootState already set
+ * @param[in] SetRotAndBootStateAndVBH FALSE
+ * by default and TRUE incase of ROT ,
+ * BootState and VBH already set
+ *
+ * @param[in] BccParamsRecvdFromAVB
+ * It will contain populated BCC parameters
  *
  * @return EFI_STATUS
  */
 EFI_STATUS
 LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
-        BOOLEAN SetRotAndBootState);
+                  BOOLEAN SetRotAndBootState
+#ifndef USE_DUMMY_BCC
+                  , BccParams_t *BccParamsRecvdFromAVB
+#endif
+                 );
 
 /**
  *  Free resources/memory allocated by

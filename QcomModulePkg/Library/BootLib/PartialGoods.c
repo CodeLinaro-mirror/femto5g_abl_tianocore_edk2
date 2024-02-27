@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -226,6 +226,12 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,cam-fd", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
+     {"qcom,cam-cre", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cre", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
      {"qcom,fd", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
@@ -340,7 +346,28 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,sfe1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
+     {"qcom,sfe2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
      {"qcom,cam-res-mgr", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tpg13", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tpg14", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tpg15", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,eeprom4", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-sensor4", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,ope-cdm0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,tfe_csid0", "status", "ok", "no"}},
@@ -355,34 +382,25 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,tfe1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,tfe_csid2", "status", "ok", "no"}},
+     {"qcom,cam-ope", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,tfe2", "status", "ok", "no"}},
+     {"qcom,ope", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,tfe_csid-lite0", "status", "ok", "no"}},
+     {"qcom,ppi0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,tfe-lite0", "status", "ok", "no"}},
+     {"qcom,ppi1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,cam-cre", "status", "ok", "no"}},
+     {"qcom,ppi2", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,cre", "status", "ok", "no"}},
+     {"qcom,tpg0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,tpg13", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,tpg14", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,tpg15", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,tpg16", "status", "ok", "no"}},
+     {"qcom,tpg1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,mdss_mdp", "status", "ok", "no"}},
@@ -535,8 +553,6 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {"camcc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
     {"cam_rsc", "status", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-    {"cam_cc_camss_top_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
     {"disp_rsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
@@ -549,22 +565,17 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {"video_cc_mvs0_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_VIDEO),
     {"video_cc_mvs0c_gdsc", "status", "no"}},
-    {BIT (EFICHIPINFO_PART_VIDEO),
-    {"video_cc_mvs1_gdsc", "status", "no"}},
-    {BIT (EFICHIPINFO_PART_VIDEO),
-    {"video_cc_mvs1c_gdsc", "status", "no"}},
-    {BIT (EFICHIPINFO_PART_VIDEO),
+    {(BIT (EFICHIPINFO_PART_VIDEO)
+     | BIT (EFICHIPINFO_PART_EVA)),
     {"videocc", "status", "no"}},
-    {BIT (EFICHIPINFO_PART_EVA),
-    {"video_cc_mvs0_gdsc", "status", "no"}},
-    {BIT (EFICHIPINFO_PART_EVA),
-    {"video_cc_mvs0c_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+    {"gcc_venus_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+    {"gcc_vcodec0_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_EVA),
     {"video_cc_mvs1_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_EVA),
     {"video_cc_mvs1c_gdsc", "status", "no"}},
-    {BIT (EFICHIPINFO_PART_EVA),
-    {"videocc", "status", "no"}},
 };
 
 STATIC EFI_STATUS
@@ -697,6 +708,13 @@ FindLabelAndUpdateProperty (VOID *fdt,
   for (i = 0; i < TableSz; i++, Table++) {
     if (!(Value & Table->Val)) {
       continue;
+    }
+
+    if (Table->Val == (BIT (EFICHIPINFO_PART_VIDEO) |
+                       BIT (EFICHIPINFO_PART_EVA))) {
+      if (!((Value & BIT (EFICHIPINFO_PART_VIDEO)) &&
+            (Value & BIT (EFICHIPINFO_PART_EVA))))
+          continue;
     }
 
     LabelHandle = &(Table->LabelRef);
