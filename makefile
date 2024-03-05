@@ -20,7 +20,13 @@ ifeq ($(BUILD_NATIVE_AARCH64),true)
 	export TARGET_ARCHITECTURE := arm64
 	export DISABLE_KERNEL_PROTOCOL := false
 	export DISABLE_MULTI_BOOT := false
+	export ENABLE_POWER_KEY_MULTIPLEX := false
 endif
+
+# Common boot configuration for all targets
+export CLEAR_RESET_REASON := true
+
+export PRIMARY_PMIC_INDEX_SUPPORTED := true
 
 ifndef $(BOOTLOADER_OUT)
 	BOOTLOADER_OUT := $(shell pwd)
@@ -163,7 +169,7 @@ endef
 Arguments should be return value, current version and supported version in order. \
 It sets return value to true if the current version is equal or greater than the supported version.
 define check_version_compatibility
-	$(eval CURR_VERSION := $(shell $(2)/clang --version |& grep -i "clang version" |& sed 's/[^0-9.]//g'))
+	$(eval CURR_VERSION := $(shell $(2)/clang --version |& grep -i "clang version" |& sed 's/^.*[^0-9]\([0-9]*\.[0-9]*\)\..*/\1/'))
 	$(eval CURR_VERSION_MAJOR := $(shell echo $(CURR_VERSION) |& cut -d. -f1))
 	$(eval CURR_VERSION_MINOR := $(shell echo $(CURR_VERSION) |& cut -d. -f2))
 	$(eval SUPPORTED_VERSION := $(3))
@@ -203,10 +209,28 @@ else
 	ENABLE_LE_VARIANT := 0
 endif
 
+ifeq ($(PRIMARY_PMIC_INDEX_SUPPORTED), true)
+	PRIMARY_PMIC_INDEX_SUPPORTED := 1
+else
+	PRIMARY_PMIC_INDEX_SUPPORTED := 0
+endif
+
 ifeq ($(DISABLE_MULTI_BOOT), true)
 	DISABLE_MULTI_BOOT := 1
 else
 	DISABLE_MULTI_BOOT := 0
+endif
+
+ifeq ($(ENABLE_POWER_KEY_MULTIPLEX), true)
+        ENABLE_POWER_KEY_MULTIPLEX := 1
+else
+        ENABLE_POWER_KEY_MULTIPLEX := 0
+endif
+
+ifeq ($(CLEAR_RESET_REASON), true)
+        CLEAR_RESET_REASON := 1
+else
+        CLEAR_RESET_REASON := 0
 endif
 
 ifeq ($(ENABLE_LV_ATOMIC_AB), 1)
@@ -219,6 +243,18 @@ ifeq ($(EARLY_ETH_ENABLED), 1)
 	EARLY_ETH_ENABLED := 1
 else
 	EARLY_ETH_ENABLED := 0
+endif
+
+ifeq ($(ENABLE_SAIL_FLASHING), 1)
+        ENABLE_SAIL_FLASHING := 1
+else
+        ENABLE_SAIL_FLASHING := 0
+endif
+
+ifeq ($(ENABLE_SAIL_BOOT), 1)
+        ENABLE_SAIL_BOOT := 1
+else
+        ENABLE_SAIL_BOOT := 0
 endif
 
 ifeq ($(EARLY_ETH_AS_DLKM), 1)
@@ -292,8 +328,10 @@ endif
 export SDLLVM_COMPILE_ANALYZE := $(SDLLVM_COMPILE_ANALYZE)
 export SDLLVM_ANALYZE_REPORT := $(SDLLVM_ANALYZE_REPORT)
 
+ifdef $(SAFESTACK_SUPPORTED_CLANG_VERSION)
 CLANG_SUPPORTS_SAFESTACK := false
 $(eval $(call check_version_compatibility, CLANG_SUPPORTS_SAFESTACK, $(CLANG_BIN), $(SAFESTACK_SUPPORTED_CLANG_VERSION)))
+endif
 
 ifeq "$(ABL_SAFESTACK)" "true"
 	ifeq "$(CLANG_SUPPORTS_SAFESTACK)" "true"
@@ -309,6 +347,13 @@ endif
 export LLVM_ENABLE_SAFESTACK := $(LLVM_ENABLE_SAFESTACK)
 export LLVM_SAFESTACK_USE_PTR := $(LLVM_SAFESTACK_USE_PTR)
 export LLVM_SAFESTACK_COLORING := $(LLVM_SAFESTACK_COLORING)
+
+CLANG_NEED_EXTRA_DLINK_FLAGS := false
+$(eval $(call check_version_compatibility, CLANG_NEED_EXTRA_DLINK_FLAGS, $(CLANG_BIN), 17.0))
+
+ifeq "$(CLANG_NEED_EXTRA_DLINK_FLAGS)" "true"
+	export CLANG_EXTRA_DLINK_FLAGS := -Wl,--no-relax -Wl,--apply-dynamic-relocs
+endif
 
 .PHONY: all cleanall srpm
 
@@ -334,6 +379,8 @@ ABL_FV_IMG: $(EDK_TOOLS_PATH_MARK_FILE)
 	-D VERIFIED_BOOT_LE=$(VERIFIED_BOOT_LE) \
 	-D VERIFIED_BOOT_ENABLED=$(VERIFIED_BOOT_ENABLED) \
 	-D EARLY_ETH_ENABLED=$(EARLY_ETH_ENABLED) \
+	-D ENABLE_SAIL_FLASHING=$(ENABLE_SAIL_FLASHING) \
+	-D ENABLE_SAIL_BOOT=$(ENABLE_SAIL_BOOT) \
 	-D HIBERNATION_SUPPORT_NO_AES=$(HIBERNATION_SUPPORT_NO_AES) \
 	-D HIBERNATION_SUPPORT_AES=$(HIBERNATION_SUPPORT_AES) \
 	-D EARLY_ETH_AS_DLKM=$(EARLY_ETH_AS_DLKM) \
@@ -342,11 +389,14 @@ ABL_FV_IMG: $(EDK_TOOLS_PATH_MARK_FILE)
 	-D TARGET_BOARD_TYPE_AUTO=$(TARGET_BOARD_TYPE_AUTO) \
 	-D VERITY_LE=$(VERITY_LE) \
 	-D INTEGRITY_LE_IMA=$(INTEGRITY_LE_IMA) \
+	-D CLEAR_RESET_REASON=$(CLEAR_RESET_REASON) \
 	-D INTEGRITY_LE_EVM=$(INTEGRITY_LE_EVM) \
 	-D USER_BUILD_VARIANT=$(USER_BUILD_VARIANT) \
 	-D DISABLE_PARALLEL_DOWNLOAD_FLASH=$(DISABLE_PARALLEL_DOWNLOAD_FLASH) \
 	-D ENABLE_LE_VARIANT=$(ENABLE_LE_VARIANT) \
+	-D PRIMARY_PMIC_INDEX_SUPPORTED=$(PRIMARY_PMIC_INDEX_SUPPORTED) \
 	-D DISABLE_MULTI_BOOT=$(DISABLE_MULTI_BOOT) \
+	-D ENABLE_POWER_KEY_MULTIPLEX=$(ENABLE_POWER_KEY_MULTIPLEX) \
 	-D ENABLE_LV_ATOMIC_AB=$(ENABLE_LV_ATOMIC_AB) \
 	-D BUILD_USES_RECOVERY_AS_BOOT=$(BUILD_USES_RECOVERY_AS_BOOT) \
 	-D INIT_BIN=$(INIT_BIN) \

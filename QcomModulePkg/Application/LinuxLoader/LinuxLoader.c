@@ -85,6 +85,7 @@
 #include <Protocol/EFICardInfo.h>
 
 #include <Protocol/EFIClock.h>
+#include <Protocol/EFIPmicSdam.h>
 #include "RecoveryInfo.h"
 
 #define MAX_APP_STR_LEN 64
@@ -100,6 +101,7 @@ STATIC BOOLEAN BootIntoFastboot = FALSE;
 STATIC BOOLEAN BootIntoRecovery = FALSE;
 UINT64 FlashlessBootImageAddr = 0;
 UINT64 NetworkBootImageAddr = 0;
+STATIC UINT32 BootDeviceType = EFI_MAX_FLASH_TYPE;
 
 // This function is used to Deactivate MDTP by entering recovery UI
 STATIC EFI_STATUS MdtpDisable (VOID)
@@ -144,7 +146,8 @@ GetRebootReason (UINT32 *ResetReason)
   }
 
   RstReasonIf->GetResetReason (RstReasonIf, ResetReason, NULL, NULL);
-  if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION)
+  if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION &&
+      ClearResetReason ())
     RstReasonIf->ClearResetReason (RstReasonIf);
   return Status;
 }
@@ -163,6 +166,11 @@ SetDefaultAudioFw ()
    * devmem Src is empty or not same as default.
   */
   AUDIOFRAMEWORK = GetAudioFw ();
+  if (AUDIOFRAMEWORK == NULL) {
+     DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NULL\n"));
+     return;
+  }
+
   if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
   Status = ReadAudioFrameWork (&Src, &Length);
     if (Status == EFI_SUCCESS) {
@@ -240,18 +248,20 @@ BOOLEAN IsABRetryCountUpdateRequired (VOID)
     Flashless boot, Network boot, Fastboot.
  **/
 
-UINT8 GetBootDeviceType ()
+UINT32 GetBootDeviceType ()
 {
-  UINT32 Val = 0;
-  UINTN  DataSize = sizeof (Val);
+  UINTN  DataSize = sizeof (BootDeviceType);
   EFI_STATUS Status = EFI_SUCCESS;
 
-  Status = gRT->GetVariable (L"SharedImemBootCfgVal",
-               &gQcomTokenSpaceGuid, NULL, &DataSize, &Val);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Failed to get boot device type, %r\n", Status));
+  if (BootDeviceType == EFI_MAX_FLASH_TYPE) {
+    Status = gRT->GetVariable (L"SharedImemBootCfgVal",
+               &gQcomTokenSpaceGuid, NULL, &DataSize, &BootDeviceType);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Failed to get boot device type, %r\n", Status));
+    }
   }
-  return Val;
+
+  return BootDeviceType;
 }
 
 /**
@@ -269,9 +279,10 @@ EFI_STATUS EFIAPI  __attribute__ ( (no_sanitize ("safe-stack")))
 LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
 {
   EFI_STATUS Status;
-  UINT8 Val = 0;
+  UINT32 Val = 0;
   UINT32 BootReason = NORMAL_MODE;
   UINT32 KeyPressed = SCAN_NULL;
+  UINT32 PowerKeyPressTime = 0;
   /* SilentMode Boot */
   CHAR8 SilentBootMode = NON_SILENT_MODE;
   /* MultiSlot Boot */
@@ -343,6 +354,18 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   if (MultiSlotBoot) {
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     FindPtnActiveSlot ();
+  }
+
+  /* Reading press and release time for power key from sdam register
+     for press time ranges between 3800msec to 4200msec, boot into fastboot */
+  if (IsPowerKeyMultiplex ()) {
+    Status = GetPowerKeyPressInfo (&PowerKeyPressTime);
+    if (Status == EFI_SUCCESS) {
+      if ( PowerKeyPressTime > 3800 &&
+        PowerKeyPressTime < 4200) {
+        BootIntoFastboot = TRUE;
+      }
+    }
   }
 
   Status = GetKeyPress (&KeyPressed);
