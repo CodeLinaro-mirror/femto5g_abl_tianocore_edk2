@@ -60,10 +60,9 @@ GetIntegrityIMACmdline (CHAR8 *IntegrityIMACmdlinePtr)
 {
   CHAR8 *IMAAppraiseOn = " ima_policy=tcb ima_appraise_tcb";
 
-  /* Check for sa525m (0x22E msm-id) withsubtype 2 and minor as 100 */
-  if (0x22E != (BoardPlatformRawChipId () & 0x0000ffff)) {
-    return IMAEVMoff (IntegrityIMACmdlinePtr);
-  }
+  /* Enable/Disable IMA-EVM by writing CDT minor value using
+   * cdt_tool.sh -m <val>
+   */
   if (100 != ((BoardTargetId () >> 8) & 0xFF)) {
     return IMAEVMoff (IntegrityIMACmdlinePtr);
   }
