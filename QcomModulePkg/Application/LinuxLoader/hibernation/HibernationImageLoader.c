@@ -30,8 +30,7 @@
  *  Changes from Qualcomm Innovation Center are provided under the following
  *  license:
  *
- *  Copyright (c) 2022 - 2024 Qualcomm Innovation Center, Inc. All rights
- *  reserved.
+ *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -82,12 +81,6 @@
 #include <Library/aes/aes_public.h>
 #include <Protocol/EFIQseecom.h>
 #include "KeymasterClient.h"
-#include <Protocol/EFIPmicSdam.h>
-
-#define PMIC_DEVICE_INDEX 0
-#define PM_SDAM_3 2
-#define REGISTER_BLOCK 22
-#define KEYPAD_VAL_BYTE 1
 
 #define BUG(fmt, ...) {\
 		printf("Fatal error " fmt, ##__VA_ARGS__);\
@@ -1350,37 +1343,12 @@ static int init_aes_decrypt(void)
 }
 #endif
 
-static UINT32 CheckSdamRegisterForGracefulShutdown (VOID)
-{
-        EFI_STATUS Status;
-        EFI_QCOM_PMIC_SDAM_PROTOCOL *SdamProtocol;
-        UINT8 SdamRegisterValue = 0;
-        Status = gBS->LocateProtocol (&gQcomPmicSdamProtocolGuid,
-                                      NULL, (VOID **)&SdamProtocol);
-        if (Status != EFI_SUCCESS) {
-                DEBUG ((EFI_D_INFO, "PMIC sdam protocol not supported\n"));
-                return SdamRegisterValue;
-        }
-        Status = SdamProtocol->SdamMemRead (PMIC_DEVICE_INDEX,
-                                            PM_SDAM_3, REGISTER_BLOCK,
-                                            KEYPAD_VAL_BYTE,
-                                            &SdamRegisterValue);
-        if (Status != EFI_SUCCESS) {
-                DEBUG ((EFI_D_INFO, "Error getting SDAM Register Value\n"));
-        }
-        return SdamRegisterValue;
-}
-
 void BootIntoHibernationImage(BootInfo *Info, BOOLEAN *SetRotAndBootState)
 {
 	int ret;
 	EFI_STATUS Status = EFI_SUCCESS;
 	printf("===============================\n");
 	printf("Entrying Hibernation restore\n");
-
-        if ( CheckSdamRegisterForGracefulShutdown () == 0 ) {
-                return;
-        }
 
 	if (check_for_valid_header() < 0)
 		return;
@@ -1403,7 +1371,7 @@ void BootIntoHibernationImage(BootInfo *Info, BOOLEAN *SetRotAndBootState)
 
 	/* ROT and BootState are set only once per boot.
 	 * set variable to TRUE to Avoid setting second
-         * time incase hibernation resume fails at restore
+         * time incase hbernation resume fails at restore
          * snapshot stage..
 	 */
 	*SetRotAndBootState = TRUE;
