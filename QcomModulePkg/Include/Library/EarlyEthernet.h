@@ -43,6 +43,7 @@
 #define PHY_ADDR_LEN   33
 #define IFACE_LEN      8
 #define SPEED_LEN      6
+#define QOSCFG_LEN	   3
 
 /**
  *  Reads partition and try to extract IP addresses
@@ -53,7 +54,7 @@
 EFI_STATUS
 GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
                               CHAR8 *phyaddrbuf, CHAR8 *ifacebuf,
-                              CHAR8 *speedbuf);
+                              CHAR8 *speedbuf, CHAR8 *qosbuf);
 
 BOOLEAN
 EarlyEthEnabled ();

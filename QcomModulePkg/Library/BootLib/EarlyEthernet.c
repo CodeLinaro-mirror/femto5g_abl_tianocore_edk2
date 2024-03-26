@@ -79,7 +79,7 @@
 EFI_STATUS
 GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
                               CHAR8 *phyaddrbuf, CHAR8 *ifacebuf,
-                              CHAR8 *speedbuf)
+                              CHAR8 *speedbuf, CHAR8 *qosbuf)
 {
   EFI_STATUS Status;
   VOID *Buffer;
@@ -87,7 +87,7 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
   UINT32 DataSize = 0;
   UINT32 Pidx;
   UINT32 Qidx;
-  UINT32 Qcount, QPhycount, QIfacecount, QSpeedcount;
+  UINT32 Qcount, QPhycount, QIfacecount, QSpeedcount, Qqoscfgcount;
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
 
   memset (ipv4buf, '\0', MAX_IP_ADDR_BUF);
@@ -96,6 +96,7 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
   memset (phyaddrbuf, '\0', MAX_IP_ADDR_BUF);
   memset (ifacebuf, '\0', MAX_IP_ADDR_BUF);
   memset (speedbuf, '\0', MAX_IP_ADDR_BUF);
+  memset (qosbuf, '\0' , MAX_IP_ADDR_BUF);
 #if EARLY_ETH_AS_DLKM
   AsciiStrnCpyS (ipv4buf, MAX_IP_ADDR_BUF, " dwmac_qcom_eth.eipv4=", 22);
   AsciiStrnCpyS (ipv6buf, MAX_IP_ADDR_BUF, " dwmac_qcom_eth.eipv6=", 22);
@@ -107,6 +108,7 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
   AsciiStrnCpyS (phyaddrbuf, MAX_IP_ADDR_BUF, " ephyaddr=", 10);
   AsciiStrnCpyS (ifacebuf, MAX_IP_ADDR_BUF, " eiface=", 8);
   AsciiStrnCpyS (speedbuf, MAX_IP_ADDR_BUF, " espeed=", 8);
+  AsciiStrnCpyS (qosbuf, MAX_IP_ADDR_BUF, " eqos=", 6);
 #endif
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
@@ -146,6 +148,7 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
 #endif
 QPhycount = 10;
 QIfacecount = QSpeedcount = 8;
+Qqoscfgcount = 6;
   Pidx = IP_ADDR_STR_OFFSET;
   Qidx = 0;
   while (((CHAR8)rawbuf[Pidx] !=
@@ -246,6 +249,18 @@ QIfacecount = QSpeedcount = 8;
        Pidx++;
        Qidx++;
   }
+
+  /* Extract config string */
+  ++Pidx;
+  Qidx = 0;
+  while (((CHAR8)rawbuf[Pidx] !=
+         EARLY_ADDR_TERMINATOR) &&
+	(Qidx < QOSCFG_LEN)) {
+	         qosbuf[Qidx + Qqoscfgcount] = rawbuf[Pidx];
+		 Pidx++;
+		 Qidx++;
+  }
+
 
   FreePages (Buffer, 1);
   return EFI_SUCCESS;
