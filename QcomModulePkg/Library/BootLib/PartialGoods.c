@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -406,7 +406,8 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,dsi-display-primary", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_DISPLAY),
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
      "/soc",
      {"qcom,dsi-display-secondary", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
@@ -433,6 +434,13 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,smmu_sde_unsec_cb", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
+    {"qcom,wb-display@1", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+     "/soc",
+    {"qcom,wb-display@2", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_AUDIO),
      "/soc",
      {"qcom,msm-adsp-loader", "status", "ok", "no"}},
@@ -588,6 +596,81 @@ static struct PartialGoods PartialGoodsMmTypeWithLabel[] = {
     {BIT (EFICHIPINFO_PART_EVA),
      "/soc",
     {"videocc", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"sde_edp_pll", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"sde_edp", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"sde_dp_pll", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"sde_dp", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"mdss_mdp0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"sde_rscc0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"smmu_sde_unsec", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"smmu_sde_sec", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"mdss_dsi0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"mdss_dsi1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"mdss_dsi_phy0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"mdss_dsi_phy1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    "/soc",
+    {"dispcc0", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"mdss_mdp1", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"sde_rscc1", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"smmu_sde_unsec1", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"smmu_sde_sec1", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"mdss_dsi2", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"mdss_dsi3", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"mdss_dsi_phy2", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"mdss_dsi_phy3", "status", "ok", "no"}},
+    {(BIT (EFICHIPINFO_PART_DISPLAY)
+     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    "/soc",
+    {"dispcc1", "status", "ok", "no"}},
 };
 
 STATIC EFI_STATUS
