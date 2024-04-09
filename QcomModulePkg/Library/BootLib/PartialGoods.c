@@ -184,6 +184,12 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,csiphy5", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
+     {"qcom,csiphy6", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,csiphy7", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
      {"qcom,csid0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
@@ -335,6 +341,48 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,cam-res-mgr", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe_csid0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe_csid1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe_csid2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe_csid-lite0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe-lite0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cam-cre", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,cre", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tpg13", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tpg14", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tpg15", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tpg16", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,mdss_mdp", "status", "ok", "no"}},
@@ -398,6 +446,9 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,smmu_sde_unsec_cb", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
+     {"qcom,wb-display", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_AUDIO),
      "/soc",
      {"qcom,msm-adsp-loader", "status", "ok", "no"}},
@@ -484,6 +535,8 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {"camcc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
     {"cam_rsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_camss_top_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
     {"disp_rsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
@@ -753,7 +806,9 @@ ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
     Status =
         pChipInfoProtocol->GetDisabledCPUs (pChipInfoProtocol, CpuCluster,
                                              Value);
-  } else {
+  }
+  if (pChipInfoProtocol->Revision < EFI_CHIPINFO_PROTOCOL_REVISION_5 ||
+     Status == EFI_NOT_FOUND) {
     Status =
         pChipInfoProtocol->GetSubsetCPUs (pChipInfoProtocol, CpuCluster,
                                              Value);
@@ -788,7 +843,9 @@ ReadMMPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
                                             i, 0, &SubsetBoolVal);
       SubsetVal = (UINT32) SubsetBoolVal;
 
-    } else {
+    }
+    if (pChipInfoProtocol->Revision < EFI_CHIPINFO_PROTOCOL_REVISION_5 ||
+       Status == EFI_NOT_FOUND) {
       /* Ensure to reset the Value before checking for Part Subset*/
       SubsetVal = 0;
       Status =
