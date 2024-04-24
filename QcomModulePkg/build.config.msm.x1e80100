@@ -1,5 +1,5 @@
 ################################################################################
-MSM_ARCH=sun
+MSM_ARCH=x1e80100
 BOOTLOADER_ARCH=AARCH64
 VERIFIED_BOOT_ENABLED=1
 VERIFIED_BOOT_LE=0
