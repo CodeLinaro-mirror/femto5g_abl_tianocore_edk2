@@ -1185,7 +1185,8 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
     UbiHeader = (UbiHeader_t *)Image;
     if (!AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
       DEBUG ((EFI_D_ERROR,  "handlesparse Detected UBI in sparse!\n"));
-      if (SparseImgData.WrittenBlockCount == 0) {
+      if ((SparseImgData.WrittenBlockCount == 0) &&
+          (!FlasherBackup.Ubi)) {
         DEBUG ((EFI_D_ERROR,  "Start of ubi image\n"));
         IsUbiImage = 1;
       }
@@ -1199,6 +1200,7 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
       gBS->CopyMem (&SparseImgData.UbiInputBufferInfo, &BufferInfoBackup,
                     sizeof (struct BufferInfo));
       FlasherBackup.Ubi = NULL;
+      IsUbiImage = 1;
     } else if (IsUbiImage == 1 &&
                !SparseImgData.UbiFlasher.Ubi ) {
       /*open flasher and save it in the sparseImage data structure*/
