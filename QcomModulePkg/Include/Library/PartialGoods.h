@@ -45,6 +45,18 @@ struct PartialGoods {
   struct SubNodeListNew SubNode; /* Sub node name list*/
 };
 
+struct LabelStruct {
+  CONST CHAR8 *LabelName;  /* Label name */
+  CONST CHAR8 *PropertyName; /* Property name */
+  CONST CHAR8 *ReplaceStr;   /* Replace string */
+};
+
+struct PartialGoodsWithLabel {
+  UINT32 Val;                    /* Value for the subset */
+  struct LabelStruct LabelRef; /* Labels list */
+};
+
+
 EFI_STATUS
 UpdatePartialGoodsNode (VOID *fdt);
 
