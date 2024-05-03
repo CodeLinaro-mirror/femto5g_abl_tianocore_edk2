@@ -32,6 +32,25 @@ BOOLEAN RI_IsGpioControlled ()
   return (HasGpioControl == 1);
 }
 
+BOOLEAN IsRecoveryInfoWithSlotA ()
+{
+  /* In case target is not having recoveryinfo support */
+  if (!IsRecoveryInfo ()) {
+    return FALSE;
+  }
+
+  INT32 Index = INVALID_PTN;
+  Index = GetPartitionIndex ((CHAR16 *)L"boot_a");
+
+  if (Index == INVALID_PTN) {
+    DEBUG ((EFI_D_ERROR, "GetBootPartitionEntry: No boot partition entry for"
+           "slot _a on recoveryinfo case\n"));
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 BOOLEAN IsRecoveryInfo ()
 {
   EFI_STATUS Status = EFI_SUCCESS ;
@@ -66,6 +85,7 @@ BOOLEAN IsRecoveryInfo ()
        HasRecoveryInfo = 1;
      }
   }
+
   return (HasRecoveryInfo == 1);
 }
 

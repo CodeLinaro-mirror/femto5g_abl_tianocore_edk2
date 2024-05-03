@@ -496,7 +496,8 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
       NAND != CheckRootDeviceType ()) {
     /* Skip slot suffix when RecoveryInfo and slot a*/
     if (!StrCmp (CurSlot.Suffix, L"_a")) {
-      if (!IsRecoveryInfo ()) {
+      if (!IsRecoveryInfo () ||
+          IsRecoveryInfoWithSlotA ()) {
         StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
                   StrLen (CurSlot.Suffix));
       }
@@ -896,7 +897,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     if (Param->MultiSlotBoot) {
       Slot CurrentSlot = GetCurrentSlotSuffix ();
       if (!IsRecoveryInfo () ||
-         (StrCmp (CurrentSlot.Suffix, L"_a"))) {
+          (StrCmp (CurrentSlot.Suffix, L"_a")) ||
+          (IsRecoveryInfoWithSlotA ())) {
         char CurSlotSuffix[sizeof (CurrentSlot.Suffix)];
         AsciiSPrint (CurSlotSuffix, sizeof (CurrentSlot.Suffix),
                      "%s", CurrentSlot.Suffix);
