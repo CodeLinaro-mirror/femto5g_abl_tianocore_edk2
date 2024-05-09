@@ -33,7 +33,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -931,11 +931,13 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
            SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
            Src = Param->SystemdSlotEnv;
            AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-           if (RI_IsGpioControlled()) {
-             Src = Param->RecoveryInfoGpio;
-             AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-           }
       }
+  }
+
+  if (IsRecoveryInfo() &&
+      RI_IsGpioControlled()) {
+    Src = Param->RecoveryInfoGpio;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
@@ -1503,16 +1505,19 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
         ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
         AddtoBootConfigList (BootConfigFlag, SystemdSlotEnv, NULL,
                          BootConfigListHead, ParamLen, 0);
-        if (RI_IsGpioControlled()) {
-          ParamLen = AsciiStrLen (RecoveryInfoGpio);
-          BootConfigFlag = IsAndroidBootParam (RecoveryInfoGpio, ParamLen,
-                                           HeaderVersion);
-          AddtoBootConfigList (BootConfigFlag, RecoveryInfoGpio, NULL,
-                              BootConfigListHead, ParamLen, 0);
-          ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-        }
       }
   }
+
+  if (IsRecoveryInfo() && 
+      RI_IsGpioControlled()) {
+    ParamLen = AsciiStrLen (RecoveryInfoGpio);
+    BootConfigFlag = IsAndroidBootParam (RecoveryInfoGpio, ParamLen,
+                                         HeaderVersion);
+    AddtoBootConfigList (BootConfigFlag, RecoveryInfoGpio, NULL,
+                         BootConfigListHead, ParamLen, 0);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+  }
+
 
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
