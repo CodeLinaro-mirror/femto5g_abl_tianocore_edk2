@@ -1591,6 +1591,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
        NumRequestedPartition += 1;
     }
 
+#ifndef PVM_SKIP_DTBO
     if (!HibernationResume) {
        if (AddRequestedPartition (RequestedPartitionAll, IMG_DTBO)
            != EFI_SUCCESS) {
@@ -1598,6 +1599,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
        }
        NumRequestedPartition += 1;
     }
+#endif
 
     if (Info->MultiSlotBoot) {
         CurrentSlot = GetCurrentSlotSuffix ();
