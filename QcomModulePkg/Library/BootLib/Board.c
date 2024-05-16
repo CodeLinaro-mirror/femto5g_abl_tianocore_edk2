@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -76,7 +76,18 @@
 STATIC struct BoardInfo platform_board_info;
 
 STATIC CONST CHAR8 *DeviceType[] = {
-        [EMMC] = "EMMC", [UFS] = "UFS", [NAND] = "NAND", [UNKNOWN] = "Unknown",
+        [EMMC] = "EMMC",
+        [UFS] = "UFS",
+        [NAND] = "NAND",
+        [NVME] = "NVME",
+        [UNKNOWN] = "Unknown",
+};
+
+STATIC CONST UINT32 DeviceTypeMedia[] = {
+        [EMMC] = SIGNATURE_32 ('e', 'm', 'm', 'c'),
+        [UFS] = SIGNATURE_32 ('u', 'f', 's', ' '),
+        [NAND] = SIGNATURE_32 ('n', 'a', 'n', 'd'),
+        [NVME] = SIGNATURE_32 ('n', 'v' , 'm', 'e'),
 };
 
 RamPartitionEntry *RamPartitionEntries = NULL;
@@ -225,6 +236,15 @@ GetChipInfo (struct BoardInfo *platform_board_info,
                                             &platform_board_info->FoundryId);
   if (EFI_ERROR (Status))
     return Status;
+  if (pChipInfoProtocol->Revision >= EFI_CHIPINFO_VERSION (1, 6)) {
+    Status = pChipInfoProtocol->GetRawPackageType (
+        pChipInfoProtocol, &platform_board_info->PackageId);
+    if (EFI_ERROR (Status)) {
+      platform_board_info->PackageId = 0;
+    }
+  } else {
+    platform_board_info->PackageId = 0;
+  }
   Status = pChipInfoProtocol->GetModemSupport (
       pChipInfoProtocol, ModemType);
   if (EFI_ERROR (Status))
@@ -323,7 +343,7 @@ GetPmicInfo (UINT32 PmicDeviceIndex,
  @param[in, out] MaxHandles  : On input, max number of handle structures
                                the buffer can hold, On output, the number
                                of handle structures returned.
- @param[in]      Type        : Device Type : UNKNOWN, UFS, EMMC, NAND
+ @param[in]      Type        : Device Type : UNKNOWN, UFS, EMMC, NAND, NVME
  @retval         EFI_STATUS  : Return Success on getting Handler Info
  **/
 
@@ -349,6 +369,9 @@ GetDeviceHandleInfo (VOID *HndlInfo, UINT32 MaxHandles, MemCardType Type)
   case NAND:
     HandleFilter.RootDeviceType = &gEfiNandUserPartitionGuid;
     break;
+  case NVME:
+    HandleFilter.RootDeviceType = &gEfiNvme0Guid;
+    break;
   case UNKNOWN:
     DEBUG ((EFI_D_ERROR, "Device type unknown\n"));
     return Status;
@@ -366,7 +389,7 @@ GetDeviceHandleInfo (VOID *HndlInfo, UINT32 MaxHandles, MemCardType Type)
 
 /**
  Return a device type
- @retval         Device type : UNKNOWN | UFS | EMMC | NAND
+ @retval         Device type : UNKNOWN | UFS | EMMC | NAND | NVME
  **/
 STATIC UINT32
 GetCompatibleRootDeviceType (VOID)
@@ -388,7 +411,8 @@ GetCompatibleRootDeviceType (VOID)
 
 /**
  Return a device type
- @retval         Device type : UNKNOWN | UFS | EMMC | NAND, default is UNKNOWN
+ @retval         Device type : UNKNOWN | UFS | EMMC | NAND | NVME,
+                               default is UNKNOWN
  **/
 
 MemCardType
@@ -414,7 +438,6 @@ CheckRootDeviceType (VOID)
       Status = CardInfo->GetCardInfo (CardInfo, &CardInfoData);
 
       if (!EFI_ERROR (Status)) {
-
         if (!AsciiStrnCmp ((CHAR8 *)CardInfoData.card_type, "UFS",
                            AsciiStrLen ("UFS"))) {
           Type = UFS;
@@ -424,6 +447,9 @@ CheckRootDeviceType (VOID)
         } else if (!AsciiStrnCmp ((CHAR8 *)CardInfoData.card_type, "NAND",
                                   AsciiStrLen ("NAND"))) {
           Type = NAND;
+        } else if (!AsciiStrnCmp ((CHAR8 *)CardInfoData.card_type, "NVME",
+                                  AsciiStrLen ("NVME"))) {
+          Type = NVME;
         } else {
           Type = GetCompatibleRootDeviceType ();
         }
@@ -609,7 +635,7 @@ UfsGetSetBootLun (UINT32 *UfsBootlun, BOOLEAN IsGet)
     return Status;
   }
 
-  if (CardInfo->Revision < EFI_MEM_CARD_INFO_PROTOCOL_REVISION) {
+  if (CardInfo->Revision < EFI_MEM_CARD_INFO_PROTOCOL_REVISION_3) {
     DEBUG ((EFI_D_ERROR, "This API not supported in Revision =%u\n",
             CardInfo->Revision));
     return EFI_NOT_FOUND;
@@ -626,15 +652,79 @@ UfsGetSetBootLun (UINT32 *UfsBootlun, BOOLEAN IsGet)
 }
 
 EFI_STATUS
+GetMemCardInfo (VOID **MemCardInfo)
+{
+  EFI_STATUS Status = EFI_INVALID_PARAMETER;
+  EFI_MEM_CARDINFO_PROTOCOL *CardInfo = NULL;
+  EFI_HANDLE *Handles = NULL;
+  UINTN NumHandles = 0;
+  UINT8 Index = 0;
+  UINT8 Count = 0;
+  EFI_BLOCK_IO_PROTOCOL *BlkIo = NULL;
+  BOOLEAN CardFound = FALSE;
+  UINT32 MediaSignature = 0;
+  BOOLEAN RemovableMedia = FALSE;
+
+  // Locate all instances of MemCardInfoProtocol
+  Status = gBS->LocateHandleBuffer (ByProtocol,
+    &gEfiMemCardInfoProtocolGuid, NULL, &NumHandles, &Handles);
+  if (EFI_ERROR (Status) ||
+     !Handles) {
+    DEBUG ((EFI_D_ERROR,
+      "LocateHandleBuffer(gEfiMemCardInfoProtocolGuid) failed: %r\n",
+      Status));
+    return Status;
+  }
+
+  for (Index = 0; Index < NumHandles; Index++) {
+    Status = gBS->HandleProtocol (Handles[Index],
+                 &gEfiMemCardInfoProtocolGuid, (VOID **)&CardInfo);
+    if (EFI_ERROR (Status)) {
+      continue;
+    }
+
+    if (CardInfo->Revision >= EFI_MEM_CARD_INFO_PROTOCOL_REVISION_4 &&
+        CardInfo->Media != NULL) {
+      RemovableMedia = CardInfo->Media->RemovableMedia;
+      MediaSignature = CardInfo->Media->MediaId;
+    } else {
+      Status = gBS->HandleProtocol (Handles[Index],
+               &gEfiBlockIoProtocolGuid, (VOID **) &BlkIo);
+      if (EFI_ERROR (Status)) {
+        continue;
+      }
+      RemovableMedia = BlkIo->Media->RemovableMedia;
+      MediaSignature = BlkIo->Media->MediaId;
+    }
+
+    if (RemovableMedia == FALSE) {
+      for (Count = 0; Count < ARRAY_SIZE (DeviceTypeMedia); Count++) {
+        if (DeviceTypeMedia[Count] == MediaSignature) {
+          CardFound = TRUE;
+          break;
+        }
+      }
+    }
+
+    if (CardFound) {
+      *MemCardInfo = (VOID *) CardInfo;
+      break;
+    }
+  }
+
+  // free the buffer for the handles
+  gBS->FreePool (Handles);
+  return Status;
+}
+
+EFI_STATUS
 BoardSerialNum (CHAR8 *StrSerialNum, UINT32 Len)
 {
   EFI_STATUS Status = EFI_INVALID_PARAMETER;
   MEM_CARD_INFO CardInfoData;
-  EFI_MEM_CARDINFO_PROTOCOL *CardInfo;
+  EFI_MEM_CARDINFO_PROTOCOL *CardInfo = NULL;
   EFI_CHIPINFO_PROTOCOL *ChipInfo;
   UINT32 SerialNo;
-  HandleInfo HandleInfoList[HANDLE_MAX_INFO_LIST];
-  UINT32 MaxHandles = ARRAY_SIZE (HandleInfoList);
   MemCardType Type = EMMC;
 
   Type = CheckRootDeviceType ();
@@ -656,19 +746,12 @@ BoardSerialNum (CHAR8 *StrSerialNum, UINT32 Len)
     AsciiSPrint (StrSerialNum, Len, "%x", SerialNo);
     ToLower (StrSerialNum);
     return Status;
-  };
-
-  Status = GetDeviceHandleInfo (HandleInfoList, MaxHandles, Type);
-  if (EFI_ERROR (Status)) {
-    return Status;
   }
 
-  Status =
-      gBS->HandleProtocol (HandleInfoList[0].Handle,
-                           &gEfiMemCardInfoProtocolGuid, (VOID **)&CardInfo);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Error locating MemCardInfoProtocol:%x\n", Status));
-
+  Status = GetMemCardInfo ((VOID **)&CardInfo);
+  if (Status != EFI_SUCCESS ||
+     !CardInfo) {
+    DEBUG ((EFI_D_ERROR, "Failed to get memory card info\n"));
     return Status;
   }
 
@@ -709,6 +792,11 @@ EFIChipInfoVersionType BoardPlatformChipVersion (VOID)
 EFIChipInfoFoundryIdType BoardPlatformFoundryId (VOID)
 {
   return platform_board_info.FoundryId;
+}
+
+UINT32 BoardPlatformPackageId (VOID)
+{
+  return platform_board_info.PackageId;
 }
 
 CHAR8 *BoardPlatformChipBaseBand (VOID)
