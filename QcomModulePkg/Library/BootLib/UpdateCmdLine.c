@@ -33,7 +33,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -451,10 +451,11 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
                 BOOLEAN NetworkBoot)
 {
   INT32 Index;
-  UINT32 Lun;
+  UINT32 Lun __attribute__ ((unused));
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
   Slot CurSlot = GetCurrentSlotSuffix ();
-  CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
+  CHAR8 LunCharMapping[] __attribute__ ((unused))
+        = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
 
   *SysPath = AllocateZeroPool (sizeof (CHAR8) * MAX_PATH_SIZE);
@@ -557,10 +558,25 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
       }
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
+#ifdef SUPPORT_AB_BOOT_LXC
+    if (MultiSlotBoot &&
+         (StrnCmp ((CONST CHAR16 *)L"_a", CurSlot.Suffix,
+          StrLen (CurSlot.Suffix)) == 0))
+          AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+          " root=PARTLABEL=system_a");
+    else if (MultiSlotBoot &&
+         (StrnCmp ((CONST CHAR16 *)L"_b", CurSlot.Suffix,
+          StrLen (CurSlot.Suffix)) == 0))
+          AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+          " root=PARTLABEL=system_b");
+    else
+          DEBUG ((EFI_D_ERROR, "Unknown system partition\n"));
+#else
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/sd%c%d",
                  Key,
                  LunCharMapping[Lun],
                  GetPartitionIdxInLun (PartitionName, Lun));
+#endif
   } else {
     DEBUG ((EFI_D_ERROR, "Unknown Device type\n"));
     FreePool (*SysPath);
