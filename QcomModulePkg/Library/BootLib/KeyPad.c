@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 - 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -70,6 +70,10 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
+#include <Protocol/EFIPmicSdam.h>
+
+#define PM_SDAM_2 1
+#define KEYPAD_VAL_BYTE 4
 
 EFI_STATUS
 GetKeyPress (UINT32 *KeyPressed)
@@ -110,3 +114,41 @@ GetKeyPress (UINT32 *KeyPressed)
 
   return Status;
 }
+
+EFI_STATUS
+GetPowerKeyPressInfo (UINT32 *PowerKeyPressTime)
+{
+  EFI_STATUS Status;
+  EFI_QCOM_PMIC_SDAM_PROTOCOL *SdamProtocol;
+  UINT32 PressTime;
+  UINT32 ReleaseTime;
+  Status = gBS->LocateProtocol (&gQcomPmicSdamProtocolGuid, NULL,
+             (VOID **)&SdamProtocol);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_INFO, "PMIC sdam protocol not supported\n"));
+    return Status;
+  }
+
+  Status = SdamProtocol->SdamMemRead (0, PM_SDAM_2,
+             26, KEYPAD_VAL_BYTE, (UINT8 *)&PressTime);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error getting press key event %x\n", Status));
+    return Status;
+  }
+
+  Status = SdamProtocol->SdamMemRead (0, PM_SDAM_2,
+            30, KEYPAD_VAL_BYTE, (UINT8 *)&ReleaseTime);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error getting release key event %x\n", Status));
+    return Status;
+  }
+
+  DEBUG ((EFI_D_INFO, "PowerKey Press time=%u,Release time=%u\n",
+           PressTime, ReleaseTime));
+  *PowerKeyPressTime = ReleaseTime - PressTime;
+
+  return Status;
+}
+
+
+

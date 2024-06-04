@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -134,9 +134,6 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"kgsl-smmu", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
      "/soc",
-     {"qcom,gpucc", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_GPU),
-     "/soc",
      {"qcom,kgsl-iommu", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
      "/soc",
@@ -183,6 +180,12 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,csiphy5", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,csiphy6", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,csiphy7", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,csid0", "status", "ok", "no"}},
@@ -245,6 +248,9 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,cci1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
+     {"qcom,cci2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
      {"qcom,jpegenc", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
@@ -293,9 +299,6 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,vfe1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,camcc", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
      {"qcom,csid2", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
@@ -338,82 +341,46 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,cam-res-mgr", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,actuator0", "status", "ok", "no"}},
+     {"qcom,tfe_csid0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,actuator1", "status", "ok", "no"}},
+     {"qcom,tfe0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,actuator2", "status", "ok", "no"}},
+     {"qcom,tfe_csid1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,actuator3", "status", "ok", "no"}},
+     {"qcom,tfe1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,actuator4", "status", "ok", "no"}},
+     {"qcom,tfe_csid2", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,actuator", "status", "ok", "no"}},
+     {"qcom,tfe2", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,eeprom0", "status", "ok", "no"}},
+     {"qcom,tfe_csid-lite0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,eeprom1", "status", "ok", "no"}},
+     {"qcom,tfe-lite0", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,eeprom2", "status", "ok", "no"}},
+     {"qcom,cam-cre", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,eeprom3", "status", "ok", "no"}},
+     {"qcom,cre", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,eeprom4", "status", "ok", "no"}},
+     {"qcom,tpg13", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,eeprom5", "status", "ok", "no"}},
+     {"qcom,tpg14", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,eeprom6", "status", "ok", "no"}},
+     {"qcom,tpg15", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
-     {"qcom,eeprom7", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,eeprom", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor0", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor1", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor2", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor3", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor3", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor4", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor5", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor6", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,cam-sensor7", "status", "ok", "no"}},
-    {BIT (EFICHIPINFO_PART_CAMERA),
-     "/soc",
-     {"qcom,ois0", "status", "ok", "no"}},
+     {"qcom,tpg16", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,mdss_mdp", "status", "ok", "no"}},
@@ -477,6 +444,9 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,smmu_sde_unsec_cb", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
+     {"qcom,wb-display", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_AUDIO),
      "/soc",
      {"qcom,msm-adsp-loader", "status", "ok", "no"}},
@@ -530,6 +500,60 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_EVA),
      "/soc",
      {"qcom,cvp", "status", "ok", "no"}},
+};
+
+static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
+    {BIT (EFICHIPINFO_PART_GPU),
+     {"gpucc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
+     {"gpu_cc_cx_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
+     {"gpu_cc_gx_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
+     {"funnel_gfx", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_bps_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_ife_0_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_ife_1_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_ife_2_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_ipe_0_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_sbi_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_sfe_0_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_sfe_1_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_titan_top_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"camcc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_rsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_camss_top_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    {"disp_rsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    {"disp_cc_mdss_core_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    {"disp_cc_mdss_core_int2_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+    {"dispcc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+    {"video_cc_mvs0_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_VIDEO),
+    {"video_cc_mvs0c_gdsc", "status", "no"}},
+    {(BIT (EFICHIPINFO_PART_VIDEO)
+     | BIT (EFICHIPINFO_PART_EVA)),
+    {"videocc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_EVA),
+    {"video_cc_mvs1_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_EVA),
+    {"video_cc_mvs1c_gdsc", "status", "no"}},
 };
 
 STATIC EFI_STATUS
@@ -645,6 +669,68 @@ FindNodeAndUpdateProperty (VOID *fdt,
   }
 }
 
+STATIC VOID
+FindLabelAndUpdateProperty (VOID *fdt,
+                           UINT32 TableSz,
+                           struct PartialGoodsWithLabel *Table,
+                           UINT32 Value)
+{
+  struct LabelStruct *LabelHandle = NULL;
+  INT32 Ret = 0;
+  UINT32 i;
+  INT32 PropLen = 0;
+  CONST CHAR8 *SymbolsDtNode = "/__symbols__";
+  CONST CHAR8 *Label, *LabelNodePath;
+  INT32 SymbolsOffset = 0, NodeOffset = 0;
+
+  for (i = 0; i < TableSz; i++, Table++) {
+    if (!(Value & Table->Val)) {
+      continue;
+    }
+
+    if (Table->Val == (BIT (EFICHIPINFO_PART_VIDEO) |
+                       BIT (EFICHIPINFO_PART_EVA))) {
+      if (!((Value & BIT (EFICHIPINFO_PART_VIDEO)) &&
+            (Value & BIT (EFICHIPINFO_PART_EVA))))
+          continue;
+    }
+
+    LabelHandle = &(Table->LabelRef);
+    Label = LabelHandle->LabelName;
+    SymbolsOffset = FdtPathOffset (fdt, SymbolsDtNode);
+    if (SymbolsOffset < 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to get Symbols node: %a\terror: %d\n",
+              SymbolsDtNode, SymbolsOffset));
+      continue;
+    }
+
+    LabelNodePath = fdt_getprop (fdt, SymbolsOffset, Label,
+                                  &PropLen);
+    if (!LabelNodePath) {
+      DEBUG ((EFI_D_ERROR, "Not a Valid Label: %a\n", Label));
+      continue;
+    }
+
+    NodeOffset = fdt_path_offset (fdt, LabelNodePath);
+    if (NodeOffset < 0) {
+      DEBUG ((EFI_D_INFO, "Node: %a is not present, ignore\n", LabelNodePath));
+      continue;
+    }
+
+     /* Add/Replace the property with Replace string value */
+    Ret = FdtSetProp (fdt, NodeOffset, LabelHandle->PropertyName,
+                      (CONST VOID *)LabelHandle->ReplaceStr,
+                      AsciiStrLen (LabelHandle->ReplaceStr) + 1);
+    if (!Ret) {
+      DEBUG ((EFI_D_INFO, "Partial goods Label:(%a) status property disabled\n",
+              Label));
+    } else {
+      DEBUG ((EFI_D_ERROR, "Failed to update property, Label:(%a) ret =%d \n",
+              Label, Ret));
+    }
+  }
+}
+
 STATIC EFI_STATUS
 ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
@@ -727,6 +813,11 @@ UpdatePartialGoodsNode (VOID *fdt)
 
     FindNodeAndUpdateProperty (fdt, ARRAY_SIZE (PartialGoodsMmType),
                                &PartialGoodsMmType[0], PartialGoodsMMValue);
+
+    FindLabelAndUpdateProperty (fdt, ARRAY_SIZE (PartialGoodsMmTypeWithLabel),
+                               &PartialGoodsMmTypeWithLabel[0],
+                               PartialGoodsMMValue);
+
   }
 
   /* Read and update CPU Partial Goods nodes */

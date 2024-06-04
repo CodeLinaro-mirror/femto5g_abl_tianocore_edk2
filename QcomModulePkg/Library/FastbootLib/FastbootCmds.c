@@ -49,7 +49,7 @@ found at
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -101,6 +101,7 @@ found at
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/UnlockMenu.h>
 #include <Library/BootLinux.h>
+#include <Library/SailLib.h>
 #include <Uefi.h>
 
 #include <Guid/EventGroup.h>
@@ -123,6 +124,7 @@ found at
 #include "MetaFormat.h"
 #include "SparseFormat.h"
 #include "Recovery.h"
+#include "RecoveryInfo.h"
 
 STATIC struct GetVarPartitionInfo part_info[] = {
     {"system", "partition-size:", "partition-type:", "", "ext4"},
@@ -220,6 +222,9 @@ STATIC LockHandle *LockFlash;
 STATIC EFI_STATUS FlashResult = EFI_SUCCESS;
 #ifdef ENABLE_UPDATE_PARTITIONS_CMDS
 STATIC EFI_EVENT UsbTimerEvent;
+STATIC UbiFlasherInfo_t FlasherBackup;
+STATIC BufferInfo_t BufferInfoBackup;
+STATIC UINT64 UbiBufferSize = 0 ;
 #endif
 
 STATIC UINT64 MaxDownLoadSize = 0;
@@ -236,6 +241,9 @@ STATIC VOID
 AcceptCmd (IN UINT64 Size, IN CHAR8 *Data);
 STATIC VOID
 AcceptCmdHandler (IN EFI_EVENT Event, IN VOID *Context);
+
+STATIC VOID
+GetMaxAllocatableMemory (OUT UINT64 *FreeSize);
 
 #define NAND_PAGES_PER_BLOCK 64
 
@@ -290,24 +298,25 @@ BOOLEAN IsDisableParallelDownloadFlash (VOID)
 }
 #endif
 
-/* Clean up memory for the getvar variables during exit */
+/* Clean up memory for the getvar and cmdlist variables
+ * during exit.
+ */
 STATIC EFI_STATUS FastbootUnInit (VOID)
 {
   FASTBOOT_VAR *Var;
-  FASTBOOT_VAR *VarPrev = NULL;
+  FASTBOOT_CMD *cmd;
 
-  for (Var = Varlist; Var && Var->next; Var = Var->next) {
-    if (VarPrev) {
-      FreePool (VarPrev);
-      VarPrev = NULL;
-    }
-    VarPrev = Var;
-  }
-  if (Var) {
+  while (Varlist) {
+    Var = Varlist;
+    Varlist = Varlist->next;
     FreePool (Var);
-    Var = NULL;
   }
 
+  while (cmdlist) {
+    cmd = cmdlist;
+    cmdlist = cmdlist->next;
+    FreePool (cmd);
+  }
   return EFI_SUCCESS;
 }
 
@@ -632,10 +641,109 @@ GetPartitionHasSlot (CHAR16 *PartitionName,
 }
 
 STATIC EFI_STATUS
+WriteUbiRawChunk (SparseImgParam *SparseImgData,
+                  VOID *Image,
+                  UINT64 Size, BOOLEAN LastChunk)
+
+{
+  UbiFlasherInfo_t *Flasher = &SparseImgData->UbiFlasher;
+  BufferInfo_t *BufferInfo = &SparseImgData->UbiInputBufferInfo;
+  UINT64 BufferSize = SparseImgData->UbiInputBufferInfo.Size;
+  UINT64 CopySize = 0;
+  UINT64 Remaining = 0;
+  EFI_STATUS Status;
+  UbiHeader_t *UbiHeader;
+
+  /* Determine how much to copy
+     1. chunk size if fits in buffer
+     2. if bigger, then till end of buffer
+  */
+  DEBUG ((EFI_D_VERBOSE, "CSz:%d BytesWritten:%d\n", Size,
+          BufferInfo->BytesWritten));
+  if (BufferInfo->BytesWritten + Size <= BufferSize) {
+    CopySize = Size;
+  } else {
+    CopySize = BufferSize - BufferInfo->BytesWritten;
+    Remaining = BufferInfo->BytesWritten + Size - BufferSize;
+    DEBUG ((EFI_D_VERBOSE, " ChunkDataSz:%d Remaining %d\n",
+            SparseImgData->ChunkDataSz, Remaining));
+  }
+
+  /* Copy Chunk */
+  gBS->CopyMem (BufferInfo->Buffer + BufferInfo->BytesWritten, Image, CopySize);
+  BufferInfo->BytesWritten += CopySize;
+
+  /* Validate Ubi header */
+  UbiHeader = SparseImgData->UbiInputBufferInfo.Buffer;
+  if (AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
+    DEBUG ((EFI_D_ERROR, "Corrupt UBI magic!\n"));
+    return EFI_VOLUME_CORRUPTED;
+  }
+
+  /* Three  possibilites :
+     Case 0. We are writing last chunk
+     Case 1. Buffer is not full. So, process next chunk
+     Case 2. Buffer is full & nothing left in current chunk,
+     So write to storage and process next chunk
+     Case 3. Buffer is full & more to be written.
+     So, write to storage and copy excess into the buffer.
+     Then process next chunk.
+  */
+
+  /* Case 0 :  Last chunk */
+  if (LastChunk) {
+    BufferSize = (BufferInfo->BytesWritten);
+  }
+
+  /* Case 1 : Nothing to do if the buffer is not filled */
+  if (BufferInfo->BytesWritten != BufferSize)  {
+    return EFI_SUCCESS;
+  }
+
+  Flasher->UbiFrameNo += 1;
+
+  Status = Flasher->Ubi->UbiFlasherWrite (Flasher->UbiFlasherHandle ,
+                                          Flasher->UbiFrameNo,
+                                          BufferInfo->Buffer,
+                                          BufferSize);
+  DEBUG ((EFI_D_VERBOSE, "flashwriter : buffer : %p frame : %d ret %d\n",
+          BufferInfo->Buffer, Flasher->UbiFrameNo, Status));
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  BufferInfo->BytesWritten = 0;
+
+  /* Case 2 : No excess data */
+  if (!Remaining) {
+    return EFI_SUCCESS;
+  }
+
+  /* Case 3: Excess data */
+  Image = (CHAR8 *) Image + CopySize;
+  UbiHeader = Image;
+  if (AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
+    DEBUG ((EFI_D_ERROR, "R: Corrupt UBI magic!\n"));
+  }
+
+  gBS->CopyMem (BufferInfo->Buffer, Image, Remaining);
+  BufferInfo->BytesWritten = Remaining;
+
+  /* TODO for buffer chunk  */
+  while (Remaining > BufferSize) {
+    DEBUG ((EFI_D_ERROR, "Need bigger buffer than %d only have %d!\n"
+            "Currently not supported\n", Remaining, BufferSize));
+  }
+
+  return EFI_SUCCESS;
+}
+
+STATIC EFI_STATUS
 HandleChunkTypeRaw (sparse_header_t *sparse_header,
         chunk_header_t *chunk_header,
         VOID **Image,
-        SparseImgParam *SparseImgData)
+        SparseImgParam *SparseImgData,
+        BOOLEAN IsUbiImage)
 {
   EFI_STATUS Status;
 
@@ -670,13 +778,33 @@ HandleChunkTypeRaw (sparse_header_t *sparse_header,
   /* Data is validated, now write to the disk */
   SparseImgData->WrittenBlockCount =
     SparseImgData->TotalBlocks * SparseImgData->BlockCountFactor;
-  Status = WriteToDisk (SparseImgData->BlockIo, SparseImgData->Handle,
-                        *Image,
-                        SparseImgData->ChunkDataSz,
-                        SparseImgData->WrittenBlockCount);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "Flash Write Failure\n"));
-    return Status;
+
+  if (IsUbiImage) {
+    EFI_STATUS Status;
+    BOOLEAN IsLastBlock;
+    IsLastBlock = ((SparseImgData->TotalBlocks + chunk_header->chunk_sz) ==
+                                                     sparse_header->total_blks);
+
+    DEBUG ((EFI_D_VERBOSE, "blocks written: %d/ %d\n",
+           SparseImgData->TotalBlocks + chunk_header->chunk_sz,
+           sparse_header->total_blks));
+    Status = WriteUbiRawChunk (SparseImgData, *Image,
+                              SparseImgData->ChunkDataSz,
+                              IsLastBlock);
+    if ( EFI_ERROR (Status) ) {
+      DEBUG ((EFI_D_ERROR, "Failed to write UbiRawChunk : %d\n", Status));
+      return Status;
+    }
+  } else {
+
+    Status = WriteToDisk (SparseImgData->BlockIo, SparseImgData->Handle,
+                          *Image,
+                          SparseImgData->ChunkDataSz,
+                          SparseImgData->WrittenBlockCount);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_ERROR, "Flash Write Failure\n"));
+      return Status;
+    }
   }
 
   if (SparseImgData->TotalBlocks >
@@ -695,7 +823,8 @@ STATIC EFI_STATUS
 HandleChunkTypeFill (sparse_header_t *sparse_header,
         chunk_header_t *chunk_header,
         VOID **Image,
-        SparseImgParam *SparseImgData)
+        SparseImgParam *SparseImgData,
+        BOOLEAN IsUbiImage)
 {
   UINT32 *FillBuf = NULL;
   UINT32 FillVal;
@@ -738,7 +867,8 @@ HandleChunkTypeFill (sparse_header_t *sparse_header,
 
   FillVal = *(UINT32 *)*Image;
   *Image = (CHAR8 *)*Image + sizeof (UINT32);
-
+  DEBUG ((EFI_D_VERBOSE, "FillVal %d Size: %d\n", FillVal,
+                        chunk_header->chunk_sz * sparse_header->blk_sz ));
   for (Temp = 0;
        Temp < (sparse_header->blk_sz / sizeof (FillVal));
        Temp++) {
@@ -760,24 +890,41 @@ HandleChunkTypeFill (sparse_header_t *sparse_header,
     SparseImgData->WrittenBlockCount =
       SparseImgData->TotalBlocks *
         SparseImgData->BlockCountFactor;
-    Status = WriteToDisk (SparseImgData->BlockIo,
-                          SparseImgData->Handle,
-                          (VOID *)FillBuf,
-                          sparse_header->blk_sz,
-                          SparseImgData->WrittenBlockCount);
-    if (EFI_ERROR (Status)) {
-      DEBUG ((EFI_D_ERROR, "Flash write failure for FILL Chunk\n"));
 
-    goto out;
+    if (IsUbiImage) {
+      BOOLEAN IsLastBlock;
+
+      IsLastBlock = (sparse_header->total_blks ==
+                      (SparseImgData->TotalBlocks + 1));
+      DEBUG ((EFI_D_VERBOSE, "block written: %d/ %d\n",
+              SparseImgData->TotalBlocks + chunk_header->chunk_sz,
+              sparse_header->total_blks));
+
+      WriteUbiRawChunk (SparseImgData, FillBuf, sparse_header->blk_sz,
+                         IsLastBlock);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR, "Failed to write UbiRawChunk : %d\n", Status));
+        goto out;
+      }
+    } else {
+
+      Status = WriteToDisk (SparseImgData->BlockIo,
+                SparseImgData->Handle,
+                (VOID *)FillBuf,
+                sparse_header->blk_sz,
+                SparseImgData->WrittenBlockCount);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR, "Flash write failure for FILL Chunk\n"));
+        goto out;
+      }
     }
-
     SparseImgData->TotalBlocks++;
   }
 
   out:
     if (FillBuf) {
-    FreePool (FillBuf);
-    FillBuf = NULL;
+      FreePool (FillBuf);
+      FillBuf = NULL;
     }
     return Status;
 }
@@ -786,7 +933,8 @@ STATIC EFI_STATUS
 ValidateChunkDataAndFlash (sparse_header_t *sparse_header,
              chunk_header_t *chunk_header,
              VOID **Image,
-             SparseImgParam *SparseImgData)
+             SparseImgParam *SparseImgData,
+             BOOLEAN IsUbiImage)
 {
   EFI_STATUS Status;
 
@@ -800,10 +948,11 @@ ValidateChunkDataAndFlash (sparse_header_t *sparse_header,
 
   switch (chunk_header->chunk_type) {
     case CHUNK_TYPE_RAW:
-    Status = HandleChunkTypeRaw (sparse_header,
+      Status = HandleChunkTypeRaw (sparse_header,
                                  chunk_header,
                                  Image,
-                                 SparseImgData);
+                                 SparseImgData,
+                                 IsUbiImage);
     if (EFI_ERROR (Status)) {
       return Status;
     }
@@ -814,7 +963,8 @@ ValidateChunkDataAndFlash (sparse_header_t *sparse_header,
       Status = HandleChunkTypeFill (sparse_header,
                                     chunk_header,
                                     Image,
-                                    SparseImgData);
+                                    SparseImgData,
+                                    IsUbiImage);
 
       if (EFI_ERROR (Status)) {
         return Status;
@@ -827,6 +977,26 @@ ValidateChunkDataAndFlash (sparse_header_t *sparse_header,
            (MAX_UINT32 - chunk_header->chunk_sz)) {
         DEBUG ((EFI_D_ERROR, "bogus size for chunk DONT CARE type\n"));
         return EFI_INVALID_PARAMETER;
+      }
+
+      /* Sanity check for first sparse chunk */
+      if (IsUbiImage &&
+          (SparseImgData->TotalBlocks != 0)) {
+        UINT64 Size;
+        UINT64 ComputedFrameNo;
+        UINT64 ComputedRemaining;
+        UbiFlasherInfo_t *Flasher = &SparseImgData->UbiFlasher;
+        BufferInfo_t *BufferInfo = &SparseImgData->UbiInputBufferInfo;
+
+        Size = chunk_header->chunk_sz * sparse_header->blk_sz;
+        ComputedFrameNo = (Size /UbiBufferSize ) + 1;
+        if (ComputedFrameNo  != Flasher->UbiFrameNo) {
+          DEBUG ((EFI_D_ERROR , "Frame number Didnt  Matched\n"));
+        }
+        ComputedRemaining = Size % UbiBufferSize;
+        if (ComputedRemaining != BufferInfo->BytesWritten) {
+          DEBUG ((EFI_D_ERROR , "Offset didnt match\n"));
+        }
       }
       SparseImgData->TotalBlocks += chunk_header->chunk_sz;
     break;
@@ -879,8 +1049,10 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
   sparse_header_t *sparse_header;
   chunk_header_t *chunk_header;
   EFI_STATUS Status;
-
+  UbiHeader_t *UbiHeader;
+  BOOLEAN IsUbiImage = FALSE;
   SparseImgParam SparseImgData = {0};
+  CHAR8 PartitionNameAscii[MAX_GPT_NAME_SIZE] = {'\0'};
 
   if (CHECK_ADD64 ((UINT64)Image, sz)) {
     DEBUG ((EFI_D_ERROR, "Integer overflow while adding Image and sz\n"));
@@ -967,7 +1139,6 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
 
     /* Read and skip over chunk header */
     chunk_header = (chunk_header_t *)Image;
-
     if (CHECK_ADD64 ((UINT64)Image, sizeof (chunk_header_t))) {
       DEBUG ((EFI_D_ERROR,
               "Integer overflow while adding Image and chunk header\n"));
@@ -1004,18 +1175,129 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
       return EFI_VOLUME_FULL;
     }
 
+    /* Detect if this is UBi image */
+    UbiHeader = (UbiHeader_t *)Image;
+    if ((SparseImgData.WrittenBlockCount == 0) &&
+        (!FlasherBackup.Ubi)) {
+      CHAR8 CopyMagic[5];
+      CopyMagic[4] = '\0';
+      gBS->CopyMem (CopyMagic, UbiHeader, 4);
+      if (!AsciiStrnCmp (CopyMagic, UBI_HEADER_MAGIC, 4)) {
+        DEBUG ((EFI_D_ERROR, "handlesparse Detected UBI in sparse!\n"));
+        IsUbiImage = 1;
+      }
+    }
+    /* Check if we have backup */
+    if (FlasherBackup.Ubi) {
+      gBS->CopyMem (&SparseImgData.UbiFlasher, &FlasherBackup,
+           sizeof (UbiFlasherInfo_t));
+      DEBUG ((EFI_D_VERBOSE, "restore: SparseImgData.UbiFlasher.FrameNo %d\n",
+           SparseImgData.UbiFlasher.UbiFrameNo));
+      gBS->CopyMem (&SparseImgData.UbiInputBufferInfo, &BufferInfoBackup,
+           sizeof (struct BufferInfo));
+      FlasherBackup.Ubi = NULL;
+      IsUbiImage = 1;
+    } else if (IsUbiImage == 1 &&
+               !SparseImgData.UbiFlasher.Ubi ) {
+      /*open flasher and save it in the sparseImage data structure*/
+      UINT32 UbiPageSize;
+      CHAR8 *Buffer;
+      UbiFlasherInfo_t *Flasher = &SparseImgData.UbiFlasher;
+
+      Status = gBS->LocateProtocol (&gEfiUbiFlasherProtocolGuid,
+                                    NULL,
+                                    (VOID **) &SparseImgData.UbiFlasher.Ubi);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR, "UBI Image flashing not supported.\n"));
+        return Status;
+      }
+
+      UnicodeStrToAsciiStr (PartitionName, PartitionNameAscii);
+
+      /*Ubi flasher is opened here */
+      Status = Flasher->Ubi->UbiFlasherOpen (PartitionNameAscii,
+                                             &Flasher->UbiFlasherHandle,
+                                             &UbiPageSize,
+                                             &Flasher->UbiBlkSize);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR, "Flasher open failed for %s\n",
+                               PartitionNameAscii));
+        return Status;
+      }
+      /*
+       * We cache the value of free memory across flashing
+       * Uefi is unable to clear the memory_map on free.
+       * leading to wrong available memory.
+       */
+      if (!UbiBufferSize) {
+    GetMaxAllocatableMemory (&UbiBufferSize);
+      }
+
+      /*Allocate Input buffer for Ubi*/
+      Status =
+         GetFastbootDeviceData ()->UsbDeviceProtocol->AllocateTransferBuffer (
+                                             UbiBufferSize,
+                                             (VOID **) &Buffer);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR, "Not enough memory to Allocate Buffer\n"));
+        return Status;
+      } else {
+        DEBUG ((EFI_D_INFO, "Allocated Buffer 0x%x (%d)\n", Buffer,
+                        UbiBufferSize));
+        SparseImgData.UbiInputBufferInfo.Buffer = Buffer;
+        SparseImgData.UbiInputBufferInfo.BytesWritten = 0;
+        SparseImgData.UbiInputBufferInfo.Size = UbiBufferSize;
+      }
+    }
+
+    /* All magic happens here */
     Status = ValidateChunkDataAndFlash (sparse_header,
                                         chunk_header,
                                         &Image,
-                                        &SparseImgData);
+                                        &SparseImgData,
+                                        IsUbiImage);
 
     if (EFI_ERROR (Status)) {
       return Status;
     }
+
+    /*
+     * When last chunk is not "dont care" type , implies we completed flashing
+     * image i.e all partial images supplied by fastboot is completed.
+     * Here on, we are looking for new flashing operation.
+     */
+    if (IsUbiImage &&
+    (chunk_header->chunk_type != CHUNK_TYPE_DONT_CARE) &&
+    (SparseImgData.TotalBlocks == sparse_header->total_blks)) {
+      CHAR8 *Buffer = SparseImgData.UbiInputBufferInfo.Buffer;
+      UbiFlasherInfo_t *Flasher = &SparseImgData.UbiFlasher;
+      BufferInfo_t *BufferInfo = &SparseImgData.UbiInputBufferInfo;
+
+      Flasher->Ubi->UbiFlasherClose (Flasher->UbiFlasherHandle);
+      gBS->SetMem (Flasher, sizeof (UbiFlasherInfo_t), 0);
+      gBS->SetMem (&FlasherBackup, sizeof (UbiFlasherInfo_t), 0);
+      Status =
+        GetFastbootDeviceData ()->UsbDeviceProtocol->FreeTransferBuffer (
+                                                                      Buffer);
+      gBS->SetMem (BufferInfo, sizeof (struct BufferInfo), 0);
+      gBS->SetMem (&BufferInfoBackup, sizeof (struct BufferInfo), 0);
+    }
+
   }
 
   DEBUG ((EFI_D_INFO, "Wrote %d blocks, expected to write %d blocks\n",
-            SparseImgData.TotalBlocks, sparse_header->total_blks));
+          SparseImgData.TotalBlocks, sparse_header->total_blks));
+
+  if (IsUbiImage) {
+    DEBUG ((EFI_D_VERBOSE, "Frame nos written %d",
+                            SparseImgData.UbiFlasher.UbiFrameNo));
+    gBS->CopyMem (&FlasherBackup, &SparseImgData.UbiFlasher,
+                 sizeof (UbiFlasherInfo_t));
+    DEBUG ((EFI_D_INFO, "bkup: SparseImgData.UbiFlasher.FrameNo %d\n",
+             SparseImgData.UbiFlasher.UbiFrameNo));
+    gBS->CopyMem (&BufferInfoBackup, &SparseImgData.UbiInputBufferInfo,
+                 sizeof (BufferInfo_t));
+  }
 
   if (SparseImgData.TotalBlocks != sparse_header->total_blks) {
     DEBUG ((EFI_D_ERROR, "Sparse Image Write Failure\n"));
@@ -1328,7 +1610,7 @@ HandleMetaImgFlash (IN CHAR16 *PartitionName,
   for (i = 0; i < images; i++) {
     PnameTerminated = FALSE;
 
-    if (img_header_entry[i].ptn_name == NULL ||
+    if (!img_header_entry[i].ptn_name[0] ||
         img_header_entry[i].start_offset == 0 || img_header_entry[i].size == 0)
       break;
 
@@ -1744,9 +2026,13 @@ ReenumeratePartTable (VOID)
     /*Check for multislot boot support*/
     MultiSlotBoot = PartitionHasMultiSlot (L"boot");
     if (MultiSlotBoot) {
-      UpdatePartitionAttributes (PARTITION_ALL);
-      FindPtnActiveSlot ();
-      PopulateMultislotMetadata ();
+      if (!IsRecoveryInfo ()) {
+        UpdatePartitionAttributes (PARTITION_ALL);
+        FindPtnActiveSlot ();
+        PopulateMultislotMetadata ();
+      } else {
+        DEBUG (( EFI_D_ERROR, "Skip UpdateParitionAttribute\n"));
+      }
       DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     } else {
       DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is not supported\n"));
@@ -1808,6 +2094,19 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
     return;
   }
   AsciiStrToUnicodeStr (arg, PartitionName);
+
+  #ifdef ENABLE_SAIL_FLASHING
+  if (CheckSailPartition (arg)) {
+    Status = SailFlash (arg, mFlashDataBuffer, sz);
+    if (Status != EFI_SUCCESS) {
+      FastbootFail ("Sail Flashing failed");
+       return;
+    } else {
+      FastbootOkay ("Sail Flashing succeeded");
+      return;
+    }
+  }
+  #endif
 
   if ((GetAVBVersion () == AVB_LE) ||
       ((GetAVBVersion () != AVB_LE) &&
@@ -2536,7 +2835,7 @@ VOID InitMultiThreadEnv ()
 
   if ((Status != EFI_SUCCESS) ||
     (KernIntf == NULL) ||
-    KernIntf->Version < EFI_KERNEL_PROTOCOL_VER_UNSAFE_STACK_APIS) {
+    KernIntf->Version < EFI_KERNEL_PROTOCOL_VER_LOCK_API) {
     DEBUG ((EFI_D_VERBOSE, "Multi thread is not supported.\n"));
     return;
   }
@@ -2572,7 +2871,7 @@ STATIC VOID GetBufferSize (UINT64 *MaxBufferSize, UINT64 *MinBufferSize)
     return;
   }
 
-  if (DdrSize <= DDR_128MB) {
+  if (DdrSize <= DDR_512MB) {
     /* 35MB */
     *MaxBufferSize = 36700160;
     /* 16MB */
@@ -2901,6 +3200,41 @@ CmdGetVar (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   FastbootFail ("GetVar Variable Not found");
 }
 
+#ifdef ENABLE_SAIL_BOOT
+
+STATIC BOOLEAN EnableSailBoot = FALSE;
+
+STATIC VOID
+CmdOemSailBootEnable (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Sz)
+{
+  CHAR8 *Ptr = NULL;
+  CONST CHAR8 *Delim = " ";
+
+  if (Arg) {
+    Ptr = AsciiStrStr (Arg, Delim);
+    if (Ptr) {
+      Ptr++;
+      if (!AsciiStrCmp (Ptr, "0")) {
+        EnableSailBoot = FALSE;
+      } else if (!AsciiStrCmp (Ptr, "1")) {
+        EnableSailBoot = TRUE;
+      }  else {
+        FastbootFail ("Invalid input entered");
+        return;
+      }
+    } else {
+      FastbootFail ("Enter fastboot oem sail-boot-enable 0/1");
+      return;
+    }
+  } else {
+    FastbootFail ("Enter fastboot oem sail-boot-enable 0/1");
+    return;
+  }
+  FastbootOkay ("");
+  return;
+}
+#endif
+
 #ifdef ENABLE_BOOT_CMD
 STATIC VOID
 CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
@@ -2909,11 +3243,23 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   boot_img_hdr_v3 *HdrV3 = Data;
   EFI_STATUS Status = EFI_SUCCESS;
   UINT32 ImageSizeActual = 0;
-  UINT32 PageSize = 0;
   UINT32 SigActual = SIGACTUAL;
   CHAR8 Resp[MAX_RSP_SIZE];
   BOOLEAN MdtpActive = FALSE;
   BootInfo Info = {0};
+
+  #ifdef ENABLE_SAIL_BOOT
+  if (EnableSailBoot) {
+    Status = SailBoot (Data, Size, TRUE);
+    if (Status != EFI_SUCCESS) {
+      FastbootFail ("SAIL Booting Failed.");
+      return;
+    } else {
+      FastbootOkay ("");
+      return;
+    }
+  }
+  #endif
 
   if (FixedPcdGetBool (EnableMdtpSupport)) {
     Status = IsMdtpActive (&MdtpActive);
@@ -2977,8 +3323,9 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
     FastbootFail ("BootImage is Incomplete");
     goto out;
   }
-  if ((MaxDownLoadSize - (ImageSizeActual - SigActual)) < PageSize) {
-    FastbootFail ("BootImage: Size is greater than boot image buffer can hold");
+
+  if (MaxDownLoadSize < (ImageSizeActual - SigActual)) {
+    FastbootFail ("BootImage: Size is greater than max download size");
     goto out;
   }
 
@@ -3035,24 +3382,6 @@ is_display_supported ( VOID )
    return 1;
 }
 
-#if TARGET_BOARD_TYPE_AUTO
-STATIC VOID
-RebootDeviceRecovery ( VOID )
-{
-
-}
-#else
-STATIC VOID
-RebootDeviceRecovery ( VOID )
-{
-   if (GetAVBVersion () != AVB_LE &&
-      !IsEnableDisplayMenuFlagSupported ()) {
-     RebootDevice (RECOVERY_MODE);
-   }
-
-}
-#endif
-
 STATIC VOID
 SetDeviceUnlock (UINT32 Type, BOOLEAN State)
 {
@@ -3096,7 +3425,10 @@ SetDeviceUnlock (UINT32 Type, BOOLEAN State)
          return;
     }
     FastbootOkay ("");
-    RebootDeviceRecovery ();
+    if (GetAVBVersion () != AVB_LE &&
+       !IsEnableDisplayMenuFlagSupported ()) {
+      RebootDevice (RECOVERY_MODE);
+    }
   }
 }
 #endif
@@ -3816,7 +4148,7 @@ PublishGetVarPartitionInfo (
 
   /* Loop will go through each partition entry
      and publish info for all partitions.*/
-  for (PtnLoopCount = 1; PtnLoopCount <= NumParts; PtnLoopCount++) {
+  for (PtnLoopCount = 0; PtnLoopCount < NumParts; PtnLoopCount++) {
     PublishType = FALSE;
     PublishSize = FALSE;
     PartitionNameUniCode = PtnEntries[PtnLoopCount].PartEntry.PartitionName;
@@ -3987,6 +4319,9 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
 #if HIBERNATION_SUPPORT_NO_AES
       {"oem golden-snapshot", CmdGoldenSnapshot},
 #endif
+#ifdef ENABLE_SAIL_BOOT
+      {"oem sail-boot-enable", CmdOemSailBootEnable},
+#endif
       {"continue", CmdContinue},
       {"reboot", CmdReboot},
       {"reboot-bootloader", CmdRebootBootloader},
@@ -4022,7 +4357,10 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
      *CurrenSlot, these can modified using fastboot set_active command
      */
     FindPtnActiveSlot ();
-    PopulateMultislotMetadata ();
+    /* This metadata is not available for RecoveryInfo case */
+    if (!IsRecoveryInfo ()) {
+      PopulateMultislotMetadata ();
+    }
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
   }
 
