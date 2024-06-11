@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -76,7 +76,11 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
 STATIC struct dt_entry *
 platform_dt_match_best (struct dt_entry_node *dt_list);
 
+#ifndef AUTO_VIRT_ABL
 STATIC BOOLEAN DtboNeed = TRUE;
+#else
+STATIC BOOLEAN DtboNeed = FALSE;
+#endif
 
 STATIC INT32 DtboIdx = INVALID_PTN;
 INT32 GetDtboIdx (VOID)
@@ -663,11 +667,20 @@ STATIC EFI_STATUS GetPlatformMatchDtb (DtInfo * CurDtbInfo,
     /*Compare msm-id of the dtb vs Board*/
     CurDtbInfo->DtPlatformId =
         fdt32_to_cpu (((struct plat_id *)PlatProp)->platform_id);
+    CurDtbInfo->DtPackageId =
+        fdt32_to_cpu (((struct plat_id *)PlatProp)->platform_id) &
+        PACKAGE_ID_MASK;
     DEBUG ((EFI_D_VERBOSE, "Boardsocid = %x, Dtsocid = %x\n",
             (BoardPlatformRawChipId () & SOC_MASK),
             (CurDtbInfo->DtPlatformId & SOC_MASK)));
-    if ((BoardPlatformRawChipId () & SOC_MASK) ==
-        (CurDtbInfo->DtPlatformId & SOC_MASK)) {
+    DEBUG ((EFI_D_VERBOSE, "(PackageID) Boardsocid = %x, Dtsocid = %x\n",
+            (BoardPlatformRawChipId () | ((BoardPlatformPackageId () & 0x1) <<
+             PLATFORM_PACKAGE_SHIFT)), CurDtbInfo->DtPlatformId));
+    DEBUG ((EFI_D_VERBOSE, "BoardPackage = %x, DtPackage = %x\n",
+            ((BoardPlatformPackageId () & 0x1) << PLATFORM_PACKAGE_SHIFT),
+            CurDtbInfo->DtPackageId));
+    if ((BoardPlatformRawChipId () | ((BoardPlatformPackageId () & 0x1) <<
+        PLATFORM_PACKAGE_SHIFT)) == CurDtbInfo->DtPlatformId) {
       CurDtbInfo->DtMatchVal |= BIT (SOC_MATCH);
     } else {
       DEBUG ((EFI_D_VERBOSE, "qcom,msm-id does not match\n"));
@@ -859,6 +872,10 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
     return FALSE;
   }
 
+  /* Get the Name prop from DTB */
+  PlatProp = (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "model", &LenPlatId);
+  DEBUG ((EFI_D_VERBOSE, "Now Parsing: %a\n", PlatProp));
+
   /* Get the msm-id prop from DTB */
   PlatProp = (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "qcom,msm-id",
                                          &LenPlatId);
@@ -1003,6 +1020,14 @@ cleanup:
         FindBestMatch = FALSE;
       }
     }
+  }
+
+  if (BestDtbInfo->Dtb) {
+    PlatProp = (CONST CHAR8 *)fdt_getprop (BestDtbInfo->Dtb,
+                fdt_path_offset (BestDtbInfo->Dtb, "/"), "model", &LenPlatId);
+    DEBUG ((EFI_D_VERBOSE, "Best Selected msm-id = 0x%x\n",
+                                BestDtbInfo->DtPlatformId));
+    DEBUG ((EFI_D_VERBOSE, "Best Selected DT: %a\n", PlatProp));
   }
 
   return FindBestMatch;
