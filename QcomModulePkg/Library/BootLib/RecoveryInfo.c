@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -22,8 +22,8 @@ STATIC BootSetType BootSet = SET_INVALID;
 | False    | X                | X                           | False          |
 | True     | False            | X                           | False          |
 | True     | True             | RECOVERY_INFO_PARTITION_FAIL| False          |
-| True     | True             | RECOVERY_INFO_GPIO          | True(gpio)     |
-| True     | True             | RECOVERY_INFO_NORMAL        | True           |
+| True     | True             | RECOVERY_INFO_NO_RECOVERY   | True(gpio)     |
+| True     | True             | RECOVERY_INFO_RECOVERY      | True           |
 +----------+------------------+-----------------------------+----------------+
 */
 
@@ -56,7 +56,7 @@ BOOLEAN IsRecoveryInfo ()
        if (RecoveryState == RECOVERY_INFO_PARTITION_FAIL) {
          DEBUG (( EFI_D_ERROR,  "recoveryinfo partition not found\n"));
          HasRecoveryInfo = 0;
-       } else if (RecoveryState == RECOVERY_INFO_GPIO) {
+       } else if (RecoveryState == RECOVERY_INFO_NO_RECOVERY) {
          HasGpioControl = 1;
          DEBUG (( EFI_D_INFO,  "Slot switching is GPIO controlled\n"));
        } else {
