@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -168,6 +168,8 @@ VOID UpdatePartitionEntries (VOID)
       }
 
       gBS->CopyMem ((&PtnEntries[Index]), PartEntry, sizeof (PartEntry[0]));
+      DEBUG ((EFI_D_VERBOSE, "[%a] Partition name is %s\n",
+                    __func__, PartEntry->PartitionName));
       PtnEntries[Index].lun = i;
     }
   }
@@ -211,8 +213,14 @@ GetStorageHandle (INT32 Lun, HandleInfo *BlockIoHandle, UINT32 *MaxHandles)
     Status =
         GetBlkIOHandles (Attribs, &HandleFilter, BlockIoHandle, MaxHandles);
     if (EFI_ERROR (Status)) {
-      DEBUG ((EFI_D_ERROR, "Error getting block IO handle for Emmc\n"));
-      return Status;
+      HandleFilter.RootDeviceType = &gEfiNvme0Guid;
+      Status =
+        GetBlkIOHandles (Attribs, &HandleFilter, BlockIoHandle, MaxHandles);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR,
+               "Error getting block IO handle for Emmc and Nvme\n"));
+        return Status;
+      }
     }
   } else {
     HandleFilter.RootDeviceType = &LunGuids[Lun];
@@ -298,7 +306,8 @@ VOID UpdatePartitionAttributes (UINT32 UpdateType)
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
   for (Lun = 0; Lun < MaxLuns; Lun++) {
 
-    if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC"))) {
+    if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
+        !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
       Status = GetStorageHandle (NO_LUN, BlockIoHandle, &MaxHandles);
     } else if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
       Status = GetStorageHandle (Lun, BlockIoHandle, &MaxHandles);
@@ -701,7 +710,11 @@ EnumeratePartitions (VOID)
   Ptable[0].MaxHandles = ARRAY_SIZE (Ptable[0].HandleInfoList);
   HandleFilter.PartitionType = NULL;
   HandleFilter.VolumeName = NULL;
+#ifdef AUTO_VIRT_ABL
+  HandleFilter.RootDeviceType = &gVirtioMmioTransportGuid;
+#else
   HandleFilter.RootDeviceType = &gEfiNandUserPartitionGuid;
+#endif
 
   Status =
       GetBlkIOHandles (Attribs, &HandleFilter, &Ptable[0].HandleInfoList[0],
@@ -710,7 +723,8 @@ EnumeratePartitions (VOID)
    * lun and the lun number is '0'
    * to have the partition selection implementation same acros
    */
-  if (Status == EFI_SUCCESS && Ptable[0].MaxHandles > 0) {
+  if (Status == EFI_SUCCESS &&
+      Ptable[0].MaxHandles > 0) {
     MaxLuns = 1;
     return Status;
   }
@@ -723,10 +737,26 @@ EnumeratePartitions (VOID)
   Status =
       GetBlkIOHandles (Attribs, &HandleFilter, &Ptable[0].HandleInfoList[0],
                        &Ptable[0].MaxHandles);
-  if (Status == EFI_SUCCESS && Ptable[0].MaxHandles > 0) {
+  if (Status == EFI_SUCCESS &&
+      Ptable[0].MaxHandles > 0) {
     MaxLuns = 1;
+    return Status;
   }
-  /* If the media is not emmc then look for UFS */
+
+  Ptable[0].MaxHandles = ARRAY_SIZE (Ptable[0].HandleInfoList);
+  HandleFilter.PartitionType = NULL;
+  HandleFilter.VolumeName = NULL;
+  HandleFilter.RootDeviceType = &gEfiNvme0Guid;
+
+  Status =
+      GetBlkIOHandles (Attribs, &HandleFilter, &Ptable[0].HandleInfoList[0],
+                       &Ptable[0].MaxHandles);
+  if (Status == EFI_SUCCESS &&
+      Ptable[0].MaxHandles > 0) {
+    MaxLuns = 1;
+    return Status;
+  }
+  /* If the media is not emmc/nvme/spinor then look for UFS */
   else if (EFI_ERROR (Status) || Ptable[0].MaxHandles == 0) {
     /* By default max 8 luns are supported but HW could be configured to use
      * only few of them or all of them
@@ -1420,6 +1450,19 @@ GetActiveSlot (Slot *ActiveSlot)
   Slot Slots[] = {{L"_a"}, {L"_b"}};
   UINT64 Priority = 0;
 
+#ifdef AUTO_VIRT_ABL
+  UINTN DataSize = 0;
+  CHAR16 TempActiveSlot[] = L"_x";
+
+  DataSize = sizeof (TempActiveSlot);
+  Status = gRT->GetVariable ((CHAR16 *)L"ActiveSlot", &gQcomTokenSpaceGuid,
+                          NULL, &DataSize, TempActiveSlot);
+  GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
+                  TempActiveSlot, StrLen (TempActiveSlot)));
+
+  return Status;
+#endif
+
   if (ActiveSlot == NULL) {
     DEBUG ((EFI_D_ERROR, "GetActiveSlot: bad parameter\n"));
     return EFI_INVALID_PARAMETER;
@@ -1747,7 +1790,8 @@ ValidateSlotGuids (Slot *BootableSlot)
               UfsBootLun, BootableSlot->Suffix));
       return EFI_DEVICE_ERROR;
     }
-  } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC"))) {
+  } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
+           !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
   } else {
     DEBUG ((EFI_D_ERROR, "Unsupported Device Type\n"));
     return EFI_DEVICE_ERROR;
@@ -1773,6 +1817,9 @@ FindBootableSlot (Slot *BootableSlot)
 
   GUARD (GetActiveSlot (BootableSlot));
 
+#ifdef AUTO_VIRT_ABL
+  return Status;
+#endif
   /* Validate Active Slot is bootable */
   BootEntry = GetBootPartitionEntry (BootableSlot);
   if (BootEntry == NULL) {
