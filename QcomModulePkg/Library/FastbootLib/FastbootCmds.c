@@ -1177,7 +1177,8 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
 
     /* Detect if this is UBi image */
     UbiHeader = (UbiHeader_t *)Image;
-    if (SparseImgData.WrittenBlockCount == 0) {
+    if ((SparseImgData.WrittenBlockCount == 0) &&
+        (!FlasherBackup.Ubi)) {
       CHAR8 CopyMagic[5];
       CopyMagic[4] = '\0';
       gBS->CopyMem (CopyMagic, UbiHeader, 4);
