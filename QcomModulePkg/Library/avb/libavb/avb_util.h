@@ -25,7 +25,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -223,6 +223,29 @@ uint64_t avb_htobe64(uint64_t in) AVB_ATTR_WARN_UNUSED_RESULT;
 int avb_safe_memcmp(const void* s1,
                     const void* s2,
                     size_t n) AVB_ATTR_WARN_UNUSED_RESULT;
+
+/* Multiply |value_to_multiply| and |value| with overflow protection.
+ * Store the product in |out_result|.
+ * Returns false if the addition overflows, true otherwise. In either
+ * case, |value| is always modified.
+*/
+bool Avb_Safe_Mutiply_To (uint64_t* Value,
+                     uint64_t Value_To_Multiply) AVB_ATTR_WARN_UNUSED_RESULT;
+
+/* Multiply |a| and |b| with overflow protection, returning the product in
+ * |out_result|.
+ * It's permissible to pass NULL for |out_result| if you just want to
+ * check that the addition would not overflow.
+ *
+ * Returns false if the addition overflows, true otherwise.
+ */
+bool Avb_Safe_Mutiply (uint64_t* Out_Result,
+                  uint64_t Value_Left,
+                  uint64_t Value_Right) AVB_ATTR_WARN_UNUSED_RESULT;
+
+/* Computes the integer square root of |x|
+*/
+uint64_t Avb_Int_Sqrt (uint64_t Num) AVB_ATTR_WARN_UNUSED_RESULT;
 
 /* Adds |value_to_add| to |value| with overflow protection.
  *

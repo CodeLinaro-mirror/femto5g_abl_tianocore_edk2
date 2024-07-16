@@ -2,7 +2,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -35,7 +35,6 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #include "avb_slot_verify.h"
 #include "avb_chain_partition_descriptor.h"
 #include "avb_footer.h"
@@ -46,13 +45,12 @@
 #include "avb_vbmeta_image.h"
 #include "avb_version.h"
 #include "BootStats.h"
+#include "Board.h"
 #include <Library/ThreadStack.h>
 #include <Protocol/EFIKernelInterface.h>
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/UefiBootServicesTableLib.h>
-
-#define IMAGE_SPLIT_SIZE 2
 
 STATIC EFI_KERNEL_PROTOCOL  *KernIntf = NULL;
 Mutex* mxLock;
@@ -167,6 +165,45 @@ out:
   return Ret;
 }
 
+/* Get the approximate optimal chunksize of an image, which is determined
+ * by |read_speed| bytes/ms, one IO call time |timeCost|, |PageSize|
+ * and |ImageSize|.
+ *
+ * the optimal chunksize is sqrt(|read_speed| * |timeCost|
+ *  * |ImageSize|) / |PageSize| * |PageSize|.
+ */
+static uint64_t GetChunkSize (uint64_t Read_Speed, uint64_t TimeCost,
+                                 uint64_t PageSize, uint64_t ImageSize) {
+  uint64_t Product = 1;
+  uint64_t ChunkSize = ImageSize;
+
+  /*ImageSize is smaller than 1ms readsize or pagesize*/
+  if (ImageSize <= Read_Speed) {
+    return ChunkSize;
+  }
+  if (ImageSize < PageSize) {
+    return ChunkSize;
+  }
+
+  if (!Avb_Safe_Mutiply_To (&Product, TimeCost) ||
+     !Avb_Safe_Mutiply_To (&Product, Read_Speed) ||
+     !Avb_Safe_Mutiply_To (&Product, ImageSize)) {
+    avb_error ("Overflow while mutiplying.\n");
+    ChunkSize = MAX_UINT32 - (MAX_UINT32 % PageSize);
+    goto out;
+  }
+  Product = Avb_Int_Sqrt (Product);
+  /* Considering page alignment, the chunkSize should be
+   * a multiple of the pagesize.
+   *
+   * floor(product / PageSize) * PageSize = product - (product % PageSize).
+   */
+  ChunkSize = Product - (Product % PageSize);
+
+out:
+  return ChunkSize;
+}
+
 static AvbSlotVerifyResult Load_partition_to_verify (
     AvbOps* ops,
     char* part_name,
@@ -198,196 +235,208 @@ out:
 }
 
 
-INT32 BootPartitionLoad (VOID* Arg)
+INT32 PartitionLoad (VOID* Arg)
 {
-  AvbSlotVerifyResult Status;
-  uint64_t ImageOffset;
-  uint64_t SplitImageSize;
-
-  LoadVerifyInfo* ThreadBootLoad = (LoadVerifyInfo*) Arg;
-  if ((NULL ==  ThreadBootLoad->ops) ||
-      (NULL == ThreadBootLoad->DescDigest) ||
-      (NULL ==  ThreadBootLoad->image_buf) ||
-      (NULL == ThreadBootLoad->part_name) ||
-      (NULL == ThreadBootLoad->HashCtx)) {
+  AvbSlotVerifyResult Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
+  uint64_t ImageOffset = 0;
+  uint64_t CurrentChunkSize = 0;
+  uint64_t SplitImageSize = 0;
+  char* Part_Name = NULL;
+  LoadVerifyInfo* ThreadLoad = (LoadVerifyInfo*) Arg;
+  if ((NULL ==  ThreadLoad->ops) ||
+      (NULL == ThreadLoad->DescDigest) ||
+      (NULL ==  ThreadLoad->image_buf) ||
+      (NULL == ThreadLoad->part_name) ||
+      (NULL == ThreadLoad->HashCtx)) {
     Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
-    ThreadBootLoad->Status = Status;
+    ThreadLoad->Status = Status;
     KernIntf->Sem->SemPost (SemMainThread, FALSE);
     KernIntf->Thread->ThreadExit (0);
     return Status;
   }
-
   Thread* CurrentThread = KernIntf->Thread->GetCurrentThread ();
+  ImageOffset = ThreadLoad->ImageOffset;
+  SplitImageSize = ThreadLoad->SplitImageSize;
+  CurrentChunkSize = SplitImageSize;
+  Part_Name = ThreadLoad->part_name;
 
-  ImageOffset = ThreadBootLoad->ImageOffset;
-  SplitImageSize = ThreadBootLoad->SplitImageSize;
-
-  Status = Load_partition_to_verify (ThreadBootLoad->ops,
-        ThreadBootLoad->part_name,
-        ImageOffset,
-        ThreadBootLoad->image_buf,
-        SplitImageSize );
-
-  if (Status != AVB_SLOT_VERIFY_RESULT_OK) {
-    return Status;
+  if (avb_strncmp ("boot", Part_Name, 4) == 0) {
+    BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_START);
   }
 
-  KernIntf->Sem->SemPost (SemLoadFirst, FALSE);
-  ThreadBootLoad->Status = Status;
-  SplitImageSize = SplitImageSize + ThreadBootLoad->RemainImageSize;
-  ImageOffset = ImageOffset + SplitImageSize;
+  /* First stage */
 
-  Status = Load_partition_to_verify (ThreadBootLoad->ops,
-          ThreadBootLoad->part_name,
-          ImageOffset,
-          ThreadBootLoad->image_buf,
-          SplitImageSize );
+  /* One loop one chunk.
+   * Ensure the last chunk is larger than SplitImageSize, break out of
+   * loop when less than twice the SplitImageSize.
+   */
+  while (ThreadLoad->RemainImageSize > (SplitImageSize << 1) ) {
+    Status = Load_partition_to_verify (ThreadLoad->ops,
+              Part_Name,
+              ImageOffset,
+              ThreadLoad->image_buf,
+              CurrentChunkSize);
+    if (Status != AVB_SLOT_VERIFY_RESULT_OK) {
+      return Status;
+    }
 
+    ImageOffset += SplitImageSize;
+    ThreadLoad->RemainImageSize -= SplitImageSize;
+    KernIntf->Sem->SemPost (SemLoadFirst, FALSE);
+  }
+
+  /* Second stage */
+  CurrentChunkSize = ThreadLoad->RemainImageSize;
+  Status = Load_partition_to_verify (ThreadLoad->ops,
+              Part_Name,
+              ImageOffset,
+              ThreadLoad->image_buf,
+              CurrentChunkSize);
+  if (Status != AVB_SLOT_VERIFY_RESULT_OK) {
+      return Status;
+  }
   KernIntf->Sem->SemPost (SemLoadSecond, FALSE);
 
-  ThreadBootLoad->Status = Status;
+  if (avb_strncmp ("boot", Part_Name, 4) == 0) {
+    BootStatsSetTimeStamp (BS_KERNEL_LOAD_BOOT_END);
+  }
+  ThreadLoad->Status = Status;
   ThreadStackNodeRemove (CurrentThread);
   KernIntf->Thread->ThreadExit (0);
-
   return 0;
-
 }
 
-INT32 BootPartitionVerify (VOID* Arg)
+INT32 PartitionVerify (VOID* Arg)
 {
-  AvbSlotVerifyResult Status;
-  uint64_t ImageOffset;
-  uint64_t SplitImageSize;
-  AvbSHA256Ctx *Sha256Ctx;
-  AvbSHA512Ctx* Sha512Ctx;
-
-  LoadVerifyInfo* ThreadBootVerify = (LoadVerifyInfo*) Arg;
+  AvbSlotVerifyResult Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
+  uint64_t ImageOffset = 0;
+  uint64_t CurrentChunkSize = 0;
+  uint64_t SplitImageSize = 0;
+  AvbSHA256Ctx *Sha256Ctx = NULL;
+  AvbSHA512Ctx* Sha512Ctx = NULL;
+  LoadVerifyInfo* ThreadVerify = (LoadVerifyInfo*) Arg;
   Thread* CurrentThread = KernIntf->Thread->GetCurrentThread ();
-  if ((NULL ==  ThreadBootVerify->ops) ||
-      (NULL == ThreadBootVerify->DescDigest) ||
-      (NULL ==  ThreadBootVerify->image_buf) ||
-      (NULL == ThreadBootVerify->part_name) ||
-      (NULL == ThreadBootVerify->HashCtx)) {
+  if ((NULL ==  ThreadVerify->ops) ||
+      (NULL == ThreadVerify->DescDigest) ||
+      (NULL ==  ThreadVerify->image_buf) ||
+      (NULL == ThreadVerify->part_name) ||
+      (NULL == ThreadVerify->HashCtx)) {
     Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
     goto out;
   }
-
-  if (ThreadBootVerify->Sha256HashCheck == true) {
-    Sha256Ctx = (AvbSHA256Ctx*) ThreadBootVerify->HashCtx;
+  if (ThreadVerify->Sha256HashCheck == true) {
+    Sha256Ctx = (AvbSHA256Ctx*) ThreadVerify->HashCtx;
     Sha512Ctx = NULL;
   } else {
     Sha256Ctx = NULL;
-    Sha512Ctx = (AvbSHA512Ctx*) ThreadBootVerify->HashCtx;
+    Sha512Ctx = (AvbSHA512Ctx*) ThreadVerify->HashCtx;
   }
 
-  ImageOffset = ThreadBootVerify->ImageOffset;
-  SplitImageSize = ThreadBootVerify->SplitImageSize;
-  KernIntf->Sem->SemWait (SemLoadFirst);
-
-  if (ThreadBootVerify->Sha256HashCheck == true) {
+  ImageOffset = ThreadVerify->ImageOffset;
+  SplitImageSize = ThreadVerify->SplitImageSize;
+  CurrentChunkSize = SplitImageSize;
+  /* First stage */
+  while (ThreadVerify->RemainImageSize > (SplitImageSize << 1)) {
+    KernIntf->Sem->SemWait (SemLoadFirst);
+    if (ThreadVerify->Sha256HashCheck == true) {
     Status = VerifyPartitionSha256 (Sha256Ctx,
-                                  ThreadBootVerify->part_name,
-                                  ThreadBootVerify->DescDigest,
-                                  ThreadBootVerify->DescDigestLen,
-                                  ThreadBootVerify->image_buf,
-                                  SplitImageSize,
-                                  ThreadBootVerify->IsFinal);
-  } else {
-   Status = VerifyPartitionSha512 (Sha512Ctx,
-                                  ThreadBootVerify->part_name,
-                                  ThreadBootVerify->DescDigest,
-                                  ThreadBootVerify->DescDigestLen,
-                                  ThreadBootVerify->image_buf,
-                                  SplitImageSize,
-                                  ThreadBootVerify->IsFinal);
-  }
-  DEBUG ((EFI_D_INFO, "BootPartitionVerify-First Return: %d\n", Status));
-
-  ThreadBootVerify->IsFinal = true;
-  SplitImageSize = SplitImageSize + ThreadBootVerify->RemainImageSize;
-  ImageOffset = ImageOffset + SplitImageSize;
-
-  KernIntf->Sem->SemWait (SemLoadSecond);
-
-  if (Status != AVB_SLOT_VERIFY_RESULT_OK) {
-    goto out;
-  }
-
-  if (ThreadBootVerify->Sha256HashCheck == true) {
-   if (!Sha256Ctx) {
-        Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
+                                    ThreadVerify->part_name,
+                                    ThreadVerify->DescDigest,
+                                    ThreadVerify->DescDigestLen,
+                                    ThreadVerify->image_buf + ImageOffset,
+                                    CurrentChunkSize,
+                                    ThreadVerify->IsFinal);
+    } else {
+    Status = VerifyPartitionSha512 (Sha512Ctx,
+                                    ThreadVerify->part_name,
+                                    ThreadVerify->DescDigest,
+                                    ThreadVerify->DescDigestLen,
+                                    ThreadVerify->image_buf + ImageOffset,
+                                    CurrentChunkSize,
+                                    ThreadVerify->IsFinal);
+    }
+    ThreadVerify->RemainImageSize -= ThreadVerify->SplitImageSize;
+    ImageOffset += CurrentChunkSize;
+    if (Status != AVB_SLOT_VERIFY_RESULT_OK) {
         goto out;
-   }
+    }
+  }
 
-   Status = VerifyPartitionSha256 (Sha256Ctx,
-                                  ThreadBootVerify->part_name,
-                                  ThreadBootVerify->DescDigest,
-                                  ThreadBootVerify->DescDigestLen,
-                                  ThreadBootVerify->image_buf + ImageOffset,
-                                  SplitImageSize,
-                                  ThreadBootVerify->IsFinal);
-  } else {
-    if (!Sha256Ctx) {
+    /* Second stage */
+    ThreadVerify->IsFinal = true;
+    CurrentChunkSize = ThreadVerify->RemainImageSize;
+    KernIntf->Sem->SemWait (SemLoadSecond);
+
+    if (ThreadVerify->Sha256HashCheck == true) {
+       if (!Sha256Ctx) {
        Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
        goto out;
-  }
+     }
 
-    Status = VerifyPartitionSha512 (Sha512Ctx,
-                                  ThreadBootVerify->part_name,
-                                  ThreadBootVerify->DescDigest,
-                                  ThreadBootVerify->DescDigestLen,
-                                  ThreadBootVerify->image_buf + ImageOffset,
-                                  SplitImageSize,
-                                  ThreadBootVerify->IsFinal);
+     Status = VerifyPartitionSha256 (Sha256Ctx,
+                                  ThreadVerify->part_name,
+                                  ThreadVerify->DescDigest,
+                                  ThreadVerify->DescDigestLen,
+                                  ThreadVerify->image_buf + ImageOffset,
+                                  CurrentChunkSize,
+                                  ThreadVerify->IsFinal);
+    } else {
+       if (!Sha256Ctx) {
+        Status = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_ARGUMENT;
+        goto out;
+     }
+     Status = VerifyPartitionSha512 (Sha512Ctx,
+                                  ThreadVerify->part_name,
+                                  ThreadVerify->DescDigest,
+                                  ThreadVerify->DescDigestLen,
+                                  ThreadVerify->image_buf + ImageOffset,
+                                  CurrentChunkSize,
+                                  ThreadVerify->IsFinal);
   }
 
 out:
-  ThreadBootVerify->Status = Status;
-  DEBUG ((EFI_D_INFO, "BootPartitionVerify-Second Return: %d\n", Status));
-
+  ThreadVerify->Status = Status;
   KernIntf->Sem->SemPost (SemMainThread, FALSE);
   ThreadStackNodeRemove (CurrentThread);
   KernIntf->Thread->ThreadExit (0);
-
   return Status;
 }
 
-EFI_STATUS CreateReaderThreads (
-     LoadVerifyInfo *ThreadLoadInfo,
-     LoadVerifyInfo *ThreadVerifyInfo) {
+EFI_STATUS CreateReaderThreads (LoadVerifyInfo *ThreadLoadInfo,
+                                       LoadVerifyInfo *ThreadVerifyInfo)
+{
   EFI_STATUS Status = EFI_SUCCESS;
-  Thread* BootLoadThread = NULL;
-  Thread* BootVerifyThread = NULL;
-  uint64_t CoreNum = 0;
+  Thread* LoadThread = NULL;
+  Thread* VerifyThread = NULL;
+  uint32_t CoreNum = 0;
 
-  BootLoadThread = KernIntf->Thread->ThreadCreate ("Executethreadwrapper_1",
-                                BootPartitionLoad, (VOID*)ThreadLoadInfo,
-                                UEFI_THREAD_PRIORITY, DEFAULT_STACK_SIZE);
-  if (BootLoadThread == NULL) {
+  LoadThread = KernIntf->Thread->ThreadCreate ("Executethreadwrapper_1",
+                                    PartitionLoad, (VOID*)ThreadLoadInfo,
+                                    UEFI_THREAD_PRIORITY, DEFAULT_STACK_SIZE);
+  if (LoadThread == NULL) {
     DEBUG ((EFI_D_INFO, "CreateReaderThreads: ThreadCreate failed\n"));
     return EFI_NOT_READY;
   }
-  KernIntf->Thread->ThreadSetPinnedCpu (BootLoadThread, CoreNum);
-  AllocateUnSafeStackPtr (BootLoadThread);
-  Status = KernIntf->Thread->ThreadResume (BootLoadThread);
+  KernIntf->Thread->ThreadSetPinnedCpu (LoadThread, CoreNum);
+  AllocateUnSafeStackPtr (LoadThread);
+  Status = KernIntf->Thread->ThreadResume (LoadThread);
   DEBUG ((EFI_D_INFO, "Thread 1 created with Thread ID: %d Status : %d\n",
                                         ThreadLoadInfo->ThreadId, Status));
 
   CoreNum = 7;
-  BootVerifyThread = KernIntf->Thread->ThreadCreate ("Executethreadwrapper_2",
-                                  BootPartitionVerify, (VOID*)ThreadVerifyInfo,
-                                  UEFI_THREAD_PRIORITY, DEFAULT_STACK_SIZE);
-  if (BootVerifyThread == NULL) {
+  VerifyThread = KernIntf->Thread->ThreadCreate ("Executethreadwrapper_2",
+                                 PartitionVerify, (VOID*)ThreadVerifyInfo,
+                                 UEFI_THREAD_PRIORITY, DEFAULT_STACK_SIZE);
+  if (VerifyThread == NULL) {
     DEBUG ((EFI_D_INFO, "CreateReaderThreads: ThreadCreate failed\n"));
     return EFI_NOT_READY;
   }
   DEBUG ((EFI_D_INFO, "Thread 2 created with Thread ID: %d\n",
-                                   ThreadVerifyInfo->ThreadId));
+                                              ThreadVerifyInfo->ThreadId));
 
-  KernIntf->Thread->ThreadSetPinnedCpu (BootVerifyThread, CoreNum);
-  AllocateUnSafeStackPtr (BootVerifyThread);
-  Status = KernIntf->Thread->ThreadResume (BootVerifyThread);
-
+  KernIntf->Thread->ThreadSetPinnedCpu (VerifyThread, CoreNum);
+  AllocateUnSafeStackPtr (VerifyThread);
+  Status = KernIntf->Thread->ThreadResume (VerifyThread);
   return Status;
 }
 
@@ -424,8 +473,7 @@ VOID InitReadMultiThreadEnv ()
    "InitMultiThreadEnv successful, Loading kernel image through threads\n"));
 }
 
-
-AvbSlotVerifyResult LoadAndVerifyBootHashPartition (
+AvbSlotVerifyResult LoadAndVerifyHashPartitionInParallel (
     AvbOps* ops,
     AvbHashDescriptor HashDesc,
     char* part_name,
@@ -440,8 +488,14 @@ AvbSlotVerifyResult LoadAndVerifyBootHashPartition (
   uint64_t ImageOffset = 0;
   uint64_t SplitImageSize = 0;
   uint64_t RemainImageSize = 0;
+  uint32_t PageSize = 0;
   bool Sha256Hash = false;
   EFI_STATUS TStatus = EFI_SUCCESS;
+
+  /*sequential read speed of images - 1000MB/s = 1MB/ms. */
+  uint64_t ReadSpeed = (1 << 20);
+  /* one IO call time - 1ms. */
+  uint64_t IoCallTime = 1ULL;
 
   if (image_buf == NULL) {
     Status = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
@@ -465,9 +519,11 @@ AvbSlotVerifyResult LoadAndVerifyBootHashPartition (
     goto out;
   }
 
-  /*Dividing boot image to two chuncks*/
-  SplitImageSize = ImageSize / IMAGE_SPLIT_SIZE;
-  RemainImageSize = ImageSize % IMAGE_SPLIT_SIZE;
+  GetPageSize (&PageSize);
+  /*Setting SplitImageSize*/
+  SplitImageSize = GetChunkSize (ReadSpeed, IoCallTime, PageSize, ImageSize);
+
+  RemainImageSize = ImageSize;
   ImageOffset = 0;
   LoadVerifyInfo* ThreadLoadInfo = AllocateZeroPool (sizeof (LoadVerifyInfo));
   LoadVerifyInfo* ThreadVerifyInfo = AllocateZeroPool (sizeof (LoadVerifyInfo));
