@@ -32,7 +32,7 @@
  /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -2101,6 +2101,18 @@ BOOLEAN ClearResetReason (VOID)
 }
 #else
 BOOLEAN ClearResetReason (VOID)
+{
+  return FALSE;
+}
+#endif
+
+#ifdef ENABLE_SLOT_SWITCH_IMAGE_CORRUPTION
+BOOLEAN SlotSwitchOnImageCorruption (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN SlotSwitchOnImageCorruption (VOID)
 {
   return FALSE;
 }
