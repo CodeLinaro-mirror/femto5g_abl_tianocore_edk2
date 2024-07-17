@@ -24,7 +24,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+ *
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
 
 #include <Uefi.h>
 #include <Library/UefiLib.h>
@@ -60,10 +64,8 @@ GetIntegrityIMACmdline (CHAR8 *IntegrityIMACmdlinePtr)
 {
   CHAR8 *IMAAppraiseOn = " ima_policy=tcb ima_appraise_tcb";
 
-  /* Check for sa525m (0x22E msm-id) withsubtype 2 and minor as 100 */
-  if (0x22E != (BoardPlatformRawChipId () & 0x0000ffff)) {
-    return IMAEVMoff (IntegrityIMACmdlinePtr);
-  }
+  /* Enable/Disable IMA-EVM by writing CDT minor value
+   */
   if (100 != ((BoardTargetId () >> 8) & 0xFF)) {
     return IMAEVMoff (IntegrityIMACmdlinePtr);
   }
