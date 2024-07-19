@@ -1143,7 +1143,10 @@ UpdateBootParamsSizeAndCmdLine (BootInfo *Info, BootParamlist *BootParamlistPtr)
     if (BootParamlistPtr->ExtraCmdLine[0]) {
       UINT32 FullCmdLen = BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE;
       CHAR8* FullCmdLine = AllocateZeroPool (FullCmdLen);
-
+      if (!FullCmdLine) {
+        DEBUG ((EFI_D_ERROR,"Failed to allocate memory for FullCmdLine\n"));
+        return EFI_OUT_OF_RESOURCES;
+      }
       AsciiStrCpyS (FullCmdLine, FullCmdLen, BootParamlistPtr->CmdLine);
       AsciiStrCatS (FullCmdLine, FullCmdLen, BootParamlistPtr->ExtraCmdLine);
       BootParamlistPtr->CmdLine = FullCmdLine;
