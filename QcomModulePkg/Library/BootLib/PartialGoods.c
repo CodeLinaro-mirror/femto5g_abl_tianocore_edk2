@@ -73,8 +73,6 @@
 #include <Uefi/UefiBaseType.h>
 #include <Library/FdtRw.h>
 
-#define SUBSET_PART_CHIPINFO_BASE_REVISION 0x0000000000010002
-
 /* Look up table for cpu partial goods
  *
  * NOTE: Array size of PartialGoodsCpuType0 and
@@ -157,6 +155,18 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,videocc", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
+     {"qcom,ais-ife0", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,ais-ife1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,ais-ife2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,ais-ife3", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
      {"qcom,cam-req-mgr", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
@@ -164,6 +174,18 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,csiphy", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,csiphy@ac65000", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,csiphy@ac66000", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,csiphy@ac67000", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,csiphy@ac68000", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,csiphy0", "status", "ok", "no"}},
@@ -305,6 +327,12 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,vfe1", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,vfe-lite0@acc4000", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,vfe-lite1@accb000", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
      {"qcom,csid2", "status", "ok", "no"}},
@@ -451,6 +479,9 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,sde_rscc", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
+     {"qcom,sde_cesta", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
      {"qcom,dp_display", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
@@ -481,7 +512,7 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"remoteproc-adsp", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_MODEM),
      "/soc",
-     {"remoteproc-mss", "status", "ok", "no"}},
+     {"qcom,mss", "status", "ok", "no"}},
     {(BIT (EFICHIPINFO_PART_MODEM)
      | BIT (EFICHIPINFO_PART_WLAN)
      | BIT (EFICHIPINFO_PART_NAV)),
@@ -526,9 +557,13 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {BIT (EFICHIPINFO_PART_GPU),
      {"gpucc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
+     {"gxclkctl", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
      {"gpu_cc_cx_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
      {"gpu_cc_gx_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
+     {"gx_clkctl_gx_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
      {"funnel_gfx", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
@@ -551,6 +586,16 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {"cam_cc_titan_top_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
     {"camcc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cambistmclkcc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_ofe_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_tfe_0_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_tfe_1_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_tfe_2_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
     {"cam_rsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
@@ -785,13 +830,22 @@ ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
   return Status;
 }
 
-STATIC EFI_STATUS
+EFI_STATUS
 ReadMMPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
   UINT32 i;
   UINT32 SubsetVal = 0;
   BOOLEAN SubsetBoolVal = FALSE;
   EFI_STATUS Status = EFI_SUCCESS;
+
+  if ((Value == NULL) ||
+      (pChipInfoProtocol == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (pChipInfoProtocol->Revision < SUBSET_PART_CHIPINFO_BASE_REVISION) {
+    return EFI_UNSUPPORTED;
+  }
 
   *Value = 0;
   for (i = 1; i < EFICHIPINFO_NUM_PARTS; i++) {

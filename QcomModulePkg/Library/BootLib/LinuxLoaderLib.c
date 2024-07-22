@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -276,7 +276,11 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
             RootDevicePath->Header.SubType != HW_VENDOR_DP ||
             (RootDevicePath->Header.Length[0] |
              (RootDevicePath->Header.Length[1] << 8)) !=
+#ifdef AUTO_VIRT_ABL
+                (sizeof (VENDOR_DEVICE_PATH) + sizeof (UINT64)) ||
+#else
                 sizeof (VENDOR_DEVICE_PATH) ||
+#endif
             ((FilterData->RootDeviceType != NULL) &&
              (CompareGuid (FilterData->RootDeviceType,
                            &RootDevicePath->Guid) == FALSE)))
@@ -849,6 +853,12 @@ GetBootDevice (CHAR8 *BootDevBuf, UINT32 Len)
     AsciiSPrint (BootDevBuf, Len, "%x.ufshc", BootDevAddr);
   } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC"))) {
     AsciiSPrint (BootDevBuf, Len, "%x.sdhci", BootDevAddr);
+  } else if (!AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
+    AsciiSPrint (BootDevBuf, Len, "%x.pcie", BootDevAddr);
+  } else if (!AsciiStrnCmp (BootDeviceType, "VBLK", AsciiStrLen ("VBLK"))) {
+    DEBUG ((EFI_D_ERROR, "Virtio Block Device is not"
+                         " supported as Boot Device\n"));
+    return EFI_NOT_FOUND;
   } else {
     DEBUG ((EFI_D_ERROR, "Unknown Boot Device type detected \n"));
     return EFI_NOT_FOUND;

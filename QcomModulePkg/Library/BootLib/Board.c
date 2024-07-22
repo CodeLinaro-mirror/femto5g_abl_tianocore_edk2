@@ -76,13 +76,20 @@
 STATIC struct BoardInfo platform_board_info;
 
 STATIC CONST CHAR8 *DeviceType[] = {
-        [EMMC] = "EMMC", [UFS] = "UFS", [NAND] = "NAND", [UNKNOWN] = "Unknown",
+        [EMMC] = "EMMC",
+        [UFS] = "UFS",
+        [NAND] = "NAND",
+        [NVME] = "NVME",
+        [VBLK] = "VBLK",
+        [UNKNOWN] = "Unknown",
 };
 
 STATIC CONST UINT32 DeviceTypeMedia[] = {
         [EMMC] = SIGNATURE_32 ('e', 'm', 'm', 'c'),
         [UFS] = SIGNATURE_32 ('u', 'f', 's', ' '),
         [NAND] = SIGNATURE_32 ('n', 'a', 'n', 'd'),
+        [NVME] = SIGNATURE_32 ('n', 'v' , 'm', 'e'),
+        [VBLK] = SIGNATURE_32 ('V', 'B', 'L', 'K'),
 };
 
 RamPartitionEntry *RamPartitionEntries = NULL;
@@ -187,6 +194,12 @@ EFI_STATUS
 BaseMem (UINT64 *BaseMemory)
 {
   EFI_STATUS Status = EFI_NOT_FOUND;
+#ifdef AUTO_VIRT_ABL
+  UINTN DataSize = 0;
+  DataSize = sizeof (*BaseMemory);
+  Status = gRT->GetVariable ((CHAR16 *)L"MemoryBase", &gQcomTokenSpaceGuid,
+                          NULL, &DataSize, BaseMemory);
+#else
   RamPartitionEntry *RamPartitions = NULL;
   UINT32 NumPartitions = 0;
   UINT64 SmallestBase;
@@ -203,6 +216,7 @@ BaseMem (UINT64 *BaseMemory)
       SmallestBase = RamPartitions[i].Base;
   }
   *BaseMemory = SmallestBase;
+#endif
   DEBUG ((EFI_D_INFO, "Memory Base Address: 0x%x\n", *BaseMemory));
 
   return Status;
@@ -231,6 +245,15 @@ GetChipInfo (struct BoardInfo *platform_board_info,
                                             &platform_board_info->FoundryId);
   if (EFI_ERROR (Status))
     return Status;
+  if (pChipInfoProtocol->Revision >= EFI_CHIPINFO_VERSION (1, 6)) {
+    Status = pChipInfoProtocol->GetRawPackageType (
+        pChipInfoProtocol, &platform_board_info->PackageId);
+    if (EFI_ERROR (Status)) {
+      platform_board_info->PackageId = 0;
+    }
+  } else {
+    platform_board_info->PackageId = 0;
+  }
   Status = pChipInfoProtocol->GetModemSupport (
       pChipInfoProtocol, ModemType);
   if (EFI_ERROR (Status))
@@ -329,7 +352,8 @@ GetPmicInfo (UINT32 PmicDeviceIndex,
  @param[in, out] MaxHandles  : On input, max number of handle structures
                                the buffer can hold, On output, the number
                                of handle structures returned.
- @param[in]      Type        : Device Type : UNKNOWN, UFS, EMMC, NAND
+ @param[in]      Type        : Device Type : UNKNOWN, UFS, EMMC, NAND, NVME,
+                                             VBLK
  @retval         EFI_STATUS  : Return Success on getting Handler Info
  **/
 
@@ -355,6 +379,12 @@ GetDeviceHandleInfo (VOID *HndlInfo, UINT32 MaxHandles, MemCardType Type)
   case NAND:
     HandleFilter.RootDeviceType = &gEfiNandUserPartitionGuid;
     break;
+  case NVME:
+    HandleFilter.RootDeviceType = &gEfiNvme0Guid;
+    break;
+  case VBLK:
+    HandleFilter.RootDeviceType = &gVirtioMmioTransportGuid;
+    break;
   case UNKNOWN:
     DEBUG ((EFI_D_ERROR, "Device type unknown\n"));
     return Status;
@@ -372,7 +402,7 @@ GetDeviceHandleInfo (VOID *HndlInfo, UINT32 MaxHandles, MemCardType Type)
 
 /**
  Return a device type
- @retval         Device type : UNKNOWN | UFS | EMMC | NAND
+ @retval         Device type : UNKNOWN | UFS | EMMC | NAND | NVME | VBLK
  **/
 STATIC UINT32
 GetCompatibleRootDeviceType (VOID)
@@ -394,7 +424,8 @@ GetCompatibleRootDeviceType (VOID)
 
 /**
  Return a device type
- @retval         Device type : UNKNOWN | UFS | EMMC | NAND, default is UNKNOWN
+ @retval         Device type : UNKNOWN | UFS | EMMC | NAND | NVME | VBLK
+                               default is UNKNOWN
  **/
 
 MemCardType
@@ -420,7 +451,6 @@ CheckRootDeviceType (VOID)
       Status = CardInfo->GetCardInfo (CardInfo, &CardInfoData);
 
       if (!EFI_ERROR (Status)) {
-
         if (!AsciiStrnCmp ((CHAR8 *)CardInfoData.card_type, "UFS",
                            AsciiStrLen ("UFS"))) {
           Type = UFS;
@@ -430,6 +460,12 @@ CheckRootDeviceType (VOID)
         } else if (!AsciiStrnCmp ((CHAR8 *)CardInfoData.card_type, "NAND",
                                   AsciiStrLen ("NAND"))) {
           Type = NAND;
+        } else if (!AsciiStrnCmp ((CHAR8 *)CardInfoData.card_type, "NVME",
+                                  AsciiStrLen ("NVME"))) {
+          Type = NVME;
+        } else if (!AsciiStrnCmp ((CHAR8 *)CardInfoData.card_type, "VBLK",
+                                  AsciiStrLen ("VBLK"))) {
+          Type = VBLK;
         } else {
           Type = GetCompatibleRootDeviceType ();
         }
@@ -708,7 +744,8 @@ BoardSerialNum (CHAR8 *StrSerialNum, UINT32 Len)
   MemCardType Type = EMMC;
 
   Type = CheckRootDeviceType ();
-  if (Type == UNKNOWN) {
+  if ((Type == UNKNOWN) ||
+        (Type == VBLK)) {
     Status = gBS->LocateProtocol (&gEfiChipInfoProtocolGuid, NULL,
                                   (VOID **)&ChipInfo);
     if (Status != EFI_SUCCESS) {
@@ -772,6 +809,11 @@ EFIChipInfoVersionType BoardPlatformChipVersion (VOID)
 EFIChipInfoFoundryIdType BoardPlatformFoundryId (VOID)
 {
   return platform_board_info.FoundryId;
+}
+
+UINT32 BoardPlatformPackageId (VOID)
+{
+  return platform_board_info.PackageId;
 }
 
 CHAR8 *BoardPlatformChipBaseBand (VOID)
