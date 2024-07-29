@@ -496,7 +496,8 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
       NAND != CheckRootDeviceType ()) {
     /* Skip slot suffix when RecoveryInfo and slot a*/
     if (!StrCmp (CurSlot.Suffix, L"_a")) {
-      if (!IsRecoveryInfo ()) {
+      if (!IsRecoveryInfo () ||
+          IsRecoveryInfoWithSlotA ()) {
         StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
                   StrLen (CurSlot.Suffix));
       }
@@ -896,7 +897,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     if (Param->MultiSlotBoot) {
       Slot CurrentSlot = GetCurrentSlotSuffix ();
       if (!IsRecoveryInfo () ||
-         (StrCmp (CurrentSlot.Suffix, L"_a"))) {
+          (StrCmp (CurrentSlot.Suffix, L"_a")) ||
+          (IsRecoveryInfoWithSlotA ())) {
         char CurSlotSuffix[sizeof (CurrentSlot.Suffix)];
         AsciiSPrint (CurSlotSuffix, sizeof (CurrentSlot.Suffix),
                      "%s", CurrentSlot.Suffix);
@@ -936,7 +938,7 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
                                   AsciiStrLen (Param->SlotSuffixAscii));
         }
       }
-  } else if (IsRecoveryInfo() &&
+  } else if (IsRecoveryInfo () &&
                IsLEVariant ()) {
            /* Recoveryinfo needs LE slot suffix */
            INT32 StrLen = 0;
@@ -946,11 +948,13 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
            SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
            Src = Param->SystemdSlotEnv;
            AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-           if (RI_IsGpioControlled()) {
-             Src = Param->RecoveryInfoGpio;
-             AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-           }
       }
+  }
+
+  if (IsRecoveryInfo () &&
+      RI_IsGpioControlled ()) {
+    Src = Param->RecoveryInfoGpio;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
@@ -1515,16 +1519,19 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
         ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
         AddtoBootConfigList (BootConfigFlag, SystemdSlotEnv, NULL,
                          BootConfigListHead, ParamLen, 0);
-        if (RI_IsGpioControlled()) {
-          ParamLen = AsciiStrLen (RecoveryInfoGpio);
-          BootConfigFlag = IsAndroidBootParam (RecoveryInfoGpio, ParamLen,
-                                           HeaderVersion);
-          AddtoBootConfigList (BootConfigFlag, RecoveryInfoGpio, NULL,
-                              BootConfigListHead, ParamLen, 0);
-          ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-        }
       }
   }
+
+  if (IsRecoveryInfo () &&
+      RI_IsGpioControlled ()) {
+    ParamLen = AsciiStrLen (RecoveryInfoGpio);
+    BootConfigFlag = IsAndroidBootParam (RecoveryInfoGpio, ParamLen,
+                                         HeaderVersion);
+    AddtoBootConfigList (BootConfigFlag, RecoveryInfoGpio, NULL,
+                         BootConfigListHead, ParamLen, 0);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+  }
+
 
 
   if ((IsBuildAsSystemRootImage (BootParamlistPtr) &&
