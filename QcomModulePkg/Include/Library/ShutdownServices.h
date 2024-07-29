@@ -46,7 +46,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -126,6 +126,7 @@ typedef enum {
   NON_SILENT_MODE = 0xB,
   FORCED_SILENT = 0xC,
   FORCED_NON_SILENT = 0xD,
+  FIRMWARE_FAIL_SAFE = 0x0E,
   OEM_RESET_MIN = 0x20,
   OEM_RESET_MAX = 0x3f,
   EMERGENCY_DLOAD = 0xFF,
