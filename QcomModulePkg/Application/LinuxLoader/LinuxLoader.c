@@ -33,7 +33,7 @@
 /*
  *  Changes from Qualcomm Innovation Center are provided under the following license:
  *
- *  Copyright (c) 2022 - 2023 Qualcomm Innovation Center, Inc. All rights
+ *  Copyright (c) 2022 - 2024 Qualcomm Innovation Center, Inc. All rights
  *  reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -482,6 +482,15 @@ flashless_boot:
   #if HIBERNATION_SUPPORT_NO_AES
     BootIntoHibernationImage (&Info, &SetRotAndBootState);
   #endif
+    if (IsLEVariant () &&
+        IsRecoveryInfo () &&
+        (BootReason == DM_VERITY_LOGGING ||
+        BootReason == FIRMWARE_FAIL_SAFE)) {
+      Slot CurrentSlot ;
+      CurrentSlot = GetCurrentSlotSuffix ();
+      RI_HandleFailedSlot (CurrentSlot);
+      /*No return*/
+    }
     Status = LoadImageAndAuth (&Info, FALSE, SetRotAndBootState);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
