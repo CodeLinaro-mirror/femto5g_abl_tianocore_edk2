@@ -147,8 +147,12 @@ GetRebootReason (UINT32 *ResetReason)
 
   RstReasonIf->GetResetReason (RstReasonIf, ResetReason, NULL, NULL);
   if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION &&
-      ClearResetReason ())
+  (ClearResetReason () ||
+  (IsRecoveryInfo () &&
+  ((*ResetReason == FIRMWARE_FAIL_SAFE) ||
+   (*ResetReason == DM_VERITY_LOGGING))))) {
     RstReasonIf->ClearResetReason (RstReasonIf);
+  }
   return Status;
 }
 
