@@ -604,15 +604,14 @@ STATIC VOID PopulateMultislotMetadata (VOID)
 STATIC VOID RI_PopulateMultiSlotMetaData (VOID)
 {
    UINT32 i = 0;
-   UINT32 j = 0;
+   UINT32 SlotIndex = 0;
    UINT32 RetryCount = 0;
    UINT32 SlotCountForRecoveryInfo = 0;
    CHAR8 PartitionNameAscii[MAX_GPT_NAME_SIZE];
    UINT32 PartitionCount = 0;
    EFI_STATUS Status = EFI_SUCCESS;
    Slot Slots[] = {{L"_a"}, {L"_b"}};
-   CHAR16 Suffix[MAX_SLOT_SUFFIX_SZ];
-   STATIC CHAR8 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
+   CHAR8 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
 
    Status = RI_GetVarAll ();
 
@@ -646,50 +645,49 @@ STATIC VOID RI_PopulateMultiSlotMetaData (VOID)
    UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix, CurrentSlotFB);
    SKIP_FIRSTCHAR_IN_SLOT_SUFFIX (CurrentSlotFB);
 
-   for (i = 0, j = 0; i < PartitionCount  &&
-                                 j < SlotCountForRecoveryInfo ; i++) {
+   for (i = 0; i < PartitionCount ; i++) {
       UnicodeStrToAsciiStr (PtnEntries[i].PartEntry.PartitionName,
                               PartitionNameAscii);
-      if ((AsciiStrnCmp (PartitionNameAscii, "boot_b",
-                                 AsciiStrLen ("boot_b")))) {
-         StrnCpyS (Suffix, ARRAY_SIZE (Suffix),
-                    Slots[j].Suffix, StrLen (Slots[j].Suffix));
-         RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotA;
-         AsciiStrnCpyS (BootSlotInfo[j].SlotUnbootableVal, ATTR_RESP_SIZE,
-                  RecoveryBootVariableInfoPtr.IsBootableSetA ? "no" : "yes",
-                  RecoveryBootVariableInfoPtr.IsBootableSetA ?
-                  AsciiStrLen ("no") : AsciiStrLen ("yes"));
-      } else {
-         StrnCpyS (Suffix, ARRAY_SIZE (Suffix), Slots[j].Suffix,
-                    StrLen (Slots[j].Suffix));
-         RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotB;
-         AsciiStrnCpyS (BootSlotInfo[j].SlotUnbootableVal, ATTR_RESP_SIZE,
-                  RecoveryBootVariableInfoPtr.IsBootableSetB ? "no" : "yes",
-                  RecoveryBootVariableInfoPtr.IsBootableSetB ?
-                  AsciiStrLen ("no") : AsciiStrLen ("yes"));
+      if (!AsciiStrnCmp (PartitionNameAscii, "boot", AsciiStrLen ("boot"))) {
+        if (!AsciiStrnCmp (PartitionNameAscii, "boot_a",
+                              AsciiStrLen ("PartitionNameAscii")) ||
+            !AsciiStrnCmp (PartitionNameAscii, "boot",
+                            AsciiStrLen ("PartitionNameAscii"))) {
+           SlotIndex = 0;
+           RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotA;
+           AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVal,
+                    ATTR_RESP_SIZE, RecoveryBootVariableInfoPtr.IsBootableSetA ?
+                    "no" : "yes", RecoveryBootVariableInfoPtr.IsBootableSetA ?
+                    AsciiStrLen ("no") : AsciiStrLen ("yes"));
+         } else if (!AsciiStrnCmp (PartitionNameAscii, "boot_b",
+                                     AsciiStrLen ("PartitionNameAscii"))) {
+           SlotIndex = 1;
+           RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotB;
+           AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVal,
+                    ATTR_RESP_SIZE, RecoveryBootVariableInfoPtr.IsBootableSetB ?
+                    "no" : "yes", RecoveryBootVariableInfoPtr.IsBootableSetB ?
+                    AsciiStrLen ("no") : AsciiStrLen ("yes"));
+         }
+
+         UnicodeStrToAsciiStr (Slots[SlotIndex].Suffix, SlotSuffix);
+         SKIP_FIRSTCHAR_IN_SLOT_SUFFIX (SlotSuffix);
+         AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        SLOT_ATTR_SIZE, "slot-unbootable:",
+                        AsciiStrLen ("slot-unbootable:"));
+         AsciiStrnCatS (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        SLOT_ATTR_SIZE, SlotSuffix, AsciiStrLen (SlotSuffix));
+         FastbootPublishVar (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        BootSlotInfo[SlotIndex].SlotUnbootableVal);
+         AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        SLOT_ATTR_SIZE, "slot-retry-count:",
+                        AsciiStrLen ("slot-retry-count:"));
+         AsciiSPrint (BootSlotInfo[SlotIndex].SlotRetryCountVal, ATTR_RESP_SIZE,
+                        "%llu", RetryCount);
+         AsciiStrnCatS (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        SLOT_ATTR_SIZE, SlotSuffix, AsciiStrLen (SlotSuffix));
+         FastbootPublishVar (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        BootSlotInfo[SlotIndex].SlotRetryCountVal);
       }
-
-
-      UnicodeStrToAsciiStr (Suffix, SlotSuffix);
-      SKIP_FIRSTCHAR_IN_SLOT_SUFFIX (SlotSuffix);
-      AsciiStrnCpyS (BootSlotInfo[j].SlotUnbootableVar, SLOT_ATTR_SIZE,
-                     "slot-unbootable:", AsciiStrLen ("slot-unbootable:"));
-
-      AsciiStrnCatS (BootSlotInfo[j].SlotUnbootableVar, SLOT_ATTR_SIZE,
-                     SlotSuffix, AsciiStrLen (SlotSuffix));
-
-      FastbootPublishVar (BootSlotInfo[j].SlotUnbootableVar,
-                     BootSlotInfo[j].SlotUnbootableVal);
-
-      AsciiStrnCpyS (BootSlotInfo[j].SlotRetryCountVar, SLOT_ATTR_SIZE,
-                    "slot-retry-count:", AsciiStrLen ("slot-retry-count:"));
-      AsciiSPrint (BootSlotInfo[j].SlotRetryCountVal, ATTR_RESP_SIZE, "%llu",
-                    RetryCount);
-      AsciiStrnCatS (BootSlotInfo[j].SlotRetryCountVar, SLOT_ATTR_SIZE,
-                    SlotSuffix, AsciiStrLen (SlotSuffix));
-      FastbootPublishVar (BootSlotInfo[j].SlotRetryCountVar,
-                    BootSlotInfo[j].SlotRetryCountVal);
-      j++;
    }
    FastbootPublishVar ("current-slot", CurrentSlotFB);
 
