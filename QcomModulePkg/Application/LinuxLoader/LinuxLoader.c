@@ -482,7 +482,8 @@ flashless_boot:
   #if HIBERNATION_SUPPORT_NO_AES
     BootIntoHibernationImage (&Info, &SetRotAndBootState);
   #endif
-    if (IsLEVariant () &&
+    if (SlotSwitchOnImageCorruption () &&
+        IsLEVariant () &&
         IsRecoveryInfo () &&
         (BootReason == DM_VERITY_LOGGING ||
         BootReason == FIRMWARE_FAIL_SAFE)) {
