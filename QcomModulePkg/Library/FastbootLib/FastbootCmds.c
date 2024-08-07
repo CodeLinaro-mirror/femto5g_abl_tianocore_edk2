@@ -606,7 +606,7 @@ STATIC VOID RI_PopulateMultiSlotMetaData (VOID)
    UINT32 i = 0;
    UINT32 j = 0;
    UINT32 RetryCount = 0;
-   STATIC UINT32 SlotCountForRecoveryInfo = 0;
+   UINT32 SlotCountForRecoveryInfo = 0;
    CHAR8 PartitionNameAscii[MAX_GPT_NAME_SIZE];
    UINT32 PartitionCount = 0;
    EFI_STATUS Status = EFI_SUCCESS;
