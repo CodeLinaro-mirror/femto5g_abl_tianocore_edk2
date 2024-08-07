@@ -31,7 +31,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 - 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 - 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -112,6 +112,7 @@ typedef struct device_info {
   persistent_value_type  persistent_value[MAX_ENTRY_SIZE];
   UINTN GoldenSnapshot;
   CHAR8 AudioFramework[MAX_AUDIO_FW_LENGTH];
+  BOOLEAN IsIpcLoggingEnabled;
 } DeviceInfo;
 
 struct verified_boot_verity_mode {
@@ -129,6 +130,7 @@ BOOLEAN IsUnlocked (VOID);
 BOOLEAN IsUnlockCritical (VOID);
 BOOLEAN IsEnforcing (VOID);
 BOOLEAN IsChargingScreenEnable (VOID);
+BOOLEAN IsIpcLoggingEnabled (VOID);
 VOID GetBootloaderVersion (CHAR8 *BootloaderVersion, UINT32 Len);
 VOID GetRadioVersion (CHAR8 *RadioVersion, UINT32 Len);
 EFI_STATUS EnableChargingScreen (BOOLEAN IsEnabled);
@@ -151,4 +153,6 @@ EFI_STATUS
 StoreAudioFrameWork (CONST CHAR8 *CmdLine, UINT32 CmdLineLen);
 EFI_STATUS
 ReadAudioFrameWork (CHAR8 **CmdLine, UINT32 *CmdLineLen);
+EFI_STATUS
+SetIpcLoggingEnabled (BOOLEAN IsEnabled);
 #endif
