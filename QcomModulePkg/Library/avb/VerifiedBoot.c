@@ -223,7 +223,8 @@ NoAVBLoadReqImage (BootInfo *Info, VOID **DtboImage,
       CurrentSlot = GetCurrentSlotSuffix ();
       /* Fixup suffix in case of recoveryinfo */
       if (!IsRecoveryInfo () ||
-          (StrCmp (CurrentSlot.Suffix, L"_a"))) {
+          (StrCmp (CurrentSlot.Suffix, L"_a")) ||
+          (IsRecoveryInfoWithSlotA ())) {
         GUARD ( StrnCatS (Pname, MAX_GPT_NAME_SIZE,
                   CurrentSlot.Suffix, StrLen (CurrentSlot.Suffix)));
       }
@@ -2262,7 +2263,8 @@ get_ptn_name:
                      StrLen (CurrentSlot.Suffix)));
     /* For RecoveryInfo skip _a suffix */
     if (IsRecoveryInfo () &&
-        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) {
+        (!IsRecoveryInfoWithSlotA ()) &&
+        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) { 
       GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"boot",
                          StrLen (L"boot")));
     }
