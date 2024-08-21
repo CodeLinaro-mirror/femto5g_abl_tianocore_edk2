@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -15,6 +15,8 @@ STATIC EFI_RECOVERYINFO_PROTOCOL *pRecoveryInfoProtocol = NULL;
 STATIC INT64 HasRecoveryInfo = -1;
 STATIC INT64 HasGpioControl = -1;
 STATIC BootSetType BootSet = SET_INVALID;
+RecoveryBootVariableInfo RecoveryBootVariableInfoPtr;
+
 /*
 +----------+------------------+-----------------------------+----------------+
 | Protocol | GetRecoveryState |        RecoveryState        | IsRecoveryInfo |
@@ -22,14 +24,33 @@ STATIC BootSetType BootSet = SET_INVALID;
 | False    | X                | X                           | False          |
 | True     | False            | X                           | False          |
 | True     | True             | RECOVERY_INFO_PARTITION_FAIL| False          |
-| True     | True             | RECOVERY_INFO_GPIO          | True(gpio)     |
-| True     | True             | RECOVERY_INFO_NORMAL        | True           |
+| True     | True             | RECOVERY_INFO_NO_RECOVERY   | True(gpio)     |
+| True     | True             | RECOVERY_INFO_RECOVERY      | True           |
 +----------+------------------+-----------------------------+----------------+
 */
 
 BOOLEAN RI_IsGpioControlled ()
 {
   return (HasGpioControl == 1);
+}
+
+BOOLEAN IsRecoveryInfoWithSlotA ()
+{
+  /* In case target is not having recoveryinfo support */
+  if (!IsRecoveryInfo ()) {
+    return FALSE;
+  }
+
+  INT32 Index = INVALID_PTN;
+  Index = GetPartitionIndex ((CHAR16 *)L"boot_a");
+
+  if (Index == INVALID_PTN) {
+    DEBUG ((EFI_D_ERROR, "GetBootPartitionEntry: No boot partition entry for"
+           "slot _a on recoveryinfo case\n"));
+    return FALSE;
+  }
+
+  return TRUE;
 }
 
 BOOLEAN IsRecoveryInfo ()
@@ -56,7 +77,7 @@ BOOLEAN IsRecoveryInfo ()
        if (RecoveryState == RECOVERY_INFO_PARTITION_FAIL) {
          DEBUG (( EFI_D_ERROR,  "recoveryinfo partition not found\n"));
          HasRecoveryInfo = 0;
-       } else if (RecoveryState == RECOVERY_INFO_GPIO) {
+       } else if (RecoveryState == RECOVERY_INFO_NO_RECOVERY) {
          HasGpioControl = 1;
          DEBUG (( EFI_D_INFO,  "Slot switching is GPIO controlled\n"));
        } else {
@@ -66,6 +87,7 @@ BOOLEAN IsRecoveryInfo ()
        HasRecoveryInfo = 1;
      }
   }
+
   return (HasRecoveryInfo == 1);
 }
 
@@ -126,5 +148,36 @@ EFI_STATUS RI_HandleFailedSlot (Slot ActiveSlot)
   }
 
   /* Enter Fastboot if we end up here */
+  return Status;
+}
+
+EFI_STATUS RI_SetActiveSlot (Slot *NewSlot)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  if (NewSlot == NULL) {
+    DEBUG ((EFI_D_ERROR, "SetActiveSlot: input parameter invalid\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (!StrCmp (NewSlot->Suffix, (CONST CHAR16 *)L"_a")) {
+    BootSet = SET_A;
+  } else if (!StrCmp (NewSlot->Suffix, (CONST CHAR16 *)L"_b")) {
+    BootSet = SET_B;
+  }
+
+  Status = pRecoveryInfoProtocol->SetActiveSlot (pRecoveryInfoProtocol,
+                                                  BootSet);
+
+  return Status;
+}
+
+EFI_STATUS RI_GetVarAll ()
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = pRecoveryInfoProtocol->GetVarAll (pRecoveryInfoProtocol,
+                                              &RecoveryBootVariableInfoPtr);
+
   return Status;
 }

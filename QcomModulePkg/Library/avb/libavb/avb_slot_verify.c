@@ -53,7 +53,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -87,6 +87,9 @@ static AvbSlotVerifyResult initialize_persistent_digest(
     size_t digest_size,
     const uint8_t* initial_digest,
     uint8_t* out_digest);
+
+/* Minimum size of a image that can be loaded and verified in parallel. - 1MB*/
+#define PARALLEL_MIN_SIZE (1 << 20)
 
 /* Helper function to see if we should continue with verification in
  * allow_verification_error=true mode if something goes wrong. See the
@@ -417,6 +420,12 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
     avb_debugv(part_name, ": Loading entire partition.\n", NULL);
   }
 
+ /* If we set  BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL,partition load
+  * and verification will be executed in parallel.
+  *
+  * In the parallel mode, the partition will be splited into
+  * several chunks to reduce load and verify time.
+  */
 #if BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
   if ((avb_strncmp ("boot", part_name, 4) == 0)) {
     image_buf = avb_malloc (image_size);
@@ -424,14 +433,17 @@ static AvbSlotVerifyResult load_and_verify_hash_partition(
       ret = AVB_SLOT_VERIFY_RESULT_ERROR_OOM;
       goto out;
     }
-    ret = LoadAndVerifyBootHashPartition (ops,
+    /*The image is loaded in parallel only if the image size is large enough*/
+    if (image_size >= PARALLEL_MIN_SIZE) {
+        ret = LoadAndVerifyHashPartitionInParallel (ops,
                                           hash_desc,
                                           part_name,
                                           desc_digest,
                                           desc_salt,
                                           image_buf,
                                           hash_desc.image_size);
-    goto out;
+      goto out;
+    }
   } else {
     ret = load_full_partition (
         ops, part_name, image_size, &image_buf, &image_preloaded);
