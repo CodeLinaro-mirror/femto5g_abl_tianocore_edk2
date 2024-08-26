@@ -49,7 +49,7 @@ found at
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -113,6 +113,7 @@ found at
 #include <Protocol/SimpleTextIn.h>
 #include <Protocol/SimpleTextOut.h>
 #include <Protocol/EFIDisplayUtils.h>
+#include <Protocol/EFIRecoveryInfo.h>
 
 #include "AutoGen.h"
 #include "BootImage.h"
@@ -125,6 +126,8 @@ found at
 #include "SparseFormat.h"
 #include "Recovery.h"
 #include "RecoveryInfo.h"
+
+extern RecoveryBootVariableInfo RecoveryBootVariableInfoPtr;
 
 STATIC struct GetVarPartitionInfo part_info[] = {
     {"system", "partition-size:", "partition-type:", "", "ext4"},
@@ -596,6 +599,99 @@ STATIC VOID PopulateMultislotMetadata (VOID)
     }
   }
   return;
+}
+
+STATIC VOID RI_PopulateMultiSlotMetaData (VOID)
+{
+   UINT32 i = 0;
+   UINT32 SlotIndex = 0;
+   UINT32 RetryCount = 0;
+   UINT32 SlotCountForRecoveryInfo = 0;
+   CHAR8 PartitionNameAscii[MAX_GPT_NAME_SIZE];
+   UINT32 PartitionCount = 0;
+   EFI_STATUS Status = EFI_SUCCESS;
+   Slot Slots[] = {{L"_a"}, {L"_b"}};
+   CHAR8 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
+
+   Status = RI_GetVarAll ();
+
+   if (Status != EFI_SUCCESS) {
+     FastbootFail ("UEFI failed to pass getvar params");
+     return;
+   }
+
+   GetPartitionCount (&PartitionCount);
+
+   /*Traverse through partition entries,count matching slots with boot */
+   for (i = 0; i < PartitionCount; i++) {
+     UnicodeStrToAsciiStr (PtnEntries[i].PartEntry.PartitionName,
+                       PartitionNameAscii);
+     if (!(AsciiStrnCmp (PartitionNameAscii, "boot", AsciiStrLen ("boot")))) {
+       SlotCountForRecoveryInfo++;
+     }
+   }
+
+   AsciiSPrint (SlotCountVar, sizeof (SlotCountVar), "%d",
+                                          SlotCountForRecoveryInfo);
+   FastbootPublishVar ("slot-count", SlotCountVar);
+
+   BootSlotInfo = AllocateZeroPool (
+                  SlotCountForRecoveryInfo * sizeof (struct GetVarSlotInfo));
+   if (BootSlotInfo == NULL) {
+     DEBUG ((EFI_D_ERROR, "Unable to allocate memory for BootSlotInfo\n"));
+     return;
+   }
+
+   UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix, CurrentSlotFB);
+   SKIP_FIRSTCHAR_IN_SLOT_SUFFIX (CurrentSlotFB);
+
+   for (i = 0; i < PartitionCount ; i++) {
+      UnicodeStrToAsciiStr (PtnEntries[i].PartEntry.PartitionName,
+                              PartitionNameAscii);
+      if (!AsciiStrnCmp (PartitionNameAscii, "boot", AsciiStrLen ("boot"))) {
+        if (!AsciiStrnCmp (PartitionNameAscii, "boot_a",
+                              AsciiStrLen ("PartitionNameAscii")) ||
+            !AsciiStrnCmp (PartitionNameAscii, "boot",
+                            AsciiStrLen ("PartitionNameAscii"))) {
+           SlotIndex = 0;
+           RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotA;
+           AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVal,
+                    ATTR_RESP_SIZE, RecoveryBootVariableInfoPtr.IsBootableSetA ?
+                    "no" : "yes", RecoveryBootVariableInfoPtr.IsBootableSetA ?
+                    AsciiStrLen ("no") : AsciiStrLen ("yes"));
+         } else if (!AsciiStrnCmp (PartitionNameAscii, "boot_b",
+                                     AsciiStrLen ("PartitionNameAscii"))) {
+           SlotIndex = 1;
+           RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotB;
+           AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVal,
+                    ATTR_RESP_SIZE, RecoveryBootVariableInfoPtr.IsBootableSetB ?
+                    "no" : "yes", RecoveryBootVariableInfoPtr.IsBootableSetB ?
+                    AsciiStrLen ("no") : AsciiStrLen ("yes"));
+         }
+
+         UnicodeStrToAsciiStr (Slots[SlotIndex].Suffix, SlotSuffix);
+         SKIP_FIRSTCHAR_IN_SLOT_SUFFIX (SlotSuffix);
+         AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        SLOT_ATTR_SIZE, "slot-unbootable:",
+                        AsciiStrLen ("slot-unbootable:"));
+         AsciiStrnCatS (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        SLOT_ATTR_SIZE, SlotSuffix, AsciiStrLen (SlotSuffix));
+         FastbootPublishVar (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        BootSlotInfo[SlotIndex].SlotUnbootableVal);
+         AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        SLOT_ATTR_SIZE, "slot-retry-count:",
+                        AsciiStrLen ("slot-retry-count:"));
+         AsciiSPrint (BootSlotInfo[SlotIndex].SlotRetryCountVal, ATTR_RESP_SIZE,
+                        "%llu", RetryCount);
+         AsciiStrnCatS (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        SLOT_ATTR_SIZE, SlotSuffix, AsciiStrLen (SlotSuffix));
+         FastbootPublishVar (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        BootSlotInfo[SlotIndex].SlotRetryCountVal);
+      }
+   }
+   FastbootPublishVar ("current-slot", CurrentSlotFB);
+
+   return;
 }
 
 #ifdef ENABLE_UPDATE_PARTITIONS_CMDS
@@ -1177,10 +1273,13 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
 
     /* Detect if this is UBi image */
     UbiHeader = (UbiHeader_t *)Image;
-    if (!AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
-      DEBUG ((EFI_D_ERROR, "handlesparse Detected UBI in sparse!\n"));
-      if (SparseImgData.WrittenBlockCount == 0) {
-        DEBUG ((EFI_D_ERROR, "Start of ubi image\n"));
+    if ((SparseImgData.WrittenBlockCount == 0) &&
+        (!FlasherBackup.Ubi)) {
+      CHAR8 CopyMagic[5];
+      CopyMagic[4] = '\0';
+      gBS->CopyMem (CopyMagic, UbiHeader, 4);
+      if (!AsciiStrnCmp (CopyMagic, UBI_HEADER_MAGIC, 4)) {
+        DEBUG ((EFI_D_ERROR, "handlesparse Detected UBI in sparse!\n"));
         IsUbiImage = 1;
       }
     }
@@ -1193,6 +1292,7 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
       gBS->CopyMem (&SparseImgData.UbiInputBufferInfo, &BufferInfoBackup,
            sizeof (struct BufferInfo));
       FlasherBackup.Ubi = NULL;
+      IsUbiImage = 1;
     } else if (IsUbiImage == 1 &&
                !SparseImgData.UbiFlasher.Ubi ) {
       /*open flasher and save it in the sparseImage data structure*/
@@ -2027,7 +2127,7 @@ ReenumeratePartTable (VOID)
         FindPtnActiveSlot ();
         PopulateMultislotMetadata ();
       } else {
-        DEBUG (( EFI_D_ERROR, "Skip UpdateParitionAttribute\n"));
+        RI_PopulateMultiSlotMetaData ();
       }
       DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     } else {
@@ -2344,7 +2444,8 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   }
 
 out:
-  if (!AsciiStrnCmp (arg, "system", AsciiStrLen ("system")) &&
+  if ((!AsciiStrnCmp (arg, "system", AsciiStrLen ("system"))||
+    !AsciiStrnCmp (arg, "super", AsciiStrLen ("super"))) &&
     !IsEnforcing () &&
     (FlashResult == EFI_SUCCESS)) {
      // reset dm_verity mode to enforcing
@@ -2517,15 +2618,16 @@ CmdSetActive (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
     } else {
       AsciiStrToUnicodeStr (InputSlot, InputSlotInUnicode);
     }
-
-    if ((AsciiStrLen (InputSlot) == MAX_SLOT_SUFFIX_SZ - 2) ||
-        (AsciiStrLen (InputSlot) == MAX_SLOT_SUFFIX_SZ - 1)) {
-      SlotEnd = AsciiStrLen (InputSlot);
-      if ((InputSlot[SlotEnd] != '\0') ||
-          !AsciiStrStr (SlotSuffixArray, InputSlot)) {
-        DEBUG ((EFI_D_ERROR, "%a Invalid InputSlot Suffix\n", InputSlot));
-        FastbootFail ("Invalid Slot Suffix");
-        return;
+    if (! IsRecoveryInfo ()) {
+      if ((AsciiStrLen (InputSlot) == MAX_SLOT_SUFFIX_SZ - 2) ||
+          (AsciiStrLen (InputSlot) == MAX_SLOT_SUFFIX_SZ - 1)) {
+        SlotEnd = AsciiStrLen (InputSlot);
+        if ((InputSlot[SlotEnd] != '\0') ||
+            !AsciiStrStr (SlotSuffixArray, InputSlot)) {
+          DEBUG ((EFI_D_ERROR, "%a Invalid InputSlot Suffix\n", InputSlot));
+          FastbootFail ("Invalid Slot Suffix");
+          return;
+        }
       }
     }
     /*Arg will be either _a or _b, so apppend it to boot*/
@@ -2542,6 +2644,21 @@ CmdSetActive (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   if (Status != EFI_SUCCESS) {
     FastbootFail ("set_active failed");
     return;
+  }
+
+  if (IsRecoveryInfo ()) {
+    Status = RI_SetActiveSlot (&NewSlot);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "non-hlos set_active failed with %r\n", Status));
+      FastbootFail ("non-hlos set_active failed");
+      return;
+    }
+
+    FastbootOkay ("");
+    RebootDevice (FASTBOOT_MODE);
+
+    // Shouldn't get here
+    FastbootFail ("Failed to reboot");
   }
 
   // Updating fbvar `current-slot'
@@ -3486,6 +3603,34 @@ CmdOemDisableChargerScreen (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 }
 
 STATIC VOID
+CmdOemEnableIpcLogging (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  DEBUG ((EFI_D_INFO, "Enabling IPC Logging\n"));
+
+  Status = SetIpcLoggingEnabled (TRUE);
+  if (Status != EFI_SUCCESS) {
+    FastbootFail ("Failed to enable IPC Logging");
+  } else {
+    FastbootOkay ("");
+  }
+}
+
+STATIC VOID
+CmdOemDisableIpcLogging (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  DEBUG ((EFI_D_INFO, "Disabling IPC Logging\n"));
+
+  Status = SetIpcLoggingEnabled (FALSE);
+  if (Status != EFI_SUCCESS) {
+    FastbootFail ("Failed to disable IPC Logging");
+  } else {
+    FastbootOkay ("");
+  }
+}
+
+STATIC VOID
 CmdOemOffModeCharger (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 {
   CHAR8 *Ptr = NULL;
@@ -3861,6 +4006,20 @@ CmdOemDevinfo (CONST CHAR8 *arg, VOID *data, UINT32 sz)
     FastbootInfo (DeviceInfo);
     WaitForTransferComplete ();
   }
+
+  FastbootOkay ("");
+}
+
+STATIC VOID
+CmdOemIpcLogging (CONST CHAR8 *arg, VOID *data, UINT32 Size)
+{
+  CHAR8 IpcLoggingEnabled[MAX_RSP_SIZE];
+
+  AsciiSPrint (IpcLoggingEnabled, sizeof (IpcLoggingEnabled),
+               "IPC Logging enabled: %a", IsIpcLoggingEnabled () ? "true" :
+               "false");
+  FastbootInfo (IpcLoggingEnabled);
+  WaitForTransferComplete ();
 
   FastbootOkay ("");
 }
@@ -4324,6 +4483,9 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
       {"getvar:", CmdGetVar},
       {"download:", CmdDownload},
       {"oem audio-framework", CmdOemAudioFrameWork},
+      {"oem ipc-logging", CmdOemIpcLogging},
+      {"oem enable-ipc-logging", CmdOemEnableIpcLogging},
+      {"oem disable-ipc-logging", CmdOemDisableIpcLogging},
   };
 
   /* Register the commands only for non-user builds */
@@ -4354,7 +4516,9 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
      */
     FindPtnActiveSlot ();
     /* This metadata is not available for RecoveryInfo case */
-    if (!IsRecoveryInfo ()) {
+    if (IsRecoveryInfo ()) {
+      RI_PopulateMultiSlotMetaData ();
+    } else {
       PopulateMultislotMetadata ();
     }
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
