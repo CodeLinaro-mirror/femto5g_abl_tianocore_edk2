@@ -276,7 +276,11 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
             RootDevicePath->Header.SubType != HW_VENDOR_DP ||
             (RootDevicePath->Header.Length[0] |
              (RootDevicePath->Header.Length[1] << 8)) !=
+#ifdef AUTO_VIRT_ABL
+                (sizeof (VENDOR_DEVICE_PATH) + sizeof (UINT64)) ||
+#else
                 sizeof (VENDOR_DEVICE_PATH) ||
+#endif
             ((FilterData->RootDeviceType != NULL) &&
              (CompareGuid (FilterData->RootDeviceType,
                            &RootDevicePath->Guid) == FALSE)))
@@ -298,10 +302,18 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
 
       /* Check if the last node is Harddrive Device path that contains the
        * Partition information */
+#ifndef AUTO_VIRT_ABL
       if (Partition->Header.Type == MEDIA_DEVICE_PATH &&
           Partition->Header.SubType == MEDIA_HARDDRIVE_DP &&
           (Partition->Header.Length[0] | (Partition->Header.Length[1] << 8)) ==
               sizeof (*Partition)) {
+#else
+      if (Partition->Header.Type == HARDWARE_DEVICE_PATH &&
+          Partition->Header.SubType == HW_VENDOR_DP &&
+          (Partition->Header.Length[0] | (Partition->Header.Length[1] << 8)) ==
+              (sizeof (VENDOR_DEVICE_PATH) + sizeof (UINT64))) {
+#endif
+
         PartitionOut = Partition;
 
         if ((SelectionAttrib & BLK_IO_SEL_PARTITIONED_GPT) == 0)
@@ -851,6 +863,10 @@ GetBootDevice (CHAR8 *BootDevBuf, UINT32 Len)
     AsciiSPrint (BootDevBuf, Len, "%x.sdhci", BootDevAddr);
   } else if (!AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
     AsciiSPrint (BootDevBuf, Len, "%x.pcie", BootDevAddr);
+  } else if (!AsciiStrnCmp (BootDeviceType, "VBLK", AsciiStrLen ("VBLK"))) {
+    DEBUG ((EFI_D_ERROR, "Virtio Block Device is not"
+                         " supported as Boot Device\n"));
+    return EFI_NOT_FOUND;
   } else {
     DEBUG ((EFI_D_ERROR, "Unknown Boot Device type detected \n"));
     return EFI_NOT_FOUND;

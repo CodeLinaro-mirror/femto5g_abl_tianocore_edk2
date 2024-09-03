@@ -73,14 +73,22 @@
 #include <Uefi/UefiBaseType.h>
 #include <Library/FdtRw.h>
 
-#define SUBSET_PART_CHIPINFO_BASE_REVISION 0x0000000000010002
-
 /* Look up table for cpu partial goods
  *
- * NOTE: Array size of PartialGoodsCpuType0 and
- *       PartialGoodsCpuType1 have to be same
+ * NOTE: Array size of all cpu types should be same.
  */
 static struct PartialGoods PartialGoodsCpuType0[] = {
+    {0x1, "/cpus", {"cpu@0", "enable-method", "psci", "none"}},
+    {0x2, "/cpus", {"cpu@100", "enable-method", "psci", "none"}},
+    {0x4, "/cpus", {"cpu@200", "enable-method", "psci", "none"}},
+    {0x8, "/cpus", {"cpu@300", "enable-method", "psci", "none"}},
+    {0x10, "/cpus", {"cpu@400", "enable-method", "psci", "none"}},
+    {0x20, "/cpus", {"cpu@500", "enable-method", "psci", "none"}},
+    {0x40, "/cpus", {"cpu@10000", "enable-method", "psci", "none"}},
+    {0x80, "/cpus", {"cpu@10100", "enable-method", "psci", "none"}},
+};
+
+static struct PartialGoods PartialGoodsCpuType1[] = {
     {0x1, "/cpus", {"cpu@0", "enable-method", "psci", "none"}},
     {0x2, "/cpus", {"cpu@100", "enable-method", "psci", "none"}},
     {0x4, "/cpus", {"cpu@200", "enable-method", "psci", "none"}},
@@ -91,12 +99,7 @@ static struct PartialGoods PartialGoodsCpuType0[] = {
     {0x80, "/cpus", {"cpu@700", "enable-method", "psci", "none"}},
 };
 
-/* Look up table for cpu partial goods 
- *
- * NOTE: Array size of PartialGoodsCpuType0 and
- *       PartialGoodsCpuType1 have to be same
- */
-static struct PartialGoods PartialGoodsCpuType1[] = {
+static struct PartialGoods PartialGoodsCpuType2[] = {
     {0x1, "/cpus", {"cpu@101", "enable-method", "psci", "none"}},
     {0x2, "/cpus", {"cpu@102", "enable-method", "psci", "none"}},
     {0x4, "/cpus", {"cpu@103", "enable-method", "psci", "none"}},
@@ -107,7 +110,7 @@ static struct PartialGoods PartialGoodsCpuType1[] = {
     {0x40, "/cpus", {"cpu@108", "enable-method", "psci", "none"}},
 };
 
-static struct PartialGoods PartialGoodsCpuType2[] = {
+static struct PartialGoods PartialGoodsCpuType3[] = {
     {0x1, "/cpus", {"cpu@0", "enable-method", "psci", "none"}},
     {0x2, "/cpus", {"cpu@1", "enable-method", "psci", "none"}},
     {0x4, "/cpus", {"cpu@2", "enable-method", "psci", "none"}},
@@ -121,7 +124,9 @@ static struct PartialGoods PartialGoodsCpuType2[] = {
 #define NUM_OF_CPUS (ARRAY_SIZE(PartialGoodsCpuType0))
 
 STATIC struct PartialGoods *PartialGoodsCpuType[MAX_CPU_CLUSTER] = {
-    PartialGoodsCpuType0, PartialGoodsCpuType1, PartialGoodsCpuType2};
+    PartialGoodsCpuType0, PartialGoodsCpuType1,
+    PartialGoodsCpuType2, PartialGoodsCpuType3
+};
 
 /* Look up table for multimedia partial goods */
 static struct PartialGoods PartialGoodsMmType[] = {
@@ -412,6 +417,12 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,tfe1", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
+     {"qcom,tfe_csid2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
+     {"qcom,tfe2", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+     "/soc",
      {"qcom,cam-ope", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
      "/soc",
@@ -481,6 +492,9 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"qcom,sde_rscc", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
+     {"qcom,sde_cesta", "status", "ok", "no"}},
+    {BIT (EFICHIPINFO_PART_DISPLAY),
+     "/soc",
      {"qcom,dp_display", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
@@ -511,7 +525,7 @@ static struct PartialGoods PartialGoodsMmType[] = {
      {"remoteproc-adsp", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_MODEM),
      "/soc",
-     {"remoteproc-mss", "status", "ok", "no"}},
+     {"qcom,mss", "status", "ok", "no"}},
     {(BIT (EFICHIPINFO_PART_MODEM)
      | BIT (EFICHIPINFO_PART_WLAN)
      | BIT (EFICHIPINFO_PART_NAV)),
@@ -556,9 +570,13 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {BIT (EFICHIPINFO_PART_GPU),
      {"gpucc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
+     {"gxclkctl", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
      {"gpu_cc_cx_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
      {"gpu_cc_gx_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_GPU),
+     {"gx_clkctl_gx_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_GPU),
      {"funnel_gfx", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
@@ -581,6 +599,16 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {"cam_cc_titan_top_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
     {"camcc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cambistmclkcc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_ofe_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_tfe_0_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_tfe_1_gdsc", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"cam_cc_tfe_2_gdsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
     {"cam_rsc", "status", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
@@ -787,19 +815,53 @@ STATIC EFI_STATUS
 ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
   UINT32 CpuCluster = 0;
+  UINT32 TmpVal = 0;
+  UINT32 TmpCpu = 0;
+  UINT32 Shift = 0;
   EFI_STATUS Status = EFI_SUCCESS;
 
    /* Ensure to reset the Value before checking CPU subset */
   *Value = 0;
 
-  if (pChipInfoProtocol->Revision >= EFI_CHIPINFO_PROTOCOL_REVISION_5) {
-    DEBUG ((EFI_D_VERBOSE, "Accessing new Partial APIs\n"));
+  if (pChipInfoProtocol->Revision >= EFI_CHIPINFO_PROTOCOL_REVISION_7) {
+    DEBUG ((EFI_D_VERBOSE, "Accessing >=EFI_CHIPINFO_PROTOCOL_REVISION_7 \n"));
+    for (CpuCluster = 0; ; CpuCluster++) {
+      Status = pChipInfoProtocol->GetDisabledCPUs (pChipInfoProtocol,
+                                                   CpuCluster, &TmpVal);
+      if ((EFI_ERROR (Status))) {
+        /* EFI_NOT_FOUND returned if invalid cluster id is passed */
+        if (Status == EFI_NOT_FOUND) {
+          Status = EFI_SUCCESS;
+        } else {
+          DEBUG ((EFI_D_ERROR, "GetDisabledCPUs() failed with status: %r\n",
+                  Status));
+        }
+        break;
+      }
+      Status = pChipInfoProtocol->GetNumCPUCores (pChipInfoProtocol, CpuCluster,
+                                                 &TmpCpu);
+      if ((EFI_ERROR (Status))) {
+        DEBUG ((EFI_D_VERBOSE, "GetNumCPUCores failed with Status: %r\n",
+                Status));
+        break;
+      }
+
+      DEBUG ((EFI_D_VERBOSE, "GetDisabledCPUs(): %x GetNumCPUCores: %x\n",
+              TmpVal, TmpCpu));
+      *Value += (TmpVal & ((1 << TmpCpu) - 1)) << Shift;
+      Shift += TmpCpu;
+      TmpVal = TmpCpu = 0;
+    }
+  } else if (pChipInfoProtocol->Revision >= EFI_CHIPINFO_PROTOCOL_REVISION_5) {
+    DEBUG ((EFI_D_VERBOSE, "Accessing >=EFI_CHIPINFO_PROTOCOL_REVISION_5\n"));
     Status =
         pChipInfoProtocol->GetDisabledCPUs (pChipInfoProtocol, CpuCluster,
                                              Value);
   }
+
   if (pChipInfoProtocol->Revision < EFI_CHIPINFO_PROTOCOL_REVISION_5 ||
      Status == EFI_NOT_FOUND) {
+    CpuCluster = 0;
     Status =
         pChipInfoProtocol->GetSubsetCPUs (pChipInfoProtocol, CpuCluster,
                                              Value);
@@ -815,13 +877,22 @@ ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
   return Status;
 }
 
-STATIC EFI_STATUS
+EFI_STATUS
 ReadMMPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
   UINT32 i;
   UINT32 SubsetVal = 0;
   BOOLEAN SubsetBoolVal = FALSE;
   EFI_STATUS Status = EFI_SUCCESS;
+
+  if ((Value == NULL) ||
+      (pChipInfoProtocol == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (pChipInfoProtocol->Revision < SUBSET_PART_CHIPINFO_BASE_REVISION) {
+    return EFI_UNSUPPORTED;
+  }
 
   *Value = 0;
   for (i = 1; i < EFICHIPINFO_NUM_PARTS; i++) {
