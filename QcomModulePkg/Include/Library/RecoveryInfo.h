@@ -13,5 +13,7 @@ BOOLEAN RI_IsGpioControlled ();
 EFI_STATUS RI_GetActiveSlot (Slot *);
 EFI_STATUS RI_HandleFailedSlot (Slot);
 BOOLEAN IsRecoveryInfoWithSlotA ();
+EFI_STATUS RI_SetActiveSlot (Slot *NewSlot);
+EFI_STATUS RI_GetVarAll ();
 
 #endif

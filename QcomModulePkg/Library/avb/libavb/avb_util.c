@@ -49,6 +49,14 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 #include "avb_util.h"
 #include "avb_ops.h"
 #include <stdarg.h>
@@ -158,6 +166,64 @@ int avb_safe_memcmp(const void* s1, const void* s2, size_t n) {
   }
 
   return result != 0;
+}
+
+bool Avb_Safe_Mutiply_To (uint64_t* Value, uint64_t Value_To_Multiply)
+{
+  uint64_t Original_Value;
+  uint64_t Tmp;
+
+  avb_assert (Value != NULL);
+
+  Original_Value = *Value;
+
+  *Value *= Value_To_Multiply;
+  if (Value_To_Multiply != 0) {
+    Tmp = *Value / Value_To_Multiply;
+    if (Tmp != Original_Value) {
+      avb_error ("Overflow when multiplying values.\n");
+      return false;
+    }
+  }
+  return true;
+}
+
+bool Avb_Safe_Mutiply (uint64_t* Out_Result, uint64_t Value_Left,
+                                             uint64_t Value_Right)
+{
+  uint64_t Dummy;
+
+  if (Out_Result == NULL) {
+    Out_Result = &Dummy;
+  }
+  *Out_Result = Value_Left;
+
+  return Avb_Safe_Mutiply_To (Out_Result, Value_Right);
+}
+
+uint64_t Avb_Int_Sqrt (uint64_t Num)
+{
+  uint64_t Left = 0, Right = Num, Ans = 0;
+  uint64_t Mid;
+
+  if (Num == 0) {
+    return Num;
+  }
+  if (Num == 1) {
+    return Num;
+  }
+
+  while (Left <= Right) {
+    Mid = Left + (Right - Left) / 2;
+    if (Mid <= Num / Mid) {
+        Ans = Mid;
+        Left = Mid + 1;
+    } else {
+        Right = Mid - 1;
+    }
+  }
+
+  return Ans;
 }
 
 bool avb_safe_add_to(uint64_t* value, uint64_t value_to_add) {

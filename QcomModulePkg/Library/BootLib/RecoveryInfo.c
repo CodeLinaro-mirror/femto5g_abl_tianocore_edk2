@@ -15,6 +15,8 @@ STATIC EFI_RECOVERYINFO_PROTOCOL *pRecoveryInfoProtocol = NULL;
 STATIC INT64 HasRecoveryInfo = -1;
 STATIC INT64 HasGpioControl = -1;
 STATIC BootSetType BootSet = SET_INVALID;
+RecoveryBootVariableInfo RecoveryBootVariableInfoPtr;
+
 /*
 +----------+------------------+-----------------------------+----------------+
 | Protocol | GetRecoveryState |        RecoveryState        | IsRecoveryInfo |
@@ -146,5 +148,36 @@ EFI_STATUS RI_HandleFailedSlot (Slot ActiveSlot)
   }
 
   /* Enter Fastboot if we end up here */
+  return Status;
+}
+
+EFI_STATUS RI_SetActiveSlot (Slot *NewSlot)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  if (NewSlot == NULL) {
+    DEBUG ((EFI_D_ERROR, "SetActiveSlot: input parameter invalid\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (!StrCmp (NewSlot->Suffix, (CONST CHAR16 *)L"_a")) {
+    BootSet = SET_A;
+  } else if (!StrCmp (NewSlot->Suffix, (CONST CHAR16 *)L"_b")) {
+    BootSet = SET_B;
+  }
+
+  Status = pRecoveryInfoProtocol->SetActiveSlot (pRecoveryInfoProtocol,
+                                                  BootSet);
+
+  return Status;
+}
+
+EFI_STATUS RI_GetVarAll ()
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = pRecoveryInfoProtocol->GetVarAll (pRecoveryInfoProtocol,
+                                              &RecoveryBootVariableInfoPtr);
+
   return Status;
 }

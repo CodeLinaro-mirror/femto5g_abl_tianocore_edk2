@@ -139,6 +139,7 @@ STATIC CHAR8 MacEthAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 QosAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
@@ -180,6 +181,8 @@ STATIC CONST CHAR8 *MemHpState = " memhp_default_state=online";
 STATIC CONST CHAR8 *MovableNode = " movable_node";
 
 STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
+
+STATIC CONST CHAR8 *EnableIpcLoggingCmdLine = " qcom_ipc_logging.enabled=1";
 
 LIST_ENTRY *BootConfigListHead = NULL;
 EFI_STATUS
@@ -1041,6 +1044,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlySpeedCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyQosCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1073,6 +1078,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
         Src = Param->ModemPathCmdLine;
         AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     }
+  }
+
+  if (IsIpcLoggingEnabled ()) {
+    Src = EnableIpcLoggingCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   return EFI_SUCCESS;
@@ -1762,13 +1772,15 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                  MacEthAddrBufCmdLine,
                                  PhyAddrBufCmdLineCmdLine,
                                  IFaceAddrBufCmdLine,
-                                 SpeedAddrBufCmdLine);
+                                 SpeedAddrBufCmdLine,
+                                 QosAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (PhyAddrBufCmdLineCmdLine);
     CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (QosAddrBufCmdLine);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1847,6 +1859,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyPhyAddrCmdLine = PhyAddrBufCmdLineCmdLine;
     Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
+    Param.EarlyQosCmdLine = QosAddrBufCmdLine;
   }
 
   if (EarlyUsbInitEnabled ()) {
