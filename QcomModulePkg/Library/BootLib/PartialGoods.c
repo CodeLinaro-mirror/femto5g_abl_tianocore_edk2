@@ -406,8 +406,7 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
      {"qcom,dsi-display-primary", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
      "/soc",
      {"qcom,dsi-display-secondary", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_DISPLAY),
@@ -437,8 +436,7 @@ static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_DISPLAY),
      "/soc",
     {"qcom,wb-display@1", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
      "/soc",
     {"qcom,wb-display@2", "status", "ok", "no"}},
     {BIT (EFICHIPINFO_PART_AUDIO),
@@ -635,40 +633,31 @@ static struct PartialGoods PartialGoodsMmTypeWithLabel[] = {
     {BIT (EFICHIPINFO_PART_DISPLAY),
     "/soc",
     {"dispcc0", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"mdss_mdp1", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"sde_rscc1", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"smmu_sde_unsec1", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"smmu_sde_sec1", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"mdss_dsi2", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"mdss_dsi3", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"mdss_dsi_phy2", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"mdss_dsi_phy3", "status", "ok", "no"}},
-    {(BIT (EFICHIPINFO_PART_DISPLAY)
-     | BIT (EFICHIPINFO_PART_DISPLAY_1)),
+    {BIT (EFICHIPINFO_PART_DISPLAY_1),
     "/soc",
     {"dispcc1", "status", "ok", "no"}},
 };
