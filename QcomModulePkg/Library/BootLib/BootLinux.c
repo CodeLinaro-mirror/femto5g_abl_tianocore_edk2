@@ -32,7 +32,7 @@
  /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -1143,7 +1143,10 @@ UpdateBootParamsSizeAndCmdLine (BootInfo *Info, BootParamlist *BootParamlistPtr)
     if (BootParamlistPtr->ExtraCmdLine[0]) {
       UINT32 FullCmdLen = BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE;
       CHAR8* FullCmdLine = AllocateZeroPool (FullCmdLen);
-
+      if (!FullCmdLine) {
+        DEBUG ((EFI_D_ERROR, "Failed to allocate memory for FullCmdLine\n"));
+        return EFI_OUT_OF_RESOURCES;
+      }
       AsciiStrCpyS (FullCmdLine, FullCmdLen, BootParamlistPtr->CmdLine);
       AsciiStrCatS (FullCmdLine, FullCmdLen, BootParamlistPtr->ExtraCmdLine);
       BootParamlistPtr->CmdLine = FullCmdLine;
@@ -2101,6 +2104,18 @@ BOOLEAN ClearResetReason (VOID)
 }
 #else
 BOOLEAN ClearResetReason (VOID)
+{
+  return FALSE;
+}
+#endif
+
+#ifdef ENABLE_SLOT_SWITCH_IMAGE_CORRUPTION
+BOOLEAN SlotSwitchOnImageCorruption (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN SlotSwitchOnImageCorruption (VOID)
 {
   return FALSE;
 }
