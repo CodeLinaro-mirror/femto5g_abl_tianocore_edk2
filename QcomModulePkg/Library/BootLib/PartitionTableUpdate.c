@@ -661,8 +661,10 @@ SwitchPtnSlots (CONST CHAR16 *SetActive)
         PtnNew = &PtnEntries[i];
       }
     }
-    /* Swap the guids for the slots */
-    SwapPtnGuid (&PtnCurrent->PartEntry, &PtnNew->PartEntry);
+    /* Swap the guids for the slots except for targets based on recoveryinfo */
+    if (!IsRecoveryInfo ()) {
+      SwapPtnGuid (&PtnCurrent->PartEntry, &PtnNew->PartEntry);
+    }
     PtnCurrent = PtnNew = NULL;
   }
 

@@ -270,7 +270,8 @@ INT32 PartitionLoad (VOID* Arg)
    * Ensure the last chunk is larger than SplitImageSize, break out of
    * loop when less than twice the SplitImageSize.
    */
-  while (ThreadLoad->RemainImageSize > (SplitImageSize << 1) ) {
+  while (ThreadLoad->RemainImageSize > (SplitImageSize +
+                                        (SplitImageSize >> 1))) {
     Status = Load_partition_to_verify (ThreadLoad->ops,
               Part_Name,
               ImageOffset,
@@ -336,7 +337,8 @@ INT32 PartitionVerify (VOID* Arg)
   SplitImageSize = ThreadVerify->SplitImageSize;
   CurrentChunkSize = SplitImageSize;
   /* First stage */
-  while (ThreadVerify->RemainImageSize > (SplitImageSize << 1)) {
+  while (ThreadVerify->RemainImageSize > (SplitImageSize +
+                                          (SplitImageSize >> 1))) {
     KernIntf->Sem->SemWait (SemLoadFirst);
     if (ThreadVerify->Sha256HashCheck == true) {
     Status = VerifyPartitionSha256 (Sha256Ctx,
