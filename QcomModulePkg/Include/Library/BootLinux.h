@@ -29,7 +29,7 @@
  /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -245,6 +245,7 @@ typedef struct BootLinuxParamlist {
   CHAR8 *FinalCmdLine;
   CHAR8 *FinalBootConfig;
   CHAR8 *CmdLine;
+  CHAR8 *ExtraCmdLine;
   BOOLEAN BootingWith32BitKernel;
   BOOLEAN BootingWithPatchedKernel;
   BOOLEAN BootingWithGzipPkgKernel;
@@ -280,6 +281,7 @@ BOOLEAN IsLEVariant (VOID);
 BOOLEAN IsMultiBoot (VOID);
 BOOLEAN IsPowerKeyMultiplex (VOID);
 BOOLEAN ClearResetReason (VOID);
+BOOLEAN SlotSwitchOnImageCorruption (VOID);
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
 VOID SetRecoveryHasNoKernel (VOID);

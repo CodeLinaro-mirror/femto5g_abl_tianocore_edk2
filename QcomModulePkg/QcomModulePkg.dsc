@@ -30,7 +30,7 @@
 #/*
 # *  Changes from Qualcomm Innovation Center are provided under the following license:
 # *
-# *  Copyright (c) 2022 - 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+# *  Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
 # *
 # *  Redistribution and use in source and binary forms, with or without
 # *  modification, are permitted (subject to the limitations in the
@@ -202,6 +202,9 @@
   !if $(CLEAR_RESET_REASON) == 1
       GCC:*_*_*_CC_FLAGS = -DCLEAR_RESET_REASON
   !endif
+  !if $(ENABLE_SLOT_SWITCH_IMAGE_CORRUPTION) == 1
+      GCC:*_*_*_CC_FLAGS = -DENABLE_SLOT_SWITCH_IMAGE_CORRUPTION
+  !endif
   !if $(ENABLE_LV_ATOMIC_AB) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LV_ATOMIC_AB
   !endif
@@ -219,6 +222,9 @@
   !endif
   !if $(VERIFIED_BOOT_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_ENABLED
+  !endif
+  !if $(PVM_SKIP_DTBO)
+      GCC:*_*_*_CC_FLAGS = -DPVM_SKIP_DTBO
   !endif
   !if $(BASE_ADDRESS)
       GCC:*_*_*_CC_FLAGS = -DBASE_ADDRESS=$(BASE_ADDRESS)

@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -661,8 +661,10 @@ SwitchPtnSlots (CONST CHAR16 *SetActive)
         PtnNew = &PtnEntries[i];
       }
     }
-    /* Swap the guids for the slots */
-    SwapPtnGuid (&PtnCurrent->PartEntry, &PtnNew->PartEntry);
+    /* Swap the guids for the slots except for targets based on recoveryinfo */
+    if (!IsRecoveryInfo ()) {
+      SwapPtnGuid (&PtnCurrent->PartEntry, &PtnNew->PartEntry);
+    }
     PtnCurrent = PtnNew = NULL;
   }
 
@@ -1285,7 +1287,8 @@ GetBootPartitionEntry (Slot *BootSlot)
 
   if (StrnCmp ((CONST CHAR16 *)L"_a", BootSlot->Suffix,
                StrLen (BootSlot->Suffix)) == 0) {
-    if (IsRecoveryInfo ()) {
+    if (IsRecoveryInfo () &&
+        !IsRecoveryInfoWithSlotA ()) {
       DEBUG (( EFI_D_VERBOSE,  "Using boot parition for recoverinfo\n"));
       Index = GetPartitionIndex ((CHAR16 *)L"boot");
     } else {
