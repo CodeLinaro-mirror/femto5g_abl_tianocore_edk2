@@ -2444,7 +2444,8 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   }
 
 out:
-  if (!AsciiStrnCmp (arg, "system", AsciiStrLen ("system")) &&
+  if ((!AsciiStrnCmp (arg, "system", AsciiStrLen ("system"))||
+    !AsciiStrnCmp (arg, "super", AsciiStrLen ("super"))) &&
     !IsEnforcing () &&
     (FlashResult == EFI_SUCCESS)) {
      // reset dm_verity mode to enforcing
@@ -3602,6 +3603,34 @@ CmdOemDisableChargerScreen (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 }
 
 STATIC VOID
+CmdOemEnableIpcLogging (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  DEBUG ((EFI_D_INFO, "Enabling IPC Logging\n"));
+
+  Status = SetIpcLoggingEnabled (TRUE);
+  if (Status != EFI_SUCCESS) {
+    FastbootFail ("Failed to enable IPC Logging");
+  } else {
+    FastbootOkay ("");
+  }
+}
+
+STATIC VOID
+CmdOemDisableIpcLogging (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  DEBUG ((EFI_D_INFO, "Disabling IPC Logging\n"));
+
+  Status = SetIpcLoggingEnabled (FALSE);
+  if (Status != EFI_SUCCESS) {
+    FastbootFail ("Failed to disable IPC Logging");
+  } else {
+    FastbootOkay ("");
+  }
+}
+
+STATIC VOID
 CmdOemOffModeCharger (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 {
   CHAR8 *Ptr = NULL;
@@ -3977,6 +4006,20 @@ CmdOemDevinfo (CONST CHAR8 *arg, VOID *data, UINT32 sz)
     FastbootInfo (DeviceInfo);
     WaitForTransferComplete ();
   }
+
+  FastbootOkay ("");
+}
+
+STATIC VOID
+CmdOemIpcLogging (CONST CHAR8 *arg, VOID *data, UINT32 Size)
+{
+  CHAR8 IpcLoggingEnabled[MAX_RSP_SIZE];
+
+  AsciiSPrint (IpcLoggingEnabled, sizeof (IpcLoggingEnabled),
+               "IPC Logging enabled: %a", IsIpcLoggingEnabled () ? "true" :
+               "false");
+  FastbootInfo (IpcLoggingEnabled);
+  WaitForTransferComplete ();
 
   FastbootOkay ("");
 }
@@ -4440,6 +4483,9 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
       {"getvar:", CmdGetVar},
       {"download:", CmdDownload},
       {"oem audio-framework", CmdOemAudioFrameWork},
+      {"oem ipc-logging", CmdOemIpcLogging},
+      {"oem enable-ipc-logging", CmdOemEnableIpcLogging},
+      {"oem disable-ipc-logging", CmdOemDisableIpcLogging},
   };
 
   /* Register the commands only for non-user builds */
