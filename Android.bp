@@ -187,6 +187,7 @@ cc_object {
         "com.android.ondevicepersonalization",
         "com.android.resolv",
         "com.android.virt",
+        "com.android.wifi",
     ],
 }
 
@@ -289,6 +290,7 @@ cc_library {
         "com.android.resolv",
         "com.android.ondevicepersonalization",
         "com.android.virt",
+        "com.android.wifi",
     ],
     min_sdk_version: "29",
     afdo: true,
@@ -516,6 +518,7 @@ cc_library {
         "com.android.conscrypt",
         "com.android.resolv",
         "com.android.virt",
+        "com.android.wifi",
     ],
     min_sdk_version: "29",
 }
