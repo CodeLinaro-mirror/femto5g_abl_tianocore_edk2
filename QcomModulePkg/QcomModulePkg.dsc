@@ -210,6 +210,12 @@
   !if $(AUTO_VIRT_ABL)
       GCC:*_*_*_CC_FLAGS = -DAUTO_VIRT_ABL
   !endif
+  !if $(BRANCH_PROTECTION_ENABLED)
+      GCC:*_*_*_CC_FLAGS = -mbranch-protection=pac-ret+bti
+  !endif
+  !if $(CFI_ENABLED)
+      GCC:*_*_*_CC_FLAGS = -fsanitize=cfi -flto -fvisibility=hidden -fno-sanitize=cfi-icall
+  !endif
 
 
 [PcdsFixedAtBuild.common]
