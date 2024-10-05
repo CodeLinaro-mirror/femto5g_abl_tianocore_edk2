@@ -749,6 +749,9 @@ cc_binary {
     defaults: [
         "boringssl_flags",
     ],
+    cflags: [
+        "-DBORINGSSL_FIPS",
+    ],
     shared_libs: [
         "libcrypto",
     ],
