@@ -182,6 +182,8 @@ STATIC CONST CHAR8 *MovableNode = " movable_node";
 
 STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
+STATIC CONST CHAR8 *EnableIpcLoggingCmdLine = " qcom_ipc_logging.enabled=1";
+
 LIST_ENTRY *BootConfigListHead = NULL;
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
@@ -1076,6 +1078,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
         Src = Param->ModemPathCmdLine;
         AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     }
+  }
+
+  if (IsIpcLoggingEnabled ()) {
+    Src = EnableIpcLoggingCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   return EFI_SUCCESS;
