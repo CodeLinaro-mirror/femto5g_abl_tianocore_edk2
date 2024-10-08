@@ -616,7 +616,7 @@ STATIC VOID RI_PopulateMultiSlotMetaData (VOID)
    Status = RI_GetVarAll ();
 
    if (Status != EFI_SUCCESS) {
-     FastbootFail ("UEFI failed to pass getvar params");
+     DEBUG ((EFI_D_ERROR, "UEFI failed to pass getvar params\n"));
      return;
    }
 
