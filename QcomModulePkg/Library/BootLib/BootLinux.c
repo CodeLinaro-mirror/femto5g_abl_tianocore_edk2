@@ -2121,6 +2121,18 @@ BOOLEAN SlotSwitchOnImageCorruption (VOID)
 }
 #endif
 
+#ifdef ENABLE_BOOT_DEVICE_BASED_DT_SELECTION
+BOOLEAN BootDeviceBasedDtSelection (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN BootDeviceBasedDtSelection (VOID)
+{
+  return FALSE;
+}
+
+#endif
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr)
 {
    return BootParamlistPtr->RamdiskSize == 0;
