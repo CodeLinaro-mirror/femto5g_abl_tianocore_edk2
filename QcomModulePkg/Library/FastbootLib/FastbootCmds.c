@@ -1212,15 +1212,20 @@ HandleSparseImgFlash (IN CHAR16 *PartitionName,
 
       UnicodeStrToAsciiStr (PartitionName, PartitionNameAscii);
 
-      /*Ubi flasher is opened here */
-      Status = Flasher->Ubi->UbiFlasherOpen (PartitionNameAscii,
+      if (Flasher->Ubi != NULL) {
+          /*Ubi flasher is opened here */
+          Status = Flasher->Ubi->UbiFlasherOpen (PartitionNameAscii,
                                              &Flasher->UbiFlasherHandle,
                                              &UbiPageSize,
                                              &Flasher->UbiBlkSize);
-      if (EFI_ERROR (Status)) {
-        DEBUG ((EFI_D_ERROR, "Flasher open failed for %s\n",
+          if (EFI_ERROR (Status)) {
+            DEBUG ((EFI_D_ERROR, "Flasher open failed for %s\n",
                                PartitionNameAscii));
-        return Status;
+            return Status;
+          }
+      } else {
+          DEBUG ((EFI_D_ERROR, "Flasher->Ubi is null\n"));
+          return EFI_UNSUPPORTED;
       }
       /*
        * We cache the value of free memory across flashing

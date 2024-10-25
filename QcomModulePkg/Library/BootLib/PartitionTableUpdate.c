@@ -186,10 +186,11 @@ GetPartitionIndex (CHAR16 *Pname)
   INT32 i;
 
   for (i = 0; i < PartitionCount; i++) {
-    if (!StrnCmp (PtnEntries[i].PartEntry.PartitionName, Pname,
-                  ARRAY_SIZE (PtnEntries[i].PartEntry.PartitionName))) {
-      return i;
-    }
+    if (StrLen (PtnEntries[i].PartEntry.PartitionName) == StrLen (Pname))
+      if (!StrnCmp (PtnEntries[i].PartEntry.PartitionName, Pname,
+                    StrLen(PtnEntries[i].PartEntry.PartitionName))) {
+        return i;
+      }
   }
 
   return INVALID_PTN;
