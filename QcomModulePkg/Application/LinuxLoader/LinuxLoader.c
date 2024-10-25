@@ -221,6 +221,8 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   if (Status == EFI_SUCCESS) {
     if (KeyPressed == SCAN_DOWN)
       BootIntoFastboot = TRUE;
+    if (KeyPressed == SCAN_DELETE)
+      BootIntoFastboot = TRUE;
     if (KeyPressed == SCAN_UP)
       BootIntoRecovery = TRUE;
     if (KeyPressed == SCAN_ESC)
