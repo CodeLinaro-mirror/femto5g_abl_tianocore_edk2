@@ -79,7 +79,10 @@ cc_defaults {
         "-DBORINGSSL_NO_STATIC_INITIALIZER",
         "-DANDROID_BAREMETAL",
     ],
-    defaults: ["boringssl_flags_common"],
+    defaults: [
+        "boringssl_flags_common",
+        "cc_baremetal_defaults",
+    ],
     apex_available: [
         "com.android.virt",
     ],
@@ -182,6 +185,7 @@ cc_object {
         "com.android.adservices",
         "com.android.btservices",
         "com.android.compos",
+        "com.android.configinfrastructure",
         "com.android.conscrypt",
         "com.android.extservices",
         "com.android.ondevicepersonalization",
@@ -285,10 +289,11 @@ cc_library {
         "com.android.adservices",
         "com.android.btservices",
         "com.android.compos",
+        "com.android.configinfrastructure",
         "com.android.conscrypt",
         "com.android.extservices",
-        "com.android.resolv",
         "com.android.ondevicepersonalization",
+        "com.android.resolv",
         "com.android.virt",
         "com.android.wifi",
     ],
@@ -513,8 +518,9 @@ cc_library {
 
     apex_available: [
         "//apex_available:platform",
-        "com.android.btservices",
         "com.android.adbd",
+        "com.android.btservices",
+        "com.android.configinfrastructure",
         "com.android.conscrypt",
         "com.android.resolv",
         "com.android.virt",
@@ -793,8 +799,10 @@ rust_bindgen {
         "libcrypto",
         "libssl",
     ],
+    min_sdk_version: "29",
     apex_available: [
         "//apex_available:platform",
+        "com.android.configinfrastructure",
         "com.android.virt",
     ],
 }
@@ -840,8 +848,10 @@ cc_library_static {
         "libcrypto",
         "libssl",
     ],
+    min_sdk_version: "29",
     apex_available: [
         "//apex_available:platform",
+        "com.android.configinfrastructure",
         "com.android.virt",
     ],
 
@@ -906,8 +916,10 @@ rust_library {
     whole_static_libs: [
         "libbssl_rust_support",
     ],
+    min_sdk_version: "29",
     apex_available: [
         "//apex_available:platform",
+        "com.android.configinfrastructure",
         "com.android.virt",
     ],
     cfgs: ["unsupported_inline_wrappers"],
