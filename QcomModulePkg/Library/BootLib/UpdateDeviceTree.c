@@ -174,6 +174,10 @@ GetRandomSeed (UINT64 *RandomSeed)
   EFI_QCOM_RNG_PROTOCOL *RngIf;
   EFI_STATUS Status;
 
+  *RandomSeed = 0;
+  Status = EFI_SUCCESS;
+  return Status;
+
   Status = gBS->LocateProtocol (&gQcomRngProtocolGuid, NULL, (VOID **)&RngIf);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_VERBOSE,
