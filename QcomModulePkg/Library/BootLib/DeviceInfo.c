@@ -162,6 +162,7 @@ EFI_STATUS
 ReadAudioFrameWork (CHAR8 **CmdLine, UINT32 *CmdLineLen)
 {
   EFI_STATUS Status = EFI_SUCCESS;
+  return EFI_OUT_OF_RESOURCES;
 
   Status =
       ReadWriteDeviceInfo (READ_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
