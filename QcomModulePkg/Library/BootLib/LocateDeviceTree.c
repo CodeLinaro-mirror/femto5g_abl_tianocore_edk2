@@ -1578,7 +1578,7 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
     }
     switch (dtb_info) {
     case DTB_FOUNDRY:
-      current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x000f0000);
+      current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
       board_info = BoardPlatformFoundryId () << 16;
       break;
     case DTB_SOFTSKU:
