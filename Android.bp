@@ -894,7 +894,7 @@ rust_defaults {
     crate_name: "bssl_sys",
     visibility: [
         "//external/rust/crates/openssl",
-        "//external/rust/crates/tokio-openssl",
+        "//external/rust/android-crates-io/crates/tokio-openssl",
         "//system/keymint/boringssl",
         "//system/security/prng_seeder",
     ],
