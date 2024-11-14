@@ -67,6 +67,8 @@ BOOLEAN IsRecoveryInfo ()
       DEBUG ((EFI_D_ERROR, "Failed to get recovery status, %r\n", Status));
       return FALSE;
     }
+    DEBUG ((EFI_D_VERBOSE , "protocol rev: %x \n",
+                                         pRecoveryInfoProtocol->Revision));
 
     Status = pRecoveryInfoProtocol -> GetRecoveryState (pRecoveryInfoProtocol,
                                                         &RecoveryState);
@@ -132,6 +134,7 @@ EFI_STATUS RI_HandleFailedSlot (Slot ActiveSlot)
 {
   EFI_STATUS Status = EFI_SUCCESS ;
   BootSetType BootSet = SET_INVALID;
+  UINT32  BootSetAndOwner = (OWNER_ABL << 16); //set owner as abl
 
   if (!StrCmp (ActiveSlot.Suffix, (CONST CHAR16 *)L"_a")) {
     BootSet = SET_A;
@@ -139,8 +142,21 @@ EFI_STATUS RI_HandleFailedSlot (Slot ActiveSlot)
     BootSet = SET_B;
   }
 
-  Status = pRecoveryInfoProtocol->HandleFailedSet (pRecoveryInfoProtocol,
-                                                    BootSet);
+
+  if (pRecoveryInfoProtocol->Revision >= EFI_RECOVERYINFO_PROTOCOL_REVISION_V1) {
+
+    /*First  nibble (16bit)  = owner field */
+    /*Second nibble          = slot */
+    BootSetAndOwner |= (BootSet & 0xFF);
+
+    DEBUG ((EFI_D_VERBOSE , "Passing UINT32 instead of BootSet\n"));
+    Status = pRecoveryInfoProtocol->HandleFailedSet (pRecoveryInfoProtocol,
+                                                     BootSetAndOwner);
+  } else {
+    DEBUG ((EFI_D_VERBOSE , "Using Older API\n"));
+    Status = pRecoveryInfoProtocol->HandleFailedSet (pRecoveryInfoProtocol,
+                                                     BootSet);
+  }
 
   /* Mostly non-returning call, but returns when gpio controlled */
   if (HasGpioControl == 1) {

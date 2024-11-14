@@ -288,6 +288,11 @@ SailFlash (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
 
   UINT8 Iter = 0;
   CHAR8 *Argument = AllocateZeroPool (SAIL_UPD_IMG_NAME_LEN);
+  if (!Argument) {
+   DEBUG ((EFI_D_ERROR, "Failed to allocate buffer\n"));
+   return EFI_BUFFER_TOO_SMALL;
+  }
+
   for (Iter = 0;  Iter < SAIL_UPD_IMG_NAME_LEN ||
                                 Arg[Iter] != '\0'; Iter++) {
         Argument[Iter] = AsciiCharToUpper (Arg[Iter]);
