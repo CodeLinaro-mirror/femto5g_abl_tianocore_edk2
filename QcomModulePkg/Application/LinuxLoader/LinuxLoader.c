@@ -108,6 +108,8 @@ STATIC EFI_STATUS MdtpDisable (VOID)
   EFI_STATUS Status = EFI_SUCCESS;
   QCOM_MDTP_PROTOCOL *MdtpProtocol;
 
+  return EFI_SUCCESS;
+
   if (FixedPcdGetBool (EnableMdtpSupport)) {
     Status = IsMdtpActive (&MdtpActive);
 
@@ -135,6 +137,8 @@ GetRebootReason (UINT32 *ResetReason)
 {
   EFI_RESETREASON_PROTOCOL *RstReasonIf;
   EFI_STATUS Status;
+
+  return EFI_SUCCESS;
 
   Status = gBS->LocateProtocol (&gEfiResetReasonProtocolGuid, NULL,
                                 (VOID **)&RstReasonIf);
@@ -263,7 +267,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   EFI_MEM_CARDINFO_PROTOCOL *CardInfo = NULL;
   /* set ROT, BootState and VBH only once per boot*/
   BOOLEAN SetRotAndBootStateAndVBH = FALSE;
-  BOOLEAN FDRDetected = FALSE;
+  //BOOLEAN FDRDetected = FALSE;
 
   DEBUG ((EFI_D_INFO, "Loader Build Info: %a %a\n", __DATE__, __TIME__));
   DEBUG ((EFI_D_VERBOSE, "LinuxLoader Load Address to debug ABL: 0x%llx\n",
@@ -292,7 +296,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     FlashlessBootImageAddr = BASE_ADDRESS;
     FlashlessBoot = TRUE;
     /* In flashless boot avoid all access to secondary storage during boot */
-    goto flashless_boot;
+    //goto flashless_boot;
   }
 
   // Initialize verified boot & Read Device Info
@@ -332,6 +336,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   }
 
   SetDefaultAudioFw ();
+  DEBUG ((EFI_D_INFO, "jgsun: bypass GetRebootReason, RecoveryInit and BoardInit\n"));
 
   // check for reboot mode
   Status = GetRebootReason (&BootReason);
@@ -397,6 +402,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     break;
   }
 
+ #if 0
   Status = RecoveryInit (&BootIntoRecovery);
   if (Status != EFI_SUCCESS)
     DEBUG ((EFI_D_VERBOSE, "RecoveryInit failed ignore: %r\n", Status));
@@ -422,6 +428,8 @@ flashless_boot:
     DEBUG ((EFI_D_ERROR, "Error finding board information: %r\n", Status));
     return Status;
   }
+
+#endif
 
   DEBUG ((EFI_D_INFO, "KeyPress:%u, BootReason:%u\n", KeyPressed, BootReason));
   DEBUG ((EFI_D_INFO, "Fastboot=%d, Recovery:%d\n",
