@@ -195,10 +195,13 @@ BaseMem (UINT64 *BaseMemory)
 {
   EFI_STATUS Status = EFI_NOT_FOUND;
 #ifdef AUTO_VIRT_ABL
-  UINTN DataSize = 0;
-  DataSize = sizeof (*BaseMemory);
-  Status = gRT->GetVariable ((CHAR16 *)L"MemoryBase", &gQcomTokenSpaceGuid,
-                          NULL, &DataSize, BaseMemory);
+  // UINTN DataSize = 0;
+  // DataSize = sizeof (*BaseMemory);
+  // Status = gRT->GetVariable ((CHAR16 *)L"MemoryBase", &gQcomTokenSpaceGuid,
+  //                         NULL, &DataSize, BaseMemory);
+  Status = EFI_SUCCESS;
+  DEBUG ((EFI_D_INFO, "jgsun: hardcode MemoryBase as 0xA4000000.\n"));
+  *BaseMemory = 0xA4000000;
 #else
   RamPartitionEntry *RamPartitions = NULL;
   UINT32 NumPartitions = 0;

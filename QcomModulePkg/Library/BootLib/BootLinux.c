@@ -170,17 +170,21 @@ UINT64 SetandGetLoadAddr (BootParamlist *BootParamlistPtr, AddrType Type)
 STATIC BOOLEAN
 QueryBootParams (UINT64 *KernelLoadAddr, UINT64 *KernelSizeReserved)
 {
-  EFI_STATUS Status;
-  EFI_STATUS SizeStatus;
-  UINTN DataSize = 0;
+  EFI_STATUS Status = EFI_SUCCESS;
+  EFI_STATUS SizeStatus = EFI_SUCCESS;
+  // UINTN DataSize = 0;
+  DEBUG ((EFI_D_INFO, "jgsun: Hack KernelLoadAddr as 0xB5000000.\n"));
+  DEBUG ((EFI_D_INFO, "jgsun: Hack KernelSize as 0x5600000.\n"));
 
-  DataSize = sizeof (*KernelLoadAddr);
-  Status = gRT->GetVariable ((CHAR16 *)L"KernelBaseAddr", &gQcomTokenSpaceGuid,
-                          NULL, &DataSize, KernelLoadAddr);
+  *KernelLoadAddr = 0xB5000000;
+  *KernelSizeReserved = 0x5600000;
+  // DataSize = sizeof (*KernelLoadAddr);
+  // Status = gRT->GetVariable ((CHAR16 *)L"KernelBaseAddr", &gQcomTokenSpaceGuid,
+  //                         NULL, &DataSize, KernelLoadAddr);
 
-  DataSize = sizeof (*KernelSizeReserved);
-  SizeStatus = gRT->GetVariable ((CHAR16 *)L"KernelSize", &gQcomTokenSpaceGuid,
-                              NULL, &DataSize, KernelSizeReserved);
+  // DataSize = sizeof (*KernelSizeReserved);
+  // SizeStatus = gRT->GetVariable ((CHAR16 *)L"KernelSize", &gQcomTokenSpaceGuid,
+  //                             NULL, &DataSize, KernelSizeReserved);
 
   return (Status == EFI_SUCCESS &&
           SizeStatus == EFI_SUCCESS);
@@ -746,13 +750,14 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
     /* For ABL running in a VM, we fetch SOC device tree address
      * from virtialized UEFI directly.
      */
-    UINTN DataSize = 0;
-    UINT64 U64SocDtb = 0;
+    // UINTN DataSize = 0;
+    UINT64 U64SocDtb = 0xB4000000;
 
-    DataSize = sizeof (U64SocDtb);
-    Status = gRT->GetVariable ((CHAR16 *)L"VmDeviceTreeBase",
-                          &gQcomTokenSpaceGuid,
-                          NULL, &DataSize, &U64SocDtb);
+    // DataSize = sizeof (U64SocDtb);
+    // Status = gRT->GetVariable ((CHAR16 *)L"VmDeviceTreeBase",
+    //                       &gQcomTokenSpaceGuid,
+    //                       NULL, &DataSize, &U64SocDtb);
+    DEBUG ((EFI_D_INFO, "jgsun: hardcode VmDeviceTreeBase as 0xB4000000.\n"));
     SocDtb = (VOID *)U64SocDtb;
 #else
     /*It is the case of DTB overlay Get the Soc specific dtb */

@@ -811,7 +811,8 @@ PartitionHasMultiSlot (CONST CHAR16 *Pname)
         }
     }
   }
-  return FALSE;
+  DEBUG ((EFI_D_INFO, "jgsun: Hack MultiSlotBoot as TRUE.\n"));
+  return TRUE;
 }
 
 VOID FindPtnActiveSlot (VOID)
@@ -1451,12 +1452,12 @@ GetActiveSlot (Slot *ActiveSlot)
   UINT64 Priority = 0;
 
 #ifdef AUTO_VIRT_ABL
-  UINTN DataSize = 0;
-  CHAR16 TempActiveSlot[] = L"_x";
+  // UINTN DataSize = 0;
+  CHAR16 TempActiveSlot[] = L"_a";
 
-  DataSize = sizeof (TempActiveSlot);
-  Status = gRT->GetVariable ((CHAR16 *)L"ActiveSlot", &gQcomTokenSpaceGuid,
-                          NULL, &DataSize, TempActiveSlot);
+  // DataSize = sizeof (TempActiveSlot);
+  // Status = gRT->GetVariable ((CHAR16 *)L"ActiveSlot", &gQcomTokenSpaceGuid,
+  //                         NULL, &DataSize, TempActiveSlot);
   GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
                   TempActiveSlot, StrLen (TempActiveSlot)));
 
