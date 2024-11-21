@@ -39,7 +39,13 @@ typedef struct _EFI_RECOVERYINFO_PROTOCOL EFI_RECOVERYINFO_PROTOCOL;
 MACRO DECLARATIONS
 ===========================================================================*/
 /* Protocol version. */
-#define EFI_RECOVERYINFO_PROTOCOL_REVISION 0x00010000
+#define EFI_RECOVERYINFO_PROTOCOL_REVISION  EFI_RECOVERYINFO_PROTOCOL_REVISION_V1
+#define EFI_RECOVERYINFO_PROTOCOL_REVISION_V0 0x00010000
+#define EFI_RECOVERYINFO_PROTOCOL_REVISION_V1 0x00010001
+
+#define SET_OWNER_IN_BOOTSETANDOWNER(BootSetAndOwner,Owner)          (BootSetAndOwner | (Owner << 16))
+#define GET_OWNER_FROM_BOOTSETANDOWNER(BootSetAndOwner)              (BootSetAndOwner >> 16)
+#define GET_BOOTSET_FROM_BOOTSETANDOWNER(BootSetAndOwner)            (BootSetAndOwner & 0xFFFF)
 
 /* Protocol GUID definition */
 #define EFI_RECOVERYINFO_PROTOCOL_GUID \
@@ -161,6 +167,8 @@ EFI_STATUS
 
   In case of Recovery-
     -Marks the status of FailedBootSet and reset if more set to try
+    -Marks Owner as passed (only in newer protocol versions)
+     (Older protocol version marks owner as UEFI by default)
     -Assert if no set to try
 
   In case of Trial Boot-
@@ -170,7 +178,7 @@ EFI_STATUS
   Other Cases - Assert
 
   @param[in]   This                  Pointer to the EFI_RECOVERYINFO_PROTOCOL instance.
-  @param[in]   FailedBootSet         Boot set failed to boot
+  @param[in]   BootSetAndOwner       Owner(upper 16-bit),Boot set failed to boot(lower 16-bit)
 
   @return
   EFI_INVALID_PARAMETER -- Input parameter is INVALID. \n
@@ -181,7 +189,7 @@ typedef
 EFI_STATUS
 (EFIAPI *EFI_HANDLE_FAILED_SET)(
    IN EFI_RECOVERYINFO_PROTOCOL *This,
-   IN BootSetType                FailedBootSet
+   IN UINT32                     BootSetAndOwner
    );
 
 

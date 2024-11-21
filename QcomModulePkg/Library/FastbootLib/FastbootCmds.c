@@ -604,20 +604,19 @@ STATIC VOID PopulateMultislotMetadata (VOID)
 STATIC VOID RI_PopulateMultiSlotMetaData (VOID)
 {
    UINT32 i = 0;
-   UINT32 j = 0;
+   UINT32 SlotIndex = 0;
    UINT32 RetryCount = 0;
-   STATIC UINT32 SlotCountForRecoveryInfo = 0;
+   UINT32 SlotCountForRecoveryInfo = 0;
    CHAR8 PartitionNameAscii[MAX_GPT_NAME_SIZE];
    UINT32 PartitionCount = 0;
    EFI_STATUS Status = EFI_SUCCESS;
    Slot Slots[] = {{L"_a"}, {L"_b"}};
-   CHAR16 Suffix[MAX_SLOT_SUFFIX_SZ];
-   STATIC CHAR8 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
+   CHAR8 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
 
    Status = RI_GetVarAll ();
 
    if (Status != EFI_SUCCESS) {
-     FastbootFail ("UEFI failed to pass getvar params");
+     DEBUG ((EFI_D_ERROR, "UEFI failed to pass getvar params\n"));
      return;
    }
 
@@ -646,50 +645,49 @@ STATIC VOID RI_PopulateMultiSlotMetaData (VOID)
    UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix, CurrentSlotFB);
    SKIP_FIRSTCHAR_IN_SLOT_SUFFIX (CurrentSlotFB);
 
-   for (i = 0, j = 0; i < PartitionCount  &&
-                                 j < SlotCountForRecoveryInfo ; i++) {
+   for (i = 0; i < PartitionCount ; i++) {
       UnicodeStrToAsciiStr (PtnEntries[i].PartEntry.PartitionName,
                               PartitionNameAscii);
-      if ((AsciiStrnCmp (PartitionNameAscii, "boot_b",
-                                 AsciiStrLen ("boot_b")))) {
-         StrnCpyS (Suffix, ARRAY_SIZE (Suffix),
-                    Slots[j].Suffix, StrLen (Slots[j].Suffix));
-         RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotA;
-         AsciiStrnCpyS (BootSlotInfo[j].SlotUnbootableVal, ATTR_RESP_SIZE,
-                  RecoveryBootVariableInfoPtr.IsBootableSetA ? "no" : "yes",
-                  RecoveryBootVariableInfoPtr.IsBootableSetA ?
-                  AsciiStrLen ("no") : AsciiStrLen ("yes"));
-      } else {
-         StrnCpyS (Suffix, ARRAY_SIZE (Suffix), Slots[j].Suffix,
-                    StrLen (Slots[j].Suffix));
-         RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotB;
-         AsciiStrnCpyS (BootSlotInfo[j].SlotUnbootableVal, ATTR_RESP_SIZE,
-                  RecoveryBootVariableInfoPtr.IsBootableSetB ? "no" : "yes",
-                  RecoveryBootVariableInfoPtr.IsBootableSetB ?
-                  AsciiStrLen ("no") : AsciiStrLen ("yes"));
+      if (!AsciiStrnCmp (PartitionNameAscii, "boot", AsciiStrLen ("boot"))) {
+        if (!AsciiStrnCmp (PartitionNameAscii, "boot_a",
+                              AsciiStrLen ("PartitionNameAscii")) ||
+            !AsciiStrnCmp (PartitionNameAscii, "boot",
+                            AsciiStrLen ("PartitionNameAscii"))) {
+           SlotIndex = 0;
+           RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotA;
+           AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVal,
+                    ATTR_RESP_SIZE, RecoveryBootVariableInfoPtr.IsBootableSetA ?
+                    "no" : "yes", RecoveryBootVariableInfoPtr.IsBootableSetA ?
+                    AsciiStrLen ("no") : AsciiStrLen ("yes"));
+         } else if (!AsciiStrnCmp (PartitionNameAscii, "boot_b",
+                                     AsciiStrLen ("PartitionNameAscii"))) {
+           SlotIndex = 1;
+           RetryCount = RecoveryBootVariableInfoPtr.RetryCountSlotB;
+           AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVal,
+                    ATTR_RESP_SIZE, RecoveryBootVariableInfoPtr.IsBootableSetB ?
+                    "no" : "yes", RecoveryBootVariableInfoPtr.IsBootableSetB ?
+                    AsciiStrLen ("no") : AsciiStrLen ("yes"));
+         }
+
+         UnicodeStrToAsciiStr (Slots[SlotIndex].Suffix, SlotSuffix);
+         SKIP_FIRSTCHAR_IN_SLOT_SUFFIX (SlotSuffix);
+         AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        SLOT_ATTR_SIZE, "slot-unbootable:",
+                        AsciiStrLen ("slot-unbootable:"));
+         AsciiStrnCatS (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        SLOT_ATTR_SIZE, SlotSuffix, AsciiStrLen (SlotSuffix));
+         FastbootPublishVar (BootSlotInfo[SlotIndex].SlotUnbootableVar,
+                        BootSlotInfo[SlotIndex].SlotUnbootableVal);
+         AsciiStrnCpyS (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        SLOT_ATTR_SIZE, "slot-retry-count:",
+                        AsciiStrLen ("slot-retry-count:"));
+         AsciiSPrint (BootSlotInfo[SlotIndex].SlotRetryCountVal, ATTR_RESP_SIZE,
+                        "%llu", RetryCount);
+         AsciiStrnCatS (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        SLOT_ATTR_SIZE, SlotSuffix, AsciiStrLen (SlotSuffix));
+         FastbootPublishVar (BootSlotInfo[SlotIndex].SlotRetryCountVar,
+                        BootSlotInfo[SlotIndex].SlotRetryCountVal);
       }
-
-
-      UnicodeStrToAsciiStr (Suffix, SlotSuffix);
-      SKIP_FIRSTCHAR_IN_SLOT_SUFFIX (SlotSuffix);
-      AsciiStrnCpyS (BootSlotInfo[j].SlotUnbootableVar, SLOT_ATTR_SIZE,
-                     "slot-unbootable:", AsciiStrLen ("slot-unbootable:"));
-
-      AsciiStrnCatS (BootSlotInfo[j].SlotUnbootableVar, SLOT_ATTR_SIZE,
-                     SlotSuffix, AsciiStrLen (SlotSuffix));
-
-      FastbootPublishVar (BootSlotInfo[j].SlotUnbootableVar,
-                     BootSlotInfo[j].SlotUnbootableVal);
-
-      AsciiStrnCpyS (BootSlotInfo[j].SlotRetryCountVar, SLOT_ATTR_SIZE,
-                    "slot-retry-count:", AsciiStrLen ("slot-retry-count:"));
-      AsciiSPrint (BootSlotInfo[j].SlotRetryCountVal, ATTR_RESP_SIZE, "%llu",
-                    RetryCount);
-      AsciiStrnCatS (BootSlotInfo[j].SlotRetryCountVar, SLOT_ATTR_SIZE,
-                    SlotSuffix, AsciiStrLen (SlotSuffix));
-      FastbootPublishVar (BootSlotInfo[j].SlotRetryCountVar,
-                    BootSlotInfo[j].SlotRetryCountVal);
-      j++;
    }
    FastbootPublishVar ("current-slot", CurrentSlotFB);
 
@@ -2446,7 +2444,8 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   }
 
 out:
-  if (!AsciiStrnCmp (arg, "system", AsciiStrLen ("system")) &&
+  if ((!AsciiStrnCmp (arg, "system", AsciiStrLen ("system"))||
+    !AsciiStrnCmp (arg, "super", AsciiStrLen ("super"))) &&
     !IsEnforcing () &&
     (FlashResult == EFI_SUCCESS)) {
      // reset dm_verity mode to enforcing
@@ -3604,6 +3603,34 @@ CmdOemDisableChargerScreen (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 }
 
 STATIC VOID
+CmdOemEnableIpcLogging (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  DEBUG ((EFI_D_INFO, "Enabling IPC Logging\n"));
+
+  Status = SetIpcLoggingEnabled (TRUE);
+  if (Status != EFI_SUCCESS) {
+    FastbootFail ("Failed to enable IPC Logging");
+  } else {
+    FastbootOkay ("");
+  }
+}
+
+STATIC VOID
+CmdOemDisableIpcLogging (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  DEBUG ((EFI_D_INFO, "Disabling IPC Logging\n"));
+
+  Status = SetIpcLoggingEnabled (FALSE);
+  if (Status != EFI_SUCCESS) {
+    FastbootFail ("Failed to disable IPC Logging");
+  } else {
+    FastbootOkay ("");
+  }
+}
+
+STATIC VOID
 CmdOemOffModeCharger (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 {
   CHAR8 *Ptr = NULL;
@@ -3979,6 +4006,20 @@ CmdOemDevinfo (CONST CHAR8 *arg, VOID *data, UINT32 sz)
     FastbootInfo (DeviceInfo);
     WaitForTransferComplete ();
   }
+
+  FastbootOkay ("");
+}
+
+STATIC VOID
+CmdOemIpcLogging (CONST CHAR8 *arg, VOID *data, UINT32 Size)
+{
+  CHAR8 IpcLoggingEnabled[MAX_RSP_SIZE];
+
+  AsciiSPrint (IpcLoggingEnabled, sizeof (IpcLoggingEnabled),
+               "IPC Logging enabled: %a", IsIpcLoggingEnabled () ? "true" :
+               "false");
+  FastbootInfo (IpcLoggingEnabled);
+  WaitForTransferComplete ();
 
   FastbootOkay ("");
 }
@@ -4442,6 +4483,9 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
       {"getvar:", CmdGetVar},
       {"download:", CmdDownload},
       {"oem audio-framework", CmdOemAudioFrameWork},
+      {"oem ipc-logging", CmdOemIpcLogging},
+      {"oem enable-ipc-logging", CmdOemEnableIpcLogging},
+      {"oem disable-ipc-logging", CmdOemDisableIpcLogging},
   };
 
   /* Register the commands only for non-user builds */

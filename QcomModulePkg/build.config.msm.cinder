@@ -11,6 +11,7 @@ BUILD_USES_RECOVERY_AS_BOOT=0
 ENABLE_LE_VARIANT=true
 ENABLE_POWER_KEY_MULTIPLEX=true
 CLEAR_RESET_REASON=false
+ENABLE_SLOT_SWITCH_IMAGE_CORRUPTION=true
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common
