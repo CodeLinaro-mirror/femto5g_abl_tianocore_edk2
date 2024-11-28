@@ -15,6 +15,7 @@ NAND_UBI_VOLUME_FLASHING_ENABLED=1
 CMDLINE_SHOW_SECURE_BOOT_STATUS=1
 INTEGRITY_LE_IMA=0
 INTEGRITY_LE_EVM=0
+ENABLE_BOOT_DEVICE_BASED_DT_SELECTION=true
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common

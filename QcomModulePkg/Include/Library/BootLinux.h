@@ -282,6 +282,7 @@ BOOLEAN IsMultiBoot (VOID);
 BOOLEAN IsPowerKeyMultiplex (VOID);
 BOOLEAN ClearResetReason (VOID);
 BOOLEAN SlotSwitchOnImageCorruption (VOID);
+BOOLEAN BootDeviceBasedDtSelection (VOID);
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
 VOID SetRecoveryHasNoKernel (VOID);
