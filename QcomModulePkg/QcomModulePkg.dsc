@@ -130,12 +130,20 @@
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO
   GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\"
 
+  !ifdef $(FORCE_NO_PIE)
+  GCC:*_*_*_ARCHCC_FLAGS  =  -fno-PIE
+  GCC:*_*_*_DLINK_FLAGS = -Wl,--no-pie
+  !endif
+
   GCC:*_*_*_DLINK_FLAGS = $(CLANG_EXTRA_DLINK_FLAGS)
   !ifdef $(TARGET_AUDIO_FRAMEWORK)
   GCC:*_*_*_CC_FLAGS = -DAUDIO_FRAMEWORK='$(TARGET_AUDIO_FRAMEWORK)'
   !endif
   !if $(VERIFIED_BOOT_LE)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE
+  !endif
+  !if $(FORCE_NO_PIE)
+      GCC:*_*_*_CC_FLAGS = -DFORCE_NO_PIE
   !endif
   !if $(SUPPORT_AB_BOOT_LXC)
       GCC:*_*_*_CC_FLAGS = -DSUPPORT_AB_BOOT_LXC
