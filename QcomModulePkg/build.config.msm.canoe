@@ -11,6 +11,7 @@ REMOVE_CARVEOUT_REGION=1
 BRANCH_PROTECTION_ENABLED=1
 CFI_ENABLED=1
 QSPA_BOOTCONFIG_ENABLE=1
+PVMFW_ENABLED=1
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common
