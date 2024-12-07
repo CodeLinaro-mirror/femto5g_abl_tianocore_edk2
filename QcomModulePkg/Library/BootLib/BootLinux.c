@@ -1513,6 +1513,8 @@ BootLinux (BootInfo *Info)
     }
   }
 
+  BootParamlistPtr.BootReason = Info->BootReason;
+
   /* Updates the command line from boot image, appends device serial no.,
    * baseband information, etc.
    * Called before ShutdownUefiBootServices as it uses some boot service
