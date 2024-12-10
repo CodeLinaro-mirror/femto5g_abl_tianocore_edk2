@@ -16,4 +16,6 @@ BOOLEAN IsRecoveryInfoWithSlotA ();
 EFI_STATUS RI_SetActiveSlot (Slot *NewSlot);
 EFI_STATUS RI_GetVarAll ();
 
+#define OWNER_ABL 0x4
+
 #endif
