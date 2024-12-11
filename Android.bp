@@ -351,6 +351,8 @@ cc_library {
 cc_library_static {
     name: "libcrypto_static",
     visibility: [
+        "//art/dex2oat",
+        "//art/tools/hiddenapi",
         "//bootable/recovery/updater",
         "//bootable/deprecated-ota/updater",
         "//external/conscrypt",
@@ -366,6 +368,7 @@ cc_library_static {
         "//hardware/interfaces/keymaster/3.0/vts/functional",
         "//hardware/interfaces/keymaster/4.0/vts/functional",
         "//hardware/interfaces/keymaster/4.1/vts/functional",
+        "//libcore",
         "//packages/modules/adb",
         "//packages/modules/AdServices:__subpackages__",
         "//packages/modules/DnsResolver/tests:__subpackages__",
@@ -384,6 +387,8 @@ cc_library_static {
     apex_available: [
         "//apex_available:platform",
         "com.android.adservices",
+        "com.android.art",
+        "com.android.art.debug",
         "com.android.extservices",
         "com.android.neuralnetworks",
     ],
@@ -417,46 +422,6 @@ cc_library_static {
     lto: {
         never: true,
     },
-}
-
-// For static linking into the ART module to provide limited functionality:
-// bignums and SHA1 for ELF checksums.
-cc_library_static {
-    name: "libcrypto_for_art",
-    defaults: [
-        "libcrypto_defaults",
-        "boringssl_defaults",
-    ],
-    srcs: [
-        "src/crypto/cpu_*.c",
-        "src/crypto/crypto.c",
-        "src/crypto/err/err.c",
-        "src/crypto/fipsmodule/bn/*.c",
-        "src/crypto/fipsmodule/bn/asm/*.c",
-        "src/crypto/fipsmodule/rand/*.c",
-        "src/crypto/fipsmodule/sha/sha1.c",
-        "src/crypto/mem.c",
-        "src/crypto/stack/stack.c",
-        "src/crypto/thread_pthread.c",
-        "src/gen/crypto/err_data.c",
-    ],
-    target: {
-        linux: {
-            srcs: [
-                "src/gen/bcm/*-linux.S",
-            ],
-        },
-    },
-    visibility: [
-        "//art:__subpackages__",
-        "//libcore:__subpackages__",
-    ],
-    apex_available: [
-        "com.android.art",
-        "com.android.art.debug",
-        "com.android.art.testing",
-    ],
-    min_sdk_version: "29",
 }
 
 // Common defaults for lib*_fuzz_unsafe. These are unsafe and deterministic
