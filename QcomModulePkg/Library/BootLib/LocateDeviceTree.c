@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -798,6 +798,16 @@ STATIC EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
     } else {
       DEBUG ((EFI_D_VERBOSE, "ddr size does not match\n"));
     }
+
+    if ( BootDeviceBasedDtSelection ()) {
+      if ((CurDtbInfo->DtPlatformSubtype & BOOT_DEVICE_MASK) ==
+         (BoardPlatformHlosSubType () & BOOT_DEVICE_MASK)) {
+        CurDtbInfo->DtMatchVal |= BIT (BOOT_DEVICE_MATCH);
+      } else {
+        DEBUG ((EFI_D_VERBOSE, "Boot device type does not match\n"));
+      }
+    }
+
   } else {
     DEBUG ((EFI_D_VERBOSE, "qcom,board-id does not exist (or) (%d) "
                            "is not a multiple of (%d)\n",
