@@ -15,7 +15,6 @@ def _abl_impl(ctx):
     inputs = []
     inputs += ctx.files.srcs
     inputs += ctx.files.deps
-    inputs += ctx.files.kernel_build_config
 
     output_files = [ctx.actions.declare_file("{}.tar.gz".format(ctx.label.name))]
 
@@ -69,7 +68,6 @@ def _abl_impl(ctx):
       }}
     """.format(
         target = ctx.attr.msm_target,
-        kernel_build_config = ctx.file.kernel_build_config.path,
         clang_version = ctx.attr.clang_version,
     )
 
@@ -164,7 +162,6 @@ abl = rule(
           ```
           glob(["**"])
           ```
-        kernel_build_config: Label referring to the kernel build.config
         abl_build_config: ABL build config
         extra_function_snippets: list of additional shell functions to define at the top of
           the build script
@@ -186,9 +183,6 @@ abl = rule(
         ),
         "msm_target": attr.string(),
         "deps": attr.label_list(),
-        "kernel_build_config": attr.label(
-            allow_single_file = True,
-        ),
         "abl_build_config": attr.string(),
         "target_build_variant": attr.label(default = ":target_build_variant"),
         "extra_function_snippets": attr.string_list(),
@@ -214,7 +208,6 @@ def define_abl(msm_target, variant):
     clang_version = VARS["CLANG_VERSION"]
     extra_deps = ["//prebuilts/clang/host/linux-x86/clang-{}:binaries".format(clang_version)]
 
-    kernel_build_config = "//prebuilts/".format(target)
     abl_build_config = "build.config.msm.{}".format(msm_target.replace("-", "."))
 
     # Use "{}.lxc" config if its a non-GKI target/variant combination
@@ -225,7 +218,6 @@ def define_abl(msm_target, variant):
     abl(
         name = "{}_abl".format(target),
         msm_target = msm_target,
-        kernel_build_config = "//prebuilts/qcom_boot_artifacts:build.config.qc.standalone",
         abl_build_config = abl_build_config,
         srcs = native.glob(
             ["**"],
