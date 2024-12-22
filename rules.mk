@@ -39,7 +39,7 @@ include $(LOCAL_DIR)/crypto-sources.mk
 
 # The AOSP stdatomic.h clang header does not build against musl. Disable C11
 # atomics.
-MODULE_CFLAGS += -D__STDC_NO_ATOMICS__
+MODULE_COMPILEFLAGS += -D__STDC_NO_ATOMICS__
 
 # Define static armcap based on lk build variables
 MODULE_STATIC_ARMCAP := -DOPENSSL_STATIC_ARMCAP
@@ -49,8 +49,7 @@ MODULE_STATIC_ARMCAP += $(call toarmcap,AES,$(USE_ARM_V8_AES))
 MODULE_STATIC_ARMCAP += $(call toarmcap,PMULL,$(USE_ARM_V8_PMULL))
 MODULE_STATIC_ARMCAP += $(call toarmcap,SHA1,$(USE_ARM_V8_SHA1))
 MODULE_STATIC_ARMCAP += $(call toarmcap,SHA256,$(USE_ARM_V8_SHA2))
-MODULE_CFLAGS += $(MODULE_STATIC_ARMCAP)
-MODULE_ASMFLAGS += $(MODULE_STATIC_ARMCAP)
+MODULE_COMPILEFLAGS += $(MODULE_STATIC_ARMCAP)
 
 ifeq (false,$(call TOBOOL,$(ALLOW_FP_USE)))
 # chacha, ghash, vpaes, sha1, and sha256 assembly files use neon instructions,
