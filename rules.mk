@@ -39,7 +39,7 @@ include $(LOCAL_DIR)/crypto-sources.mk
 
 # The AOSP stdatomic.h clang header does not build against musl. Disable C11
 # atomics.
-MODULE_COMPILEFLAGS += -D__STDC_NO_ATOMICS__
+MODULE_CFLAGS += -D__STDC_NO_ATOMICS__
 
 # Define static armcap based on lk build variables
 MODULE_STATIC_ARMCAP := -DOPENSSL_STATIC_ARMCAP
