@@ -184,6 +184,8 @@ STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 STATIC CONST CHAR8 *EnableIpcLoggingCmdLine = " qcom_ipc_logging.enabled=1";
 
+#define BOOT_REASON_STR_LEN 30
+
 LIST_ENTRY *BootConfigListHead = NULL;
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
@@ -1084,6 +1086,15 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     Src = EnableIpcLoggingCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
+
+#ifdef ENABLE_BOOT_REASON_BOOTPARAM
+  if (BootParamlistPtr->BootReason) {
+    char BootReasonStr[BOOT_REASON_STR_LEN];
+    AsciiSPrint (BootReasonStr, BOOT_REASON_STR_LEN,
+                 " qcom-reboot-reason.reason=%d", BootParamlistPtr->BootReason);
+    AsciiStrCatS (Dst, MaxCmdLineLen, BootReasonStr);
+  }
+#endif
 
   return EFI_SUCCESS;
 }

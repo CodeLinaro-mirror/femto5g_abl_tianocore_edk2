@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -169,6 +169,7 @@ typedef enum {
   SUBTYPE_DEFAULT_MATCH,
   SUBTYPE_EXACT_MATCH,
   DDR_MATCH,
+  BOOT_DEVICE_MATCH,
   VARIANT_MATCH,
   SOC_MATCH,
   MAX_MATCH,
