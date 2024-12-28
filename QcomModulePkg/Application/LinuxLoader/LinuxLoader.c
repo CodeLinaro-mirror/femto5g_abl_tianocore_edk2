@@ -162,6 +162,8 @@ SetDefaultAudioFw ()
   STATIC UINT32 Length;
   EFI_STATUS Status;
 
+  return;
+
   AUDIOFRAMEWORK = GetAudioFw ();
   Status = ReadAudioFrameWork (&Src, &Length);
   if ((AsciiStrCmp (Src, "audioreach") == 0) ||
@@ -300,11 +302,11 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   }
 
   // Initialize verified boot & Read Device Info
-  Status = DeviceInfoInit ();
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Initialize the device info failed: %r\n", Status));
-    goto stack_guard_update_default;
-  }
+  // Status = DeviceInfoInit ();
+  // if (Status != EFI_SUCCESS) {
+  //   DEBUG ((EFI_D_ERROR, "Initialize the device info failed: %r\n", Status));
+  //   goto stack_guard_update_default;
+  // }
 
   Status = EnumeratePartitions ();
 
