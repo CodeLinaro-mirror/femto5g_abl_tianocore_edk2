@@ -750,8 +750,7 @@ BoardSerialNum (CHAR8 *StrSerialNum, UINT32 Len)
   MemCardType Type = EMMC;
 
   Type = CheckRootDeviceType ();
-  if ((Type == UNKNOWN) ||
-        (Type == VBLK)) {
+  if (Type == UNKNOWN) {
     Status = gBS->LocateProtocol (&gEfiChipInfoProtocolGuid, NULL,
                                   (VOID **)&ChipInfo);
     if (Status != EFI_SUCCESS) {
