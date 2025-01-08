@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Google Inc.
+// Copyright 2015 The BoringSSL Authors
 //
 // Permission to use, copy, modify, and/or distribute this software for any
 // purpose with or without fee is hereby granted, provided that the above
@@ -96,6 +96,8 @@ var sdeCPUs = []string{
 	"cpx", // Cooper Lake
 	"icx", // Ice Lake server
 	"tgl", // Tiger Lake
+	"adl", // Alder Lake
+	"spr", // Sapphire Rapids
 }
 
 var armCPUs = []string{
@@ -394,10 +396,12 @@ func main() {
 
 	testOutput := testresult.NewResults()
 	var failed, skipped []test
+	var total int
 	for testResult := range results {
 		test := testResult.Test
 		args := test.Cmd
 
+		total++
 		if testResult.Error == errTestSkipped {
 			fmt.Printf("%s\n", test.longName())
 			fmt.Printf("%s was skipped\n", args[0])
@@ -426,14 +430,14 @@ func main() {
 	}
 
 	if len(skipped) > 0 {
-		fmt.Printf("\n%d of %d tests were skipped:\n", len(skipped), len(testCases))
+		fmt.Printf("\n%d of %d tests were skipped:\n", len(skipped), total)
 		for _, test := range skipped {
 			fmt.Printf("\t%s\n", test.shortName())
 		}
 	}
 
 	if len(failed) > 0 {
-		fmt.Printf("\n%d of %d tests failed:\n", len(failed), len(testCases))
+		fmt.Printf("\n%d of %d tests failed:\n", len(failed), total)
 		for _, test := range failed {
 			fmt.Printf("\t%s\n", test.shortName())
 		}

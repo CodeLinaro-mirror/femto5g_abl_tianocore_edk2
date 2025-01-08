@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, Google Inc.
+/* Copyright 2018 The BoringSSL Authors
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,7 +20,7 @@
 
 #include <openssl/span.h>
 
-#include "../fipsmodule/rand/fork_detect.h"
+#include "../bcm_support.h"
 #include "../fipsmodule/rand/internal.h"
 #include "../test/abi_test.h"
 #include "../test/test_util.h"

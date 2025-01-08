@@ -58,6 +58,7 @@ cc_defaults {
     cppflags: [
         "-Wall",
         "-Werror",
+        "-std=c++17",
     ],
 
     // Build BoringSSL and its tests against the same STL.
@@ -122,8 +123,7 @@ cc_defaults {
             ldflags: ["-Wl,-Bsymbolic"],
         },
     },
-
-    stl: "none",
+    stl: "libc++_static",
 }
 
 // Boring Crypto Module object file.
@@ -727,7 +727,7 @@ cc_binary {
         "libcrypto",
     ],
     srcs: [
-        "src/util/fipstools/test_fips.c",
+        "src/util/fipstools/test_fips.cc",
     ],
     required: [
         "adb",
@@ -753,7 +753,7 @@ libbssl_sys_raw_flags = [
 // Rust bindings
 rust_bindgen {
     name: "libbssl_sys_raw",
-    source_stem: "bssl_sys_bindings",
+    source_stem: "bindgen",
     crate_name: "bssl_sys_raw",
     host_supported: true,
     wrapper_src: "src/rust/bssl-sys/wrapper.h",
@@ -774,7 +774,7 @@ rust_bindgen {
 
 rust_bindgen {
     name: "libbssl_sys_raw_nostd",
-    source_stem: "bssl_sys_bindings",
+    source_stem: "bindgen",
     crate_name: "bssl_sys_raw",
     wrapper_src: "src/rust/bssl-sys/wrapper.h",
     bindgen_flags: [
@@ -875,7 +875,7 @@ rust_defaults {
     product_available: true,
 }
 
-rust_library {
+rust_library_rlib {
     name: "libbssl_sys",
     defaults: ["libbssl_sys_defaults"],
     whole_static_libs: [
@@ -934,6 +934,7 @@ rust_defaults {
     name: "libbssl_crypto_defaults",
     crate_name: "bssl_crypto",
     visibility: ["//visibility:public"],
+    features: ["std"],
     srcs: ["src/rust/bssl-crypto/src/lib.rs"],
     rustlibs: ["libbssl_sys"],
 }

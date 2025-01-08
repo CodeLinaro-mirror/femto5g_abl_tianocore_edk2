@@ -1,4 +1,4 @@
-/* Copyright (c) 2023, Google Inc.
+/* Copyright 2023 The BoringSSL Authors
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -22,7 +22,7 @@
 #include <openssl/base.h>
 #include <openssl/span.h>
 
-namespace bssl {
+BSSL_NAMESPACE_BEGIN
 
 struct CertificateInternals;
 
@@ -78,6 +78,6 @@ class OPENSSL_EXPORT Certificate {
   std::unique_ptr<CertificateInternals> internals_;
 };
 
-}  // namespace bssl
+BSSL_NAMESPACE_END
 
 #endif  // OPENSSL_HEADER_BSSL_PKI_CERTIFICATE_H_ && __cplusplus

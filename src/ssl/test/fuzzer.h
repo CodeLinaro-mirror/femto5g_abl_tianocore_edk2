@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, Google Inc.
+/* Copyright 2017 The BoringSSL Authors
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -414,13 +414,19 @@ class TLSFuzzer {
     SSL_CTX_enable_ocsp_stapling(ctx_.get());
 
     // Enable versions and ciphers that are off by default.
-    if (!SSL_CTX_set_strict_cipher_list(ctx_.get(), "ALL:3DES")) {
+    uint16_t min_version = protocol_ == kDTLS ? DTLS1_VERSION : TLS1_VERSION;
+    uint16_t max_version =
+        protocol_ == kDTLS ? DTLS1_3_VERSION : TLS1_3_VERSION;
+    if (!SSL_CTX_set_min_proto_version(ctx_.get(), min_version) ||
+        !SSL_CTX_set_max_proto_version(ctx_.get(), max_version) ||
+        !SSL_CTX_set_strict_cipher_list(ctx_.get(), "ALL:3DES")) {
       return false;
     }
 
     static const uint16_t kGroups[] = {
-        SSL_GROUP_X25519_KYBER768_DRAFT00, SSL_GROUP_X25519,
-        SSL_GROUP_SECP256R1, SSL_GROUP_SECP384R1, SSL_GROUP_SECP521R1};
+        SSL_GROUP_X25519_MLKEM768, SSL_GROUP_X25519_KYBER768_DRAFT00,
+        SSL_GROUP_X25519,          SSL_GROUP_SECP256R1,
+        SSL_GROUP_SECP384R1,       SSL_GROUP_SECP521R1};
     if (!SSL_CTX_set1_group_ids(ctx_.get(), kGroups,
                                 OPENSSL_ARRAY_SIZE(kGroups))) {
       return false;

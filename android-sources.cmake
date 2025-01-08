@@ -1,4 +1,4 @@
-# Copyright (c) 2015, Google Inc.
+# Copyright 2015 The BoringSSL Authors
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -17,246 +17,250 @@
 # file, or use list(TRANSFORM ... PREPEND) from CMake 3.12.
 
 set(crypto_sources
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_bitstr.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_bool.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_d2i_fp.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_dup.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_gentm.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_i2d_fp.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_int.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_mbstr.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_object.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_octet.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_strex.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_strnid.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_time.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_type.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/a_utctm.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/asn1_lib.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/asn1_par.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/asn_pack.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/f_int.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/f_string.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/posix_time.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_dec.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_enc.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_fre.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_new.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_typ.c
-  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_utl.c
-  ${BORINGSSL_ROOT}src/crypto/base64/base64.c
-  ${BORINGSSL_ROOT}src/crypto/bio/bio.c
-  ${BORINGSSL_ROOT}src/crypto/bio/bio_mem.c
-  ${BORINGSSL_ROOT}src/crypto/bio/connect.c
-  ${BORINGSSL_ROOT}src/crypto/bio/errno.c
-  ${BORINGSSL_ROOT}src/crypto/bio/fd.c
-  ${BORINGSSL_ROOT}src/crypto/bio/file.c
-  ${BORINGSSL_ROOT}src/crypto/bio/hexdump.c
-  ${BORINGSSL_ROOT}src/crypto/bio/pair.c
-  ${BORINGSSL_ROOT}src/crypto/bio/printf.c
-  ${BORINGSSL_ROOT}src/crypto/bio/socket.c
-  ${BORINGSSL_ROOT}src/crypto/bio/socket_helper.c
-  ${BORINGSSL_ROOT}src/crypto/blake2/blake2.c
-  ${BORINGSSL_ROOT}src/crypto/bn_extra/bn_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/bn_extra/convert.c
-  ${BORINGSSL_ROOT}src/crypto/buf/buf.c
-  ${BORINGSSL_ROOT}src/crypto/bytestring/asn1_compat.c
-  ${BORINGSSL_ROOT}src/crypto/bytestring/ber.c
-  ${BORINGSSL_ROOT}src/crypto/bytestring/cbb.c
-  ${BORINGSSL_ROOT}src/crypto/bytestring/cbs.c
-  ${BORINGSSL_ROOT}src/crypto/bytestring/unicode.c
-  ${BORINGSSL_ROOT}src/crypto/chacha/chacha.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/cipher_extra.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/derive_key.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_aesctrhmac.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_aesgcmsiv.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_chacha20poly1305.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_des.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_null.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_rc2.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_rc4.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_tls.c
-  ${BORINGSSL_ROOT}src/crypto/cipher_extra/tls_cbc.c
-  ${BORINGSSL_ROOT}src/crypto/conf/conf.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_apple.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_fuchsia.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_linux.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_openbsd.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_sysreg.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_win.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_arm_freebsd.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_arm_linux.c
-  ${BORINGSSL_ROOT}src/crypto/cpu_intel.c
-  ${BORINGSSL_ROOT}src/crypto/crypto.c
-  ${BORINGSSL_ROOT}src/crypto/curve25519/curve25519.c
-  ${BORINGSSL_ROOT}src/crypto/curve25519/curve25519_64_adx.c
-  ${BORINGSSL_ROOT}src/crypto/curve25519/spake25519.c
-  ${BORINGSSL_ROOT}src/crypto/des/des.c
-  ${BORINGSSL_ROOT}src/crypto/dh_extra/dh_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/dh_extra/params.c
-  ${BORINGSSL_ROOT}src/crypto/digest_extra/digest_extra.c
-  ${BORINGSSL_ROOT}src/crypto/dilithium/dilithium.c
-  ${BORINGSSL_ROOT}src/crypto/dsa/dsa.c
-  ${BORINGSSL_ROOT}src/crypto/dsa/dsa_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/ec_extra/ec_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/ec_extra/ec_derive.c
-  ${BORINGSSL_ROOT}src/crypto/ec_extra/hash_to_curve.c
-  ${BORINGSSL_ROOT}src/crypto/ecdh_extra/ecdh_extra.c
-  ${BORINGSSL_ROOT}src/crypto/ecdsa_extra/ecdsa_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/engine/engine.c
-  ${BORINGSSL_ROOT}src/crypto/err/err.c
-  ${BORINGSSL_ROOT}src/crypto/evp/evp.c
-  ${BORINGSSL_ROOT}src/crypto/evp/evp_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/evp/evp_ctx.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_dh.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_dh_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_dsa_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_ec.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_ec_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_ed25519.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_ed25519_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_hkdf.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_rsa.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_rsa_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_x25519.c
-  ${BORINGSSL_ROOT}src/crypto/evp/p_x25519_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/evp/pbkdf.c
-  ${BORINGSSL_ROOT}src/crypto/evp/print.c
-  ${BORINGSSL_ROOT}src/crypto/evp/scrypt.c
-  ${BORINGSSL_ROOT}src/crypto/evp/sign.c
-  ${BORINGSSL_ROOT}src/crypto/ex_data.c
-  ${BORINGSSL_ROOT}src/crypto/fipsmodule/bcm.c
-  ${BORINGSSL_ROOT}src/crypto/fipsmodule/fips_shared_support.c
-  ${BORINGSSL_ROOT}src/crypto/hpke/hpke.c
-  ${BORINGSSL_ROOT}src/crypto/hrss/hrss.c
-  ${BORINGSSL_ROOT}src/crypto/keccak/keccak.c
-  ${BORINGSSL_ROOT}src/crypto/kyber/kyber.c
-  ${BORINGSSL_ROOT}src/crypto/lhash/lhash.c
-  ${BORINGSSL_ROOT}src/crypto/mem.c
-  ${BORINGSSL_ROOT}src/crypto/obj/obj.c
-  ${BORINGSSL_ROOT}src/crypto/obj/obj_xref.c
-  ${BORINGSSL_ROOT}src/crypto/pem/pem_all.c
-  ${BORINGSSL_ROOT}src/crypto/pem/pem_info.c
-  ${BORINGSSL_ROOT}src/crypto/pem/pem_lib.c
-  ${BORINGSSL_ROOT}src/crypto/pem/pem_oth.c
-  ${BORINGSSL_ROOT}src/crypto/pem/pem_pk8.c
-  ${BORINGSSL_ROOT}src/crypto/pem/pem_pkey.c
-  ${BORINGSSL_ROOT}src/crypto/pem/pem_x509.c
-  ${BORINGSSL_ROOT}src/crypto/pem/pem_xaux.c
-  ${BORINGSSL_ROOT}src/crypto/pkcs7/pkcs7.c
-  ${BORINGSSL_ROOT}src/crypto/pkcs7/pkcs7_x509.c
-  ${BORINGSSL_ROOT}src/crypto/pkcs8/p5_pbev2.c
-  ${BORINGSSL_ROOT}src/crypto/pkcs8/pkcs8.c
-  ${BORINGSSL_ROOT}src/crypto/pkcs8/pkcs8_x509.c
-  ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305.c
-  ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_arm.c
-  ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_vec.c
-  ${BORINGSSL_ROOT}src/crypto/pool/pool.c
-  ${BORINGSSL_ROOT}src/crypto/rand_extra/deterministic.c
-  ${BORINGSSL_ROOT}src/crypto/rand_extra/forkunsafe.c
-  ${BORINGSSL_ROOT}src/crypto/rand_extra/getentropy.c
-  ${BORINGSSL_ROOT}src/crypto/rand_extra/ios.c
-  ${BORINGSSL_ROOT}src/crypto/rand_extra/passive.c
-  ${BORINGSSL_ROOT}src/crypto/rand_extra/rand_extra.c
-  ${BORINGSSL_ROOT}src/crypto/rand_extra/trusty.c
-  ${BORINGSSL_ROOT}src/crypto/rand_extra/windows.c
-  ${BORINGSSL_ROOT}src/crypto/rc4/rc4.c
-  ${BORINGSSL_ROOT}src/crypto/refcount.c
-  ${BORINGSSL_ROOT}src/crypto/rsa_extra/rsa_asn1.c
-  ${BORINGSSL_ROOT}src/crypto/rsa_extra/rsa_crypt.c
-  ${BORINGSSL_ROOT}src/crypto/rsa_extra/rsa_print.c
-  ${BORINGSSL_ROOT}src/crypto/siphash/siphash.c
-  ${BORINGSSL_ROOT}src/crypto/spx/address.c
-  ${BORINGSSL_ROOT}src/crypto/spx/fors.c
-  ${BORINGSSL_ROOT}src/crypto/spx/merkle.c
-  ${BORINGSSL_ROOT}src/crypto/spx/spx.c
-  ${BORINGSSL_ROOT}src/crypto/spx/spx_util.c
-  ${BORINGSSL_ROOT}src/crypto/spx/thash.c
-  ${BORINGSSL_ROOT}src/crypto/spx/wots.c
-  ${BORINGSSL_ROOT}src/crypto/stack/stack.c
-  ${BORINGSSL_ROOT}src/crypto/thread.c
-  ${BORINGSSL_ROOT}src/crypto/thread_none.c
-  ${BORINGSSL_ROOT}src/crypto/thread_pthread.c
-  ${BORINGSSL_ROOT}src/crypto/thread_win.c
-  ${BORINGSSL_ROOT}src/crypto/trust_token/pmbtoken.c
-  ${BORINGSSL_ROOT}src/crypto/trust_token/trust_token.c
-  ${BORINGSSL_ROOT}src/crypto/trust_token/voprf.c
-  ${BORINGSSL_ROOT}src/crypto/x509/a_digest.c
-  ${BORINGSSL_ROOT}src/crypto/x509/a_sign.c
-  ${BORINGSSL_ROOT}src/crypto/x509/a_verify.c
-  ${BORINGSSL_ROOT}src/crypto/x509/algorithm.c
-  ${BORINGSSL_ROOT}src/crypto/x509/asn1_gen.c
-  ${BORINGSSL_ROOT}src/crypto/x509/by_dir.c
-  ${BORINGSSL_ROOT}src/crypto/x509/by_file.c
-  ${BORINGSSL_ROOT}src/crypto/x509/i2d_pr.c
-  ${BORINGSSL_ROOT}src/crypto/x509/name_print.c
-  ${BORINGSSL_ROOT}src/crypto/x509/policy.c
-  ${BORINGSSL_ROOT}src/crypto/x509/rsa_pss.c
-  ${BORINGSSL_ROOT}src/crypto/x509/t_crl.c
-  ${BORINGSSL_ROOT}src/crypto/x509/t_req.c
-  ${BORINGSSL_ROOT}src/crypto/x509/t_x509.c
-  ${BORINGSSL_ROOT}src/crypto/x509/t_x509a.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_akey.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_akeya.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_alt.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_bcons.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_bitst.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_conf.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_cpols.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_crld.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_enum.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_extku.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_genn.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_ia5.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_info.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_int.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_lib.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_ncons.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_ocsp.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_pcons.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_pmaps.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_prn.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_purp.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_skey.c
-  ${BORINGSSL_ROOT}src/crypto/x509/v3_utl.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_att.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_cmp.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_d2.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_def.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_ext.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_lu.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_obj.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_req.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_set.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_trs.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_txt.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_v3.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_vfy.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509_vpm.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509cset.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509name.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509rset.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x509spki.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_algor.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_all.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_attrib.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_crl.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_exten.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_name.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_pubkey.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_req.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_sig.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_spki.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_val.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_x509.c
-  ${BORINGSSL_ROOT}src/crypto/x509/x_x509a.c
-  ${BORINGSSL_ROOT}src/gen/crypto/err_data.c
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_bitstr.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_bool.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_d2i_fp.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_dup.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_gentm.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_i2d_fp.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_int.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_mbstr.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_object.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_octet.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_strex.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_strnid.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_time.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_type.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/a_utctm.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/asn1_lib.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/asn1_par.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/asn_pack.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/f_int.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/f_string.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/posix_time.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_dec.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_enc.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_fre.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_new.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_typ.cc
+  ${BORINGSSL_ROOT}src/crypto/asn1/tasn_utl.cc
+  ${BORINGSSL_ROOT}src/crypto/base64/base64.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/bio.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/bio_mem.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/connect.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/errno.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/fd.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/file.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/hexdump.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/pair.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/printf.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/socket.cc
+  ${BORINGSSL_ROOT}src/crypto/bio/socket_helper.cc
+  ${BORINGSSL_ROOT}src/crypto/blake2/blake2.cc
+  ${BORINGSSL_ROOT}src/crypto/bn_extra/bn_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/bn_extra/convert.cc
+  ${BORINGSSL_ROOT}src/crypto/buf/buf.cc
+  ${BORINGSSL_ROOT}src/crypto/bytestring/asn1_compat.cc
+  ${BORINGSSL_ROOT}src/crypto/bytestring/ber.cc
+  ${BORINGSSL_ROOT}src/crypto/bytestring/cbb.cc
+  ${BORINGSSL_ROOT}src/crypto/bytestring/cbs.cc
+  ${BORINGSSL_ROOT}src/crypto/bytestring/unicode.cc
+  ${BORINGSSL_ROOT}src/crypto/chacha/chacha.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/cipher_extra.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/derive_key.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_aesctrhmac.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_aesgcmsiv.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_chacha20poly1305.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_des.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_null.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_rc2.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_rc4.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/e_tls.cc
+  ${BORINGSSL_ROOT}src/crypto/cipher_extra/tls_cbc.cc
+  ${BORINGSSL_ROOT}src/crypto/conf/conf.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_apple.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_fuchsia.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_linux.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_openbsd.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_sysreg.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_win.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_arm_freebsd.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_arm_linux.cc
+  ${BORINGSSL_ROOT}src/crypto/cpu_intel.cc
+  ${BORINGSSL_ROOT}src/crypto/crypto.cc
+  ${BORINGSSL_ROOT}src/crypto/curve25519/curve25519.cc
+  ${BORINGSSL_ROOT}src/crypto/curve25519/curve25519_64_adx.cc
+  ${BORINGSSL_ROOT}src/crypto/curve25519/spake25519.cc
+  ${BORINGSSL_ROOT}src/crypto/des/des.cc
+  ${BORINGSSL_ROOT}src/crypto/dh_extra/dh_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/dh_extra/params.cc
+  ${BORINGSSL_ROOT}src/crypto/digest_extra/digest_extra.cc
+  ${BORINGSSL_ROOT}src/crypto/dsa/dsa.cc
+  ${BORINGSSL_ROOT}src/crypto/dsa/dsa_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/ec_extra/ec_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/ec_extra/ec_derive.cc
+  ${BORINGSSL_ROOT}src/crypto/ec_extra/hash_to_curve.cc
+  ${BORINGSSL_ROOT}src/crypto/ecdh_extra/ecdh_extra.cc
+  ${BORINGSSL_ROOT}src/crypto/ecdsa_extra/ecdsa_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/engine/engine.cc
+  ${BORINGSSL_ROOT}src/crypto/err/err.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/evp.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/evp_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/evp_ctx.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_dh.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_dh_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_dsa_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_ec.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_ec_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_ed25519.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_ed25519_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_hkdf.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_rsa.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_rsa_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_x25519.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/p_x25519_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/pbkdf.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/print.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/scrypt.cc
+  ${BORINGSSL_ROOT}src/crypto/evp/sign.cc
+  ${BORINGSSL_ROOT}src/crypto/ex_data.cc
+  ${BORINGSSL_ROOT}src/crypto/fipsmodule/bcm.cc
+  ${BORINGSSL_ROOT}src/crypto/fipsmodule/fips_shared_support.cc
+  ${BORINGSSL_ROOT}src/crypto/hpke/hpke.cc
+  ${BORINGSSL_ROOT}src/crypto/hrss/hrss.cc
+  ${BORINGSSL_ROOT}src/crypto/kyber/kyber.cc
+  ${BORINGSSL_ROOT}src/crypto/lhash/lhash.cc
+  ${BORINGSSL_ROOT}src/crypto/md4/md4.cc
+  ${BORINGSSL_ROOT}src/crypto/md5/md5.cc
+  ${BORINGSSL_ROOT}src/crypto/mem.cc
+  ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa.cc
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem.cc
+  ${BORINGSSL_ROOT}src/crypto/obj/obj.cc
+  ${BORINGSSL_ROOT}src/crypto/obj/obj_xref.cc
+  ${BORINGSSL_ROOT}src/crypto/pem/pem_all.cc
+  ${BORINGSSL_ROOT}src/crypto/pem/pem_info.cc
+  ${BORINGSSL_ROOT}src/crypto/pem/pem_lib.cc
+  ${BORINGSSL_ROOT}src/crypto/pem/pem_oth.cc
+  ${BORINGSSL_ROOT}src/crypto/pem/pem_pk8.cc
+  ${BORINGSSL_ROOT}src/crypto/pem/pem_pkey.cc
+  ${BORINGSSL_ROOT}src/crypto/pem/pem_x509.cc
+  ${BORINGSSL_ROOT}src/crypto/pem/pem_xaux.cc
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/pkcs7.cc
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/pkcs7_x509.cc
+  ${BORINGSSL_ROOT}src/crypto/pkcs8/p5_pbev2.cc
+  ${BORINGSSL_ROOT}src/crypto/pkcs8/pkcs8.cc
+  ${BORINGSSL_ROOT}src/crypto/pkcs8/pkcs8_x509.cc
+  ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305.cc
+  ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_arm.cc
+  ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_vec.cc
+  ${BORINGSSL_ROOT}src/crypto/pool/pool.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/deterministic.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/fork_detect.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/forkunsafe.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/getentropy.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/ios.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/passive.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/rand_extra.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/trusty.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/urandom.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/windows.cc
+  ${BORINGSSL_ROOT}src/crypto/rc4/rc4.cc
+  ${BORINGSSL_ROOT}src/crypto/refcount.cc
+  ${BORINGSSL_ROOT}src/crypto/rsa_extra/rsa_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/rsa_extra/rsa_crypt.cc
+  ${BORINGSSL_ROOT}src/crypto/rsa_extra/rsa_extra.cc
+  ${BORINGSSL_ROOT}src/crypto/rsa_extra/rsa_print.cc
+  ${BORINGSSL_ROOT}src/crypto/sha/sha1.cc
+  ${BORINGSSL_ROOT}src/crypto/sha/sha256.cc
+  ${BORINGSSL_ROOT}src/crypto/sha/sha512.cc
+  ${BORINGSSL_ROOT}src/crypto/siphash/siphash.cc
+  ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa.cc
+  ${BORINGSSL_ROOT}src/crypto/stack/stack.cc
+  ${BORINGSSL_ROOT}src/crypto/thread.cc
+  ${BORINGSSL_ROOT}src/crypto/thread_none.cc
+  ${BORINGSSL_ROOT}src/crypto/thread_pthread.cc
+  ${BORINGSSL_ROOT}src/crypto/thread_win.cc
+  ${BORINGSSL_ROOT}src/crypto/trust_token/pmbtoken.cc
+  ${BORINGSSL_ROOT}src/crypto/trust_token/trust_token.cc
+  ${BORINGSSL_ROOT}src/crypto/trust_token/voprf.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/a_digest.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/a_sign.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/a_verify.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/algorithm.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/asn1_gen.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/by_dir.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/by_file.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/i2d_pr.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/name_print.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/policy.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/rsa_pss.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/t_crl.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/t_req.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/t_x509.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/t_x509a.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_akey.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_akeya.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_alt.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_bcons.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_bitst.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_conf.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_cpols.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_crld.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_enum.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_extku.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_genn.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_ia5.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_info.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_int.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_lib.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_ncons.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_ocsp.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_pcons.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_pmaps.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_prn.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_purp.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_skey.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/v3_utl.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_att.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_cmp.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_d2.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_def.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_ext.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_lu.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_obj.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_req.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_set.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_trs.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_txt.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_v3.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_vfy.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509_vpm.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509cset.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509name.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509rset.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x509spki.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_algor.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_all.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_attrib.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_crl.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_exten.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_name.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_pubkey.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_req.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_sig.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_spki.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_val.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_x509.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_x509a.cc
+  ${BORINGSSL_ROOT}src/gen/crypto/err_data.cc
 )
 set(crypto_sources_asm
   ${BORINGSSL_ROOT}src/crypto/curve25519/asm/x25519-asm-arm.S
   ${BORINGSSL_ROOT}src/crypto/hrss/asm/poly_rq_mul.S
   ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_arm_asm.S
+  ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx10-x86_64-apple.S
+  ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx10-x86_64-linux.S
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-gcm-x86_64-apple.S
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-gcm-x86_64-linux.S
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-x86-apple.S
@@ -298,10 +302,6 @@ set(crypto_sources_asm
   ${BORINGSSL_ROOT}src/gen/bcm/ghashv8-armv8-apple.S
   ${BORINGSSL_ROOT}src/gen/bcm/ghashv8-armv8-linux.S
   ${BORINGSSL_ROOT}src/gen/bcm/ghashv8-armv8-win.S
-  ${BORINGSSL_ROOT}src/gen/bcm/md5-586-apple.S
-  ${BORINGSSL_ROOT}src/gen/bcm/md5-586-linux.S
-  ${BORINGSSL_ROOT}src/gen/bcm/md5-x86_64-apple.S
-  ${BORINGSSL_ROOT}src/gen/bcm/md5-x86_64-linux.S
   ${BORINGSSL_ROOT}src/gen/bcm/p256-armv8-asm-apple.S
   ${BORINGSSL_ROOT}src/gen/bcm/p256-armv8-asm-linux.S
   ${BORINGSSL_ROOT}src/gen/bcm/p256-armv8-asm-win.S
@@ -369,6 +369,10 @@ set(crypto_sources_asm
   ${BORINGSSL_ROOT}src/gen/crypto/chacha20_poly1305_armv8-win.S
   ${BORINGSSL_ROOT}src/gen/crypto/chacha20_poly1305_x86_64-apple.S
   ${BORINGSSL_ROOT}src/gen/crypto/chacha20_poly1305_x86_64-linux.S
+  ${BORINGSSL_ROOT}src/gen/crypto/md5-586-apple.S
+  ${BORINGSSL_ROOT}src/gen/crypto/md5-586-linux.S
+  ${BORINGSSL_ROOT}src/gen/crypto/md5-x86_64-apple.S
+  ${BORINGSSL_ROOT}src/gen/crypto/md5-x86_64-linux.S
   ${BORINGSSL_ROOT}src/gen/test_support/trampoline-armv4-linux.S
   ${BORINGSSL_ROOT}src/gen/test_support/trampoline-armv8-apple.S
   ${BORINGSSL_ROOT}src/gen/test_support/trampoline-armv8-linux.S
@@ -383,6 +387,7 @@ set(crypto_sources_asm
   ${BORINGSSL_ROOT}src/third_party/fiat/asm/fiat_p256_adx_sqr.S
 )
 set(crypto_sources_nasm
+  ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx10-x86_64-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-gcm-x86_64-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-x86-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-x86_64-win.asm
@@ -392,8 +397,6 @@ set(crypto_sources_nasm
   ${BORINGSSL_ROOT}src/gen/bcm/ghash-ssse3-x86_64-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/ghash-x86-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/ghash-x86_64-win.asm
-  ${BORINGSSL_ROOT}src/gen/bcm/md5-586-win.asm
-  ${BORINGSSL_ROOT}src/gen/bcm/md5-x86_64-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/p256-x86_64-asm-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/p256_beeu-x86_64-asm-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/rdrand-x86_64-win.asm
@@ -413,6 +416,8 @@ set(crypto_sources_nasm
   ${BORINGSSL_ROOT}src/gen/crypto/chacha-x86-win.asm
   ${BORINGSSL_ROOT}src/gen/crypto/chacha-x86_64-win.asm
   ${BORINGSSL_ROOT}src/gen/crypto/chacha20_poly1305_x86_64-win.asm
+  ${BORINGSSL_ROOT}src/gen/crypto/md5-586-win.asm
+  ${BORINGSSL_ROOT}src/gen/crypto/md5-x86_64-win.asm
   ${BORINGSSL_ROOT}src/gen/test_support/trampoline-x86-win.asm
   ${BORINGSSL_ROOT}src/gen/test_support/trampoline-x86_64-win.asm
 )
@@ -505,7 +510,6 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/curve25519/x25519_test.cc
   ${BORINGSSL_ROOT}src/crypto/dh_extra/dh_test.cc
   ${BORINGSSL_ROOT}src/crypto/digest_extra/digest_test.cc
-  ${BORINGSSL_ROOT}src/crypto/dilithium/dilithium_test.cc
   ${BORINGSSL_ROOT}src/crypto/dsa/dsa_test.cc
   ${BORINGSSL_ROOT}src/crypto/ecdh_extra/ecdh_test.cc
   ${BORINGSSL_ROOT}src/crypto/err/err_test.cc
@@ -521,19 +525,20 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ec/p256_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ecdsa/ecdsa_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/hkdf/hkdf_test.cc
-  ${BORINGSSL_ROOT}src/crypto/fipsmodule/md5/md5_test.cc
+  ${BORINGSSL_ROOT}src/crypto/fipsmodule/keccak/keccak_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/modes/gcm_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/rand/ctrdrbg_test.cc
-  ${BORINGSSL_ROOT}src/crypto/fipsmodule/rand/fork_detect_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/service_indicator/service_indicator_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/sha/sha_test.cc
   ${BORINGSSL_ROOT}src/crypto/hmac_extra/hmac_test.cc
   ${BORINGSSL_ROOT}src/crypto/hpke/hpke_test.cc
   ${BORINGSSL_ROOT}src/crypto/hrss/hrss_test.cc
   ${BORINGSSL_ROOT}src/crypto/impl_dispatch_test.cc
-  ${BORINGSSL_ROOT}src/crypto/keccak/keccak_test.cc
   ${BORINGSSL_ROOT}src/crypto/kyber/kyber_test.cc
   ${BORINGSSL_ROOT}src/crypto/lhash/lhash_test.cc
+  ${BORINGSSL_ROOT}src/crypto/md5/md5_test.cc
+  ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_test.cc
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem_test.cc
   ${BORINGSSL_ROOT}src/crypto/obj/obj_test.cc
   ${BORINGSSL_ROOT}src/crypto/pem/pem_test.cc
   ${BORINGSSL_ROOT}src/crypto/pkcs7/pkcs7_test.cc
@@ -541,13 +546,14 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/pkcs8/pkcs8_test.cc
   ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_test.cc
   ${BORINGSSL_ROOT}src/crypto/pool/pool_test.cc
+  ${BORINGSSL_ROOT}src/crypto/rand_extra/fork_detect_test.cc
   ${BORINGSSL_ROOT}src/crypto/rand_extra/getentropy_test.cc
   ${BORINGSSL_ROOT}src/crypto/rand_extra/rand_test.cc
   ${BORINGSSL_ROOT}src/crypto/refcount_test.cc
   ${BORINGSSL_ROOT}src/crypto/rsa_extra/rsa_test.cc
   ${BORINGSSL_ROOT}src/crypto/self_test.cc
   ${BORINGSSL_ROOT}src/crypto/siphash/siphash_test.cc
-  ${BORINGSSL_ROOT}src/crypto/spx/spx_test.cc
+  ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa_test.cc
   ${BORINGSSL_ROOT}src/crypto/stack/stack_test.cc
   ${BORINGSSL_ROOT}src/crypto/test/gtest_main.cc
   ${BORINGSSL_ROOT}src/crypto/thread_test.cc
@@ -590,9 +596,6 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/cipher_extra/test/nist_cavp/tdes_ecb.txt
   ${BORINGSSL_ROOT}src/crypto/cipher_extra/test/xchacha20_poly1305_tests.txt
   ${BORINGSSL_ROOT}src/crypto/curve25519/ed25519_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/dilithium/dilithium_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/dilithium/edge_cases_draft_dilithium3_sign.txt
-  ${BORINGSSL_ROOT}src/crypto/dilithium/edge_cases_draft_dilithium3_verify.txt
   ${BORINGSSL_ROOT}src/crypto/ecdh_extra/ecdh_tests.txt
   ${BORINGSSL_ROOT}src/crypto/evp/evp_tests.txt
   ${BORINGSSL_ROOT}src/crypto/evp/scrypt_tests.txt
@@ -616,12 +619,25 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ec/p256-nistz_tests.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ecdsa/ecdsa_sign_tests.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ecdsa/ecdsa_verify_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/fipsmodule/modes/gcm_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/fipsmodule/keccak/keccak_tests.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/rand/ctrdrbg_vectors.txt
   ${BORINGSSL_ROOT}src/crypto/hmac_extra/hmac_tests.txt
   ${BORINGSSL_ROOT}src/crypto/hpke/hpke_test_vectors.txt
-  ${BORINGSSL_ROOT}src/crypto/keccak/keccak_tests.txt
   ${BORINGSSL_ROOT}src/crypto/kyber/kyber_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_keygen_65_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_keygen_87_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_siggen_65_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_siggen_87_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem1024_decap_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem1024_encap_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem1024_keygen_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem1024_nist_decap_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem1024_nist_keygen_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem768_decap_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem768_encap_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem768_keygen_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem768_nist_decap_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem768_nist_keygen_tests.txt
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/bad1.p12
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/bad2.p12
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/bad3.p12
@@ -638,8 +654,10 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/windows.p12
   ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_tests.txt
   ${BORINGSSL_ROOT}src/crypto/siphash/siphash_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/spx/spx_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/spx/spx_tests_deterministic.txt
+  ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa_keygen.txt
+  ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa_prehash.txt
+  ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa_siggen.txt
+  ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa_sigver.txt
   ${BORINGSSL_ROOT}src/crypto/x509/test/basic_constraints_ca.pem
   ${BORINGSSL_ROOT}src/crypto/x509/test/basic_constraints_ca_pathlen_0.pem
   ${BORINGSSL_ROOT}src/crypto/x509/test/basic_constraints_ca_pathlen_1.pem
@@ -756,6 +774,10 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/hmac_sha512_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/kw_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/kwp_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_65_standard_sign_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_65_standard_verify_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_87_standard_sign_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_87_standard_verify_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/primality_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/rsa_oaep_2048_sha1_mgf1sha1_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/rsa_oaep_2048_sha224_mgf1sha1_test.txt
@@ -803,5 +825,6 @@ set(ssl_test_sources
   ${BORINGSSL_ROOT}src/crypto/test/gtest_main.cc
   ${BORINGSSL_ROOT}src/ssl/span_test.cc
   ${BORINGSSL_ROOT}src/ssl/ssl_c_test.c
+  ${BORINGSSL_ROOT}src/ssl/ssl_internal_test.cc
   ${BORINGSSL_ROOT}src/ssl/ssl_test.cc
 )

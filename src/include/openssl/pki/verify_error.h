@@ -1,4 +1,4 @@
-/* Copyright (c) 2024, Google Inc.
+/* Copyright 2024 The BoringSSL Authors
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,10 +15,11 @@
 #if !defined(OPENSSL_HEADER_BSSL_PKI_VERIFY_ERROR_H_) && defined(__cplusplus)
 #define OPENSSL_HEADER_BSSL_PKI_VERIFY_ERROR_H_
 
-#include <string>
-#include <string_view>
+#include <openssl/base.h>
 
-namespace bssl {
+#include <string>
+
+BSSL_NAMESPACE_BEGIN
 
 // VerifyError describes certificate chain validation result.
 class OPENSSL_EXPORT VerifyError {
@@ -132,6 +133,6 @@ class OPENSSL_EXPORT VerifyError {
   std::string diagnostic_;
 };
 
-} // namespace bssl
+BSSL_NAMESPACE_END
 
 #endif  // OPENSSL_HEADER_BSSL_PKI_VERIFY_ERROR_H_
