@@ -77,6 +77,10 @@
 #include <Protocol/EFIRecoveryInfo.h>
 #include "RecoveryInfo.h"
 
+STATIC CONST CHAR16 *SkipPtnGuidSwap[] = {
+  L"xbl", L"xbl_config", L"xbl_bkup", L"shrm",
+};
+
 STATIC BOOLEAN FlashingGpt;
 STATIC BOOLEAN ParseSecondaryGpt;
 struct StoragePartInfo Ptable[MAX_LUNS];
@@ -661,9 +665,18 @@ SwitchPtnSlots (CONST CHAR16 *SetActive)
         PtnNew = &PtnEntries[i];
       }
     }
-    /* Swap the guids for the slots except for targets based on recoveryinfo */
+    /* Swap the guids for the slots except for targets based on recoveryinfo.
+     * If recovery info is not implemented, for the OTA case, the swapping of
+     * GUID for the NHLOS partition is managed in XBL. Therefore, the
+     * bootloader should skip the swapping of GUID.
+     */
     if (!IsRecoveryInfo ()) {
-      SwapPtnGuid (&PtnCurrent->PartEntry, &PtnNew->PartEntry);
+      if (StrnCmp ((PtnCurrent->PartEntry.PartitionName), SkipPtnGuidSwap[0], StrLen(SkipPtnGuidSwap[0]))
+          && StrnCmp ((PtnCurrent->PartEntry.PartitionName), SkipPtnGuidSwap[1], StrLen(SkipPtnGuidSwap[1]))
+          && StrnCmp ((PtnCurrent->PartEntry.PartitionName), SkipPtnGuidSwap[2], StrLen(SkipPtnGuidSwap[2]))
+          && StrnCmp ((PtnCurrent->PartEntry.PartitionName), SkipPtnGuidSwap[3], StrLen(SkipPtnGuidSwap[3]))) {
+        SwapPtnGuid (&PtnCurrent->PartEntry, &PtnNew->PartEntry);
+      }
     }
     PtnCurrent = PtnNew = NULL;
   }
