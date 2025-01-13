@@ -1,6 +1,6 @@
 load("//build/kernel/kleaf:directory_with_structure.bzl", dws = "directory_with_structure")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_toolchain")
-load("//msm-kernel:target_variants.bzl", "get_all_variants")
+load("//soc-repo:target_variants.bzl", "get_all_variants")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@kernel_toolchain_info//:dict.bzl", "VARS")
 load(
@@ -15,7 +15,6 @@ def _abl_impl(ctx):
     inputs = []
     inputs += ctx.files.srcs
     inputs += ctx.files.deps
-    inputs += ctx.files.kernel_build_config
 
     output_files = [ctx.actions.declare_file("{}.tar.gz".format(ctx.label.name))]
 
@@ -28,14 +27,13 @@ def _abl_impl(ctx):
       ABL_OUT_DIR=${{ROOT_DIR}}/bootable/bootloader/edk2/out
       CLANG_VERSION="{clang_version}"
       CLANG_PREBUILT_BIN="prebuilts/clang/host/linux-x86/clang-$CLANG_VERSION/bin"
+      MSM_ARCH={target}
 
       # Stub out append_cmd
       append_cmd() {{
         :
       }}
       export -f append_cmd
-
-      source "{kernel_build_config}"
 
       if [ -n "$CLANG_VERSION" ]; then
         export PATH="${{ROOT_DIR}}/prebuilts/clang/host/linux-x86/clang-${{CLANG_VERSION}}/bin:${{PATH}}"
@@ -69,7 +67,7 @@ def _abl_impl(ctx):
         find "${{ABL_OUT_DIR}}" -type d -name "abl-${{TARGET_BUILD_VARIANT}}" -exec cp -ar {{}} "$ABL_IMAGE_DIR" \\;
       }}
     """.format(
-        kernel_build_config = ctx.file.kernel_build_config.path,
+        target = ctx.attr.msm_target,
         clang_version = ctx.attr.clang_version,
     )
 
@@ -164,7 +162,6 @@ abl = rule(
           ```
           glob(["**"])
           ```
-        kernel_build_config: Label referring to the kernel build.config
         abl_build_config: ABL build config
         extra_function_snippets: list of additional shell functions to define at the top of
           the build script
@@ -184,16 +181,14 @@ abl = rule(
             mandatory = True,
             allow_files = True,
         ),
+        "msm_target": attr.string(),
         "deps": attr.label_list(),
-        "kernel_build_config": attr.label(
-            allow_single_file = True,
-        ),
         "abl_build_config": attr.string(),
         "target_build_variant": attr.label(default = ":target_build_variant"),
         "extra_function_snippets": attr.string_list(),
         "extra_post_gen_snippets": attr.string_list(),
         "extra_build_configs": attr.string_list(),
-        "clang_version": attr.string()
+        "clang_version": attr.string(),
     },
     toolchains = [
         hermetic_toolchain.type,
@@ -213,8 +208,8 @@ def define_abl(msm_target, variant):
     clang_version = VARS["CLANG_VERSION"]
     extra_deps = ["//prebuilts/clang/host/linux-x86/clang-{}:binaries".format(clang_version)]
 
-    kernel_build_config = "//msm-kernel:{}_build_config_bazel".format(target)
     abl_build_config = "build.config.msm.{}".format(msm_target.replace("-", "."))
+
     # Use "{}.lxc" config if its a non-GKI target/variant combination
     if msm_target == "gen4auto":
         if variant == "perf-defconfig" or variant == "debug-defconfig":
@@ -222,11 +217,11 @@ def define_abl(msm_target, variant):
 
     abl(
         name = "{}_abl".format(target),
-        kernel_build_config = kernel_build_config,
+        msm_target = msm_target,
         abl_build_config = abl_build_config,
         srcs = native.glob(
             ["**"],
-            exclude=[
+            exclude = [
                 "**/*.pyc",
                 "**/__pycache__/**",
                 "Conf/BuildEnv.sh",
