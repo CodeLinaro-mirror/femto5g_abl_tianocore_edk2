@@ -12,6 +12,9 @@
 #include "Secretkeeper.h"
 
 #define CAppClient_UID 0x97U
+// CBOR response header that needs to be ignored until the start of the
+// COSE public key.
+#define CosePubKeyDeserializeOffset 8
 
 // Global handle to secretkeeper TA
 static Object AppObj = Object_NULL;
@@ -129,7 +132,7 @@ out_success:
 /* Get public key from TA */
 EFI_STATUS
 SecretkeeperGetCosePublicKey (UINT8 *CosePubKey, UINT32 CosePubKeyLen,
-                              UINT32 *CosePubKeyLenOut)
+                              UINT32 *RspLenOut, UINT32 *Offset)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   /* CBOR encoded request for GetIdentity Request */
@@ -153,7 +156,8 @@ SecretkeeperGetCosePublicKey (UINT8 *CosePubKey, UINT32 CosePubKeyLen,
            Status));
   }
 
-  *CosePubKeyLenOut = LenOut;
+  *RspLenOut = LenOut;
+  *Offset = CosePubKeyDeserializeOffset;
 
   return Status;
 }

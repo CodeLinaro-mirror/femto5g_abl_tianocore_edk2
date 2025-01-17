@@ -13,8 +13,11 @@
 EFI_STATUS
 SecretkeeperStartApp (VOID);
 
+// This returns a CBOR encoded Cose Public Key with the COSE key material
+// Offset: This is the response header size that has to be skipped to identify
+// the start of the COSE Public key,
 EFI_STATUS
 SecretkeeperGetCosePublicKey (UINT8 *CosePubKey, UINT32 CosePubKeyLen,
-                              UINT32 *CosePubKeyLenOut);
+                              UINT32 *RspLenOut, UINT32 *Offset);
 
 #endif
