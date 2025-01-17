@@ -30,7 +30,7 @@
 #/*
 # * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
 # *
-# * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 # * SPDX-License-Identifier: BSD-3-Clause-Clear
 #*/
 
@@ -263,4 +263,5 @@
 			AesLib|QcomModulePkg/Library/aes/AesLib.inf
 			UbsanLib|QcomModulePkg/Library/UbsanLib/UbsanLib.inf
 			Lz4Lib|QcomModulePkg/Library/lz4/lib/Lz4Lib.inf
+			SecretkeeperLib|QcomModulePkg/Library/Secretkeeper/Secretkeeper.inf
 	}
