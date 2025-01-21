@@ -99,7 +99,7 @@
 #define PLATFORM_FOUNDRY_SHIFT 16
 #define PLATFORM_PACKAGE_SHIFT 24
 #define PLATFORM_SOFTSKU_SHIFT 26
-#define DTBO_MAX_SIZE_ALLOWED (24 * 1024 * 1024)
+#define DTBO_MAX_SIZE_ALLOWED (128 * 1024 * 1024)
 #define SOC_MASK (0xffff)
 #define VARIANT_MASK (0x000000ff)
 #define VARIANT_MINOR_MASK (0x0000ff00)
@@ -116,6 +116,12 @@
 #define OEM_ID_SHIFT 24
 #define DDR_MASK (0x00000700)
 #define BOOT_DEVICE_MASK (0x000f0000)
+#define OEMID_MASK1 24
+#define OEMID_MASK2 8
+#define REVERSE_32_BITS(num) ( ((num & 0xFF000000) >> OEMID_MASK1) \
+                   | ((num & 0x00FF0000) >> OEMID_MASK2) \
+                   | ((num & 0x0000FF00) << OEMID_MASK2) \
+                   | ((num & 0x000000FF) << OEMID_MASK1) )
 
 typedef enum {
   NONE_MATCH,
