@@ -3193,6 +3193,7 @@ CmdContinue (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
   BootInfo Info = {0};
 
   Info.MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
+  Info.BootReason = FASTBOOT_MODE;
   Status = LoadImageAndAuth (&Info, FALSE, FALSE);
   if (Status != EFI_SUCCESS) {
     AsciiSPrint (Resp, sizeof (Resp), "Failed to load image from partition: %r",
@@ -3413,6 +3414,7 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   Info.Images[0].Name = "boot";
   Info.NumLoadedImages = 1;
   Info.MultiSlotBoot = PartitionHasMultiSlot (L"boot");
+  Info.BootReason = FASTBOOT_MODE;
 
   if (Info.MultiSlotBoot) {
     Status = ClearUnbootable ();

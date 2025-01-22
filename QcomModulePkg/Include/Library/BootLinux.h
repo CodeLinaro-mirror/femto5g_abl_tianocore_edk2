@@ -192,6 +192,7 @@ typedef struct BootInfo {
   VOID *VBData;
   UINT32 HeaderVersion;
   BOOLEAN HasBootInitRamdisk;
+  UINT32 BootReason;
 } BootInfo;
 
 typedef struct BootLinuxParamlist {
@@ -241,6 +242,8 @@ typedef struct BootLinuxParamlist {
   //Kernel size rounded off based on the page size
   UINT32 KernelSizeActual;
   UINT32 FinalBootConfigLen;
+
+  UINT32 BootReason;
 
   CHAR8 *FinalCmdLine;
   CHAR8 *FinalBootConfig;
