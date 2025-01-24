@@ -67,8 +67,6 @@ endif
 MODULE_SRCS += $(addprefix $(LOCAL_DIR)/,$(LOCAL_SRC_FILES))
 MODULE_SRCS += $(addprefix $(LOCAL_DIR)/,$(LOCAL_SRC_FILES_$(ARCH)))
 
-MODULE_INCLUDES += $(LOCAL_DIR)/src/crypto
-
 MODULE_EXPORT_INCLUDES += $(LOCAL_DIR)/src/include
 
 include trusty/user/base/lib/openssl-stubs/openssl-stubs-inc.mk
