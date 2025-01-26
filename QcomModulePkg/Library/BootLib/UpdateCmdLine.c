@@ -184,6 +184,11 @@ STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 STATIC CONST CHAR8 *EnableIpcLoggingCmdLine = " qcom_ipc_logging.enabled=1";
 
+#ifdef ENABLE_BOOT_REASON_BOOTPARAM
+#define MAX_BOOT_REASON_CMD_LINE 64
+STATIC CHAR8 BootReasonCmdLine[MAX_BOOT_REASON_CMD_LINE];
+#endif
+
 LIST_ENTRY *BootConfigListHead = NULL;
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
@@ -1085,6 +1090,13 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
+#ifdef ENABLE_BOOT_REASON_BOOTPARAM
+  if (BootParamlistPtr->BootReason) {
+    Src = BootReasonCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+#endif
+
   return EFI_SUCCESS;
 }
 CHAR8* RemoveSpace (CHAR8* param, UINT32 ParamLen)
@@ -1813,6 +1825,14 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, 
                     (CHAR16 *)SWAP_PARTITION_NAME);
   }
+
+#ifdef ENABLE_BOOT_REASON_BOOTPARAM
+  if (BootParamlistPtr->BootReason) {
+    AsciiSPrint (BootReasonCmdLine, sizeof (BootReasonCmdLine),
+                 " qcom-reboot-reason.reason=%d", BootParamlistPtr->BootReason);
+    CmdLineLen += AsciiStrLen (BootReasonCmdLine);
+  }
+#endif
 
   Param.Recovery = Recovery;
   Param.MultiSlotBoot = MultiSlotBoot;

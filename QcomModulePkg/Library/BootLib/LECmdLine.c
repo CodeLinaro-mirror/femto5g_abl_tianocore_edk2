@@ -32,6 +32,7 @@
 #include "LECmdLine.h"
 #include "Board.h"
 #include <Library/MemoryAllocationLib.h>
+#include "RecoveryInfo.h"
 
 /* verity command line related structures */
 #define MAX_VERITY_CMD_LINE 512
@@ -244,9 +245,13 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
     StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, (CONST CHAR16 *)L"system",
           StrLen ((CONST CHAR16 *)L"system"));
     if (MultiSlotBoot) {
-      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE,
-            GetCurrentSlotSuffix ().Suffix,
-            StrLen (GetCurrentSlotSuffix ().Suffix));
+      if (!IsRecoveryInfo () ||
+         (StrCmp (GetCurrentSlotSuffix ().Suffix, L"_a")) ||
+         (IsRecoveryInfoWithSlotA ())) {
+        StrnCatS (PartitionName, MAX_GPT_NAME_SIZE,
+        GetCurrentSlotSuffix ().Suffix,
+        StrLen (GetCurrentSlotSuffix ().Suffix));
+      }
       DEBUG ((EFI_D_VERBOSE, "Partition name:%s\n", PartitionName));
     }
     Index = GetPartitionIndex (PartitionName);

@@ -29,7 +29,7 @@
  /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -2342,11 +2342,12 @@ get_ptn_name:
 
   if (AVBVersion != AVB_LE) {
     DisplayVerifiedBootScreen (Info);
-    DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
+  }
+  DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
+  if (KeymasterEnabled) {
     Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Error sending milestone call to TZ\n"));
-      return Status;
     }
   }
   return Status;
