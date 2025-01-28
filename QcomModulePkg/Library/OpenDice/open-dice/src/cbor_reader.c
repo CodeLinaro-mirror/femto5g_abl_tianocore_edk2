@@ -13,11 +13,15 @@
 // the License.
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
+ * ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
+ * under the following license:
+ * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc.
+ * All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
  */
+
+#ifndef ENABLE_C_HEADER
 #include "../../opendice-util.h"
+#endif
 
 #include "dice/cbor_reader.h"
 
@@ -36,10 +40,10 @@ static bool CborReadWouldOverflow(size_t size, struct CborIn* in) {
   return size > SIZE_MAX - in->cursor || in->cursor + size > in->buffer_size;
 }
 
-static enum CborReadResult CborPeekIntialValueAndArgument(struct CborIn* in,
-                                                          uint8_t* size,
-                                                          enum CborType* type,
-                                                          uint64_t* val) {
+static enum CborReadResult CborPeekInitialValueAndArgument(struct CborIn* in,
+                                                           uint8_t* size,
+                                                           enum CborType* type,
+                                                           uint64_t* val) {
   uint8_t initial_byte;
   uint8_t additional_information;
   uint64_t value;
@@ -61,13 +65,13 @@ static enum CborReadResult CborPeekIntialValueAndArgument(struct CborIn* in,
     if (bytes == 2) {
       value |= in->buffer[in->cursor + 1];
     } else if (bytes == 3) {
-      value |= (uint16_t)in->buffer[in->cursor + 1] << 8;
-      value |= (uint16_t)in->buffer[in->cursor + 2];
+      value |= (uint64_t)in->buffer[in->cursor + 1] << 8;
+      value |= (uint64_t)in->buffer[in->cursor + 2];
     } else if (bytes == 5) {
-      value |= (uint32_t)in->buffer[in->cursor + 1] << 24;
-      value |= (uint32_t)in->buffer[in->cursor + 2] << 16;
-      value |= (uint32_t)in->buffer[in->cursor + 3] << 8;
-      value |= (uint32_t)in->buffer[in->cursor + 4];
+      value |= (uint64_t)in->buffer[in->cursor + 1] << 24;
+      value |= (uint64_t)in->buffer[in->cursor + 2] << 16;
+      value |= (uint64_t)in->buffer[in->cursor + 3] << 8;
+      value |= (uint64_t)in->buffer[in->cursor + 4];
     } else if (bytes == 9) {
       value |= (uint64_t)in->buffer[in->cursor + 1] << 56;
       value |= (uint64_t)in->buffer[in->cursor + 2] << 48;
@@ -93,7 +97,7 @@ static enum CborReadResult CborReadSize(struct CborIn* in, enum CborType type,
   enum CborType in_type;
   uint64_t raw;
   enum CborReadResult res =
-      CborPeekIntialValueAndArgument(in, &bytes, &in_type, &raw);
+      CborPeekInitialValueAndArgument(in, &bytes, &in_type, &raw);
   if (res != CBOR_READ_RESULT_OK) {
     return res;
   }
@@ -103,7 +107,7 @@ static enum CborReadResult CborReadSize(struct CborIn* in, enum CborType type,
   if (raw > SIZE_MAX) {
     return CBOR_READ_RESULT_MALFORMED;
   }
-  *size = raw;
+  *size = (size_t)raw;
   in->cursor += bytes;
   return CBOR_READ_RESULT_OK;
 }
@@ -131,7 +135,7 @@ static enum CborReadResult CborReadSimple(struct CborIn* in, uint8_t val) {
   enum CborType type;
   uint64_t raw;
   enum CborReadResult res =
-      CborPeekIntialValueAndArgument(in, &bytes, &type, &raw);
+      CborPeekInitialValueAndArgument(in, &bytes, &type, &raw);
   if (res != CBOR_READ_RESULT_OK) {
     return res;
   }
@@ -147,7 +151,7 @@ enum CborReadResult CborReadInt(struct CborIn* in, int64_t* val) {
   enum CborType type;
   uint64_t raw;
   enum CborReadResult res =
-      CborPeekIntialValueAndArgument(in, &bytes, &type, &raw);
+      CborPeekInitialValueAndArgument(in, &bytes, &type, &raw);
   if (res != CBOR_READ_RESULT_OK) {
     return res;
   }
@@ -166,7 +170,7 @@ enum CborReadResult CborReadUint(struct CborIn* in, uint64_t* val) {
   uint8_t bytes;
   enum CborType type;
   enum CborReadResult res =
-      CborPeekIntialValueAndArgument(in, &bytes, &type, val);
+      CborPeekInitialValueAndArgument(in, &bytes, &type, val);
   if (res != CBOR_READ_RESULT_OK) {
     return res;
   }
@@ -199,7 +203,7 @@ enum CborReadResult CborReadTag(struct CborIn* in, uint64_t* tag) {
   uint8_t bytes;
   enum CborType type;
   enum CborReadResult res =
-      CborPeekIntialValueAndArgument(in, &bytes, &type, tag);
+      CborPeekInitialValueAndArgument(in, &bytes, &type, tag);
   if (res != CBOR_READ_RESULT_OK) {
     return res;
   }
@@ -236,7 +240,7 @@ enum CborReadResult CborReadSkip(struct CborIn* in) {
     uint64_t val;
     enum CborReadResult res;
 
-    res = CborPeekIntialValueAndArgument(&peeker, &bytes, &type, &val);
+    res = CborPeekInitialValueAndArgument(&peeker, &bytes, &type, &val);
     if (res != CBOR_READ_RESULT_OK) {
       return res;
     }
@@ -257,7 +261,7 @@ enum CborReadResult CborReadSkip(struct CborIn* in) {
         continue;
       case CBOR_TYPE_BSTR:
       case CBOR_TYPE_TSTR:
-        if (CborReadWouldOverflow(val, &peeker)) {
+        if (val > SIZE_MAX || CborReadWouldOverflow((size_t)val, &peeker)) {
           return CBOR_READ_RESULT_END;
         }
         peeker.cursor += val;
@@ -284,7 +288,10 @@ enum CborReadResult CborReadSkip(struct CborIn* in) {
     if (stack_size == CBOR_READ_SKIP_STACK_SIZE) {
       return CBOR_READ_RESULT_MALFORMED;
     }
-    size_stack[stack_size++] = val;
+    if (val > SIZE_MAX) {
+      return CBOR_READ_RESULT_END;
+    }
+    size_stack[stack_size++] = (size_t)val;
   }
 
   in->cursor = peeker.cursor;

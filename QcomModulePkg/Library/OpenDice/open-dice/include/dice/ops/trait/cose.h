@@ -12,11 +12,20 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
+// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
+// under the following license:
+// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
+// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+
 #ifndef DICE_OPS_TRAIT_COSE_H_
 #define DICE_OPS_TRAIT_COSE_H_
 
 #include <dice/config.h>
 #include <dice/dice.h>
+#ifdef ENABLE_C_HEADER
+#include <stddef.h>
+#include <stdint.h>
+#endif
 
 // These functions may optionally be implemented by a COSE based integration.
 // They aren't directly depended on by the main DICE functions but provide
@@ -31,8 +40,9 @@ extern "C" {
 // kDiceResultBufferTooSmall is returned |encoded_size| will be set to the
 // required size of the buffer.
 DiceResult DiceCoseEncodePublicKey(
-    void* context, const uint8_t public_key[DICE_PUBLIC_KEY_SIZE],
-    size_t buffer_size, uint8_t* buffer, size_t* encoded_size);
+    void* context, DicePrincipal principal,
+    const uint8_t public_key[DICE_PUBLIC_KEY_BUFFER_SIZE], size_t buffer_size,
+    uint8_t* buffer, size_t* encoded_size);
 
 // Signs the payload and additional authenticated data, formatting the result
 // into a COSE_Sign1 structure. There are no unprotected attributes included in
@@ -45,7 +55,7 @@ DiceResult DiceCoseEncodePublicKey(
 DiceResult DiceCoseSignAndEncodeSign1(
     void* context, const uint8_t* payload, size_t payload_size,
     const uint8_t* aad, size_t aad_size,
-    const uint8_t private_key[DICE_PRIVATE_KEY_SIZE], size_t buffer_size,
+    const uint8_t private_key[DICE_PRIVATE_KEY_BUFFER_SIZE], size_t buffer_size,
     uint8_t* buffer, size_t* encoded_size);
 
 #ifdef __cplusplus

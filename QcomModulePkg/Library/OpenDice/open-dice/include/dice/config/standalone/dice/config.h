@@ -12,15 +12,21 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-#ifndef DICE_CONFIG_H_
-#define DICE_CONFIG_H_
+// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
+// under the following license:
+// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
+// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+
+#ifndef DICE_CONFIG_STANDALONE_DICE_CONFIG_H_
+#define DICE_CONFIG_STANDALONE_DICE_CONFIG_H_
 
 // The standalone config is only used for testing. In particular, it is used
 // for tests that focus on the core aspects of the library and not the ops.
 // These value aren't yet used meaningfully in such tests so are given
 // placeholder values.
-#define DICE_PUBLIC_KEY_SIZE 1
-#define DICE_PRIVATE_KEY_SIZE 1
-#define DICE_SIGNATURE_SIZE 1
+#define DICE_PUBLIC_KEY_BUFFER_SIZE 1
+#define DICE_PRIVATE_KEY_BUFFER_SIZE 1
+#define DICE_SIGNATURE_BUFFER_SIZE 1
+#define DICE_PROFILE_NAME NULL
 
-#endif  // DICE_DICE_CONFIG_H_
+#endif  // DICE_CONFIG_STANDALONE_DICE_CONFIG_H_

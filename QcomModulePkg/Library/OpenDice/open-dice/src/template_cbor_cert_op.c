@@ -35,17 +35,25 @@
 //   * authority_descriptor_size must be zero
 //   * config_type must be kDiceConfigTypeInline
 
+// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
+// under the following license:
+// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
+// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+
+#ifdef ENABLE_C_HEADER
 #include <stdint.h>
 #include <string.h>
+#endif
 
 #include "dice/dice.h"
 #include "dice/ops.h"
+#include "dice/profile_name.h"
 #include "dice/utils.h"
 
-#if DICE_PUBLIC_KEY_SIZE != 32
+#if DICE_PUBLIC_KEY_BUFFER_SIZE != 32
 #error "Only Ed25519 is supported; 32 bytes needed to store the public key."
 #endif
-#if DICE_SIGNATURE_SIZE != 64
+#if DICE_SIGNATURE_BUFFER_SIZE != 64
 #error "Only Ed25519 is supported; 64 bytes needed to store the signature."
 #endif
 
@@ -164,10 +172,16 @@ DiceResult DiceGenerateCertificate(
     uint8_t* certificate, size_t* certificate_actual_size) {
   DiceResult result = kDiceResultOk;
 
+  DiceKeyParam key_param;
+  result = DiceGetKeyParam(context, kDicePrincipalSubject, &key_param);
+  if (result != kDiceResultOk) {
+    goto out;
+  }
+
   // Variable length descriptors are not supported.
   if (input_values->code_descriptor_size > 0 ||
       input_values->config_type != kDiceConfigTypeInline ||
-      input_values->authority_descriptor_size > 0) {
+      input_values->authority_descriptor_size > 0 || DICE_PROFILE_NAME) {
     return kDiceResultInvalidInput;
   }
 
@@ -178,20 +192,21 @@ DiceResult DiceGenerateCertificate(
   }
 
   // Declare buffers which are cleared on 'goto out'.
-  uint8_t subject_private_key[DICE_PRIVATE_KEY_SIZE];
-  uint8_t authority_private_key[DICE_PRIVATE_KEY_SIZE];
+  uint8_t subject_private_key[DICE_PRIVATE_KEY_BUFFER_SIZE];
+  uint8_t authority_private_key[DICE_PRIVATE_KEY_BUFFER_SIZE];
 
   // Derive keys and IDs from the private key seeds.
-  uint8_t subject_public_key[DICE_PUBLIC_KEY_SIZE];
-  result = DiceKeypairFromSeed(context, subject_private_key_seed,
-                               subject_public_key, subject_private_key);
+  uint8_t subject_public_key[DICE_PUBLIC_KEY_BUFFER_SIZE];
+  result = DiceKeypairFromSeed(context, kDicePrincipalSubject,
+                               subject_private_key_seed, subject_public_key,
+                               subject_private_key);
   if (result != kDiceResultOk) {
     goto out;
   }
 
   uint8_t subject_id[DICE_ID_SIZE];
   result = DiceDeriveCdiCertificateId(context, subject_public_key,
-                                      DICE_PUBLIC_KEY_SIZE, subject_id);
+                                      DICE_PUBLIC_KEY_BUFFER_SIZE, subject_id);
   if (result != kDiceResultOk) {
     goto out;
   }
@@ -199,16 +214,17 @@ DiceResult DiceGenerateCertificate(
   DiceHexEncode(subject_id, sizeof(subject_id), subject_id_hex,
                 sizeof(subject_id_hex));
 
-  uint8_t authority_public_key[DICE_PUBLIC_KEY_SIZE];
-  result = DiceKeypairFromSeed(context, authority_private_key_seed,
-                               authority_public_key, authority_private_key);
+  uint8_t authority_public_key[DICE_PUBLIC_KEY_BUFFER_SIZE];
+  result = DiceKeypairFromSeed(context, kDicePrincipalAuthority,
+                               authority_private_key_seed, authority_public_key,
+                               authority_private_key);
   if (result != kDiceResultOk) {
     goto out;
   }
 
   uint8_t authority_id[DICE_ID_SIZE];
-  result = DiceDeriveCdiCertificateId(context, authority_public_key,
-                                      DICE_PUBLIC_KEY_SIZE, authority_id);
+  result = DiceDeriveCdiCertificateId(
+      context, authority_public_key, DICE_PUBLIC_KEY_BUFFER_SIZE, authority_id);
   if (result != kDiceResultOk) {
     goto out;
   }
@@ -235,7 +251,7 @@ DiceResult DiceGenerateCertificate(
          &certificate[kFieldTable[kFieldIndexPayload].offset],
          kFieldTable[kFieldIndexPayload].length);
 
-  uint8_t signature[DICE_SIGNATURE_SIZE];
+  uint8_t signature[DICE_SIGNATURE_BUFFER_SIZE];
   result =
       DiceSign(context, tbs, sizeof(tbs), authority_private_key, signature);
   if (result != kDiceResultOk) {
