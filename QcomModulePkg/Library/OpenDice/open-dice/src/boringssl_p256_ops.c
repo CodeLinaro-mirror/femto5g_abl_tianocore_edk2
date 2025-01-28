@@ -1,4 +1,4 @@
-// Copyright 2022 Google LLC
+// Copyright 2024 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not
 // use this file except in compliance with the License. You may obtain a copy of
@@ -12,12 +12,12 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// This is an implementation of P-384 signature operations using boringssl.
+// This is an implementation of P-256 signature operations using boringssl.
 
 // ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
 // under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+// Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #ifdef ENABLE_C_HEADER
 #include <stdint.h>
@@ -32,14 +32,14 @@
 #if DICE_PRIVATE_KEY_SEED_SIZE != 32
 #error "Private key seed is expected to be 32 bytes."
 #endif
-#if DICE_PUBLIC_KEY_BUFFER_SIZE != 96
-#error "This P-384 implementation needs 96 bytes to store the public key."
+#if DICE_PUBLIC_KEY_BUFFER_SIZE != 64
+#error "This P-256 implementation needs 64 bytes to store the public key."
 #endif
-#if DICE_PRIVATE_KEY_BUFFER_SIZE != 48
-#error "P-384 needs 48 bytes for the private key."
+#if DICE_PRIVATE_KEY_BUFFER_SIZE != 32
+#error "P-256 needs 32 bytes for the private key."
 #endif
-#if DICE_SIGNATURE_BUFFER_SIZE != 96
-#error "P-384 needs 96 bytes to store the signature."
+#if DICE_SIGNATURE_BUFFER_SIZE != 64
+#error "P-256 needs 64 bytes to store the signature."
 #endif
 
 DiceResult DiceGetKeyParam(void* context_not_used,
@@ -51,8 +51,8 @@ DiceResult DiceGetKeyParam(void* context_not_used,
   key_param->signature_size = DICE_SIGNATURE_BUFFER_SIZE;
 
   key_param->cose_key_type = kCoseKeyKtyEc2;
-  key_param->cose_key_algorithm = kCoseAlgEs384;
-  key_param->cose_key_curve = kCoseCrvP384;
+  key_param->cose_key_algorithm = kCoseAlgEs256;
+  key_param->cose_key_curve = kCoseCrvP256;
   return kDiceResultOk;
 }
 
@@ -63,7 +63,7 @@ DiceResult DiceKeypairFromSeed(
     uint8_t private_key[DICE_PRIVATE_KEY_BUFFER_SIZE]) {
   (void)context_not_used;
   (void)principal_not_used;
-  if (1 == P384KeypairFromSeed(public_key, private_key, seed)) {
+  if (1 == P256KeypairFromSeed(public_key, private_key, seed)) {
     return kDiceResultOk;
   }
   return kDiceResultPlatformError;
@@ -74,7 +74,7 @@ DiceResult DiceSign(void* context_not_used, const uint8_t* message,
                     const uint8_t private_key[DICE_PRIVATE_KEY_BUFFER_SIZE],
                     uint8_t signature[DICE_SIGNATURE_BUFFER_SIZE]) {
   (void)context_not_used;
-  if (1 == P384Sign(signature, message, message_size, private_key)) {
+  if (1 == P256Sign(signature, message, message_size, private_key)) {
     return kDiceResultOk;
   }
   return kDiceResultPlatformError;
@@ -85,7 +85,7 @@ DiceResult DiceVerify(void* context_not_used, const uint8_t* message,
                       const uint8_t signature[DICE_SIGNATURE_BUFFER_SIZE],
                       const uint8_t public_key[DICE_PUBLIC_KEY_BUFFER_SIZE]) {
   (void)context_not_used;
-  if (1 == P384Verify(message, message_size, signature, public_key)) {
+  if (1 == P256Verify(message, message_size, signature, public_key)) {
     return kDiceResultOk;
   }
   return kDiceResultPlatformError;
