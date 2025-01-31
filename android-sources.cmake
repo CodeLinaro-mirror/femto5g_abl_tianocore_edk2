@@ -175,6 +175,7 @@ set(crypto_sources
   ${BORINGSSL_ROOT}src/crypto/sha/sha512.cc
   ${BORINGSSL_ROOT}src/crypto/siphash/siphash.cc
   ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa.cc
+  ${BORINGSSL_ROOT}src/crypto/spake2plus/spake2plus.cc
   ${BORINGSSL_ROOT}src/crypto/stack/stack.cc
   ${BORINGSSL_ROOT}src/crypto/thread.cc
   ${BORINGSSL_ROOT}src/crypto/thread_none.cc
@@ -261,6 +262,8 @@ set(crypto_sources_asm
   ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_arm_asm.S
   ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx10-x86_64-apple.S
   ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx10-x86_64-linux.S
+  ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx2-x86_64-apple.S
+  ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx2-x86_64-linux.S
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-gcm-x86_64-apple.S
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-gcm-x86_64-linux.S
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-x86-apple.S
@@ -388,6 +391,7 @@ set(crypto_sources_asm
 )
 set(crypto_sources_nasm
   ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx10-x86_64-win.asm
+  ${BORINGSSL_ROOT}src/gen/bcm/aes-gcm-avx2-x86_64-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-gcm-x86_64-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-x86-win.asm
   ${BORINGSSL_ROOT}src/gen/bcm/aesni-x86_64-win.asm
@@ -554,6 +558,7 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/self_test.cc
   ${BORINGSSL_ROOT}src/crypto/siphash/siphash_test.cc
   ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa_test.cc
+  ${BORINGSSL_ROOT}src/crypto/spake2plus/spake2plus_test.cc
   ${BORINGSSL_ROOT}src/crypto/stack/stack_test.cc
   ${BORINGSSL_ROOT}src/crypto/test/gtest_main.cc
   ${BORINGSSL_ROOT}src/crypto/thread_test.cc

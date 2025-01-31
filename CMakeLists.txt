@@ -88,6 +88,8 @@ set(
   src/crypto/poly1305/poly1305_arm_asm.S
   src/gen/bcm/aes-gcm-avx10-x86_64-apple.S
   src/gen/bcm/aes-gcm-avx10-x86_64-linux.S
+  src/gen/bcm/aes-gcm-avx2-x86_64-apple.S
+  src/gen/bcm/aes-gcm-avx2-x86_64-linux.S
   src/gen/bcm/aesni-gcm-x86_64-apple.S
   src/gen/bcm/aesni-gcm-x86_64-linux.S
   src/gen/bcm/aesni-x86-apple.S
@@ -218,6 +220,7 @@ set(
   CRYPTO_SOURCES_NASM
 
   src/gen/bcm/aes-gcm-avx10-x86_64-win.asm
+  src/gen/bcm/aes-gcm-avx2-x86_64-win.asm
   src/gen/bcm/aesni-gcm-x86_64-win.asm
   src/gen/bcm/aesni-x86-win.asm
   src/gen/bcm/aesni-x86_64-win.asm
@@ -421,6 +424,7 @@ add_library(
   src/crypto/sha/sha512.cc
   src/crypto/siphash/siphash.cc
   src/crypto/slhdsa/slhdsa.cc
+  src/crypto/spake2plus/spake2plus.cc
   src/crypto/stack/stack.cc
   src/crypto/thread.cc
   src/crypto/thread_none.cc
