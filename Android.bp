@@ -770,6 +770,24 @@ rust_bindgen {
         "com.android.configinfrastructure",
         "com.android.virt",
     ],
+    handle_static_inline: true,
+    static_inline_library: "libbssl_sys_raw_staticfns",
+}
+
+cc_library_static {
+    name: "libbssl_sys_raw_staticfns",
+    srcs: [":libbssl_sys_raw"],
+    include_dirs: ["."],
+    local_include_dirs: ["include/"],
+    host_supported: true,
+    vendor_available: true,
+    product_available: true,
+    min_sdk_version: "29",
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.configinfrastructure",
+        "com.android.virt",
+    ],
 }
 
 rust_bindgen {
@@ -787,6 +805,19 @@ rust_bindgen {
     apex_available: [
         "com.android.virt",
     ],
+    handle_static_inline: true,
+    whole_static_libs: ["libcrypto_baremetal"],
+    static_inline_library: "libbssl_sys_raw_nostd_staticfns",
+}
+
+cc_library_static {
+    name: "libbssl_sys_raw_nostd_staticfns",
+    srcs: [":libbssl_sys_raw_nostd"],
+    include_dirs: ["."],
+    local_include_dirs: ["include/"],
+    apex_available: [
+        "com.android.virt",
+    ],
 }
 
 // Encapsulate the bindgen-generated layout tests as a test target.
@@ -800,57 +831,6 @@ rust_test {
     auto_gen_config: true,
     clippy_lints: "none",
     lints: "none",
-}
-
-// Rust's bindgen doesn't cope with macros, so this target includes C functions that
-// do the same thing as macros defined in BoringSSL header files.
-cc_library_static {
-    name: "libbssl_rust_support",
-    host_supported: true,
-    defaults: ["boringssl_flags"],
-    srcs: ["src/rust/bssl-sys/rust_wrapper.c"],
-    shared_libs: [
-        "libcrypto",
-        "libssl",
-    ],
-    min_sdk_version: "29",
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.configinfrastructure",
-        "com.android.virt",
-    ],
-
-    // b/336916369: This library gets linked into a rust rlib.  Disable LTO
-    // until cross-language lto is supported.
-    lto: {
-        never: true,
-    },
-}
-
-cc_library_static {
-    name: "libbssl_rust_support_baremetal",
-    defaults: ["boringssl_flags_baremetal"],
-    srcs: ["src/rust/bssl-sys/rust_wrapper.c"],
-    static_libs: [
-        "libcrypto_baremetal",
-        "libssl_baremetal",
-    ],
-
-    // b/336916369: This library gets linked into a rust rlib.  Disable LTO
-    // until cross-language lto is supported.
-    lto: {
-        never: true,
-    },
-}
-
-cc_library_host_static {
-    name: "libbssl_rust_support_static",
-    defaults: ["boringssl_flags"],
-    srcs: ["src/rust/bssl-sys/rust_wrapper.c"],
-    whole_static_libs: [
-        "libcrypto_static",
-        "libssl_static",
-    ],
 }
 
 rust_defaults {
@@ -871,6 +851,12 @@ rust_defaults {
         "libcrypto",
         "libssl",
     ],
+
+    // Because the bindgen bindings are src included,
+    // we need to redeclare the staticfns dependency
+    whole_static_libs: [
+        "libbssl_sys_raw_staticfns",
+    ],
     vendor_available: true,
     product_available: true,
 }
@@ -878,25 +864,21 @@ rust_defaults {
 rust_library_rlib {
     name: "libbssl_sys",
     defaults: ["libbssl_sys_defaults"],
-    whole_static_libs: [
-        "libbssl_rust_support",
-    ],
     min_sdk_version: "29",
     apex_available: [
         "//apex_available:platform",
         "com.android.configinfrastructure",
         "com.android.virt",
     ],
-    cfgs: ["unsupported_inline_wrappers"],
 }
 
 rust_library_host_rlib {
     name: "libbssl_sys_static",
     defaults: ["libbssl_sys_defaults"],
     whole_static_libs: [
-        "libbssl_rust_support_static",
+        "libcrypto_static",
+        "libssl_static",
     ],
-    cfgs: ["unsupported_inline_wrappers"],
 }
 
 genrule {
@@ -922,10 +904,11 @@ rust_library_rlib {
         "libcompiler_builtins.rust_sysroot",
         "libcore.rust_sysroot",
     ],
+    // Because the bindgen bindings are src included,
+    // we need to redeclare the staticfns dependency
     whole_static_libs: [
-        "libbssl_rust_support_baremetal",
+        "libbssl_sys_raw_nostd_staticfns",
     ],
-    cfgs: ["unsupported_inline_wrappers"],
 }
 
 // High-level Rust crate `bssl-crypto`
