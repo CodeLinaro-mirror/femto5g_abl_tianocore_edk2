@@ -788,6 +788,11 @@ cc_library_static {
         "com.android.configinfrastructure",
         "com.android.virt",
     ],
+    // b/336916369: This library gets linked into a rust rlib.  Disable LTO
+    // until cross-language lto is supported.
+    lto: {
+        never: true,
+    },
 }
 
 rust_bindgen {
