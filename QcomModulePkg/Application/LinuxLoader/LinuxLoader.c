@@ -484,6 +484,7 @@ flashless_boot:
     Info.FlashlessBoot = FlashlessBoot;
     Info.NetworkBoot = NetworkBoot;
     Info.SilentBootMode = SilentBootMode;
+    Info.BootReason = BootReason;
   #if HIBERNATION_SUPPORT_NO_AES
     BootIntoHibernationImage (&Info, &SetRotAndBootState);
   #endif
