@@ -839,7 +839,7 @@ rust_test {
 }
 
 rust_defaults {
-    name: "libbssl_sys_defaults",
+    name: "libbssl_sys_static_defaults",
     host_supported: true,
     crate_name: "bssl_sys",
     visibility: [
@@ -852,11 +852,6 @@ rust_defaults {
         "src/rust/bssl-sys/src/lib.rs",
         ":libbssl_sys_raw",
     ],
-    shared_libs: [
-        "libcrypto",
-        "libssl",
-    ],
-
     // Because the bindgen bindings are src included,
     // we need to redeclare the staticfns dependency
     whole_static_libs: [
@@ -864,6 +859,15 @@ rust_defaults {
     ],
     vendor_available: true,
     product_available: true,
+}
+
+rust_defaults {
+    name: "libbssl_sys_defaults",
+    defaults: ["libbssl_sys_static_defaults"],
+    shared_libs: [
+        "libssl",
+        "libcrypto",
+    ],
 }
 
 rust_library_rlib {
@@ -879,7 +883,7 @@ rust_library_rlib {
 
 rust_library_host_rlib {
     name: "libbssl_sys_static",
-    defaults: ["libbssl_sys_defaults"],
+    defaults: ["libbssl_sys_static_defaults"],
     whole_static_libs: [
         "libcrypto_static",
         "libssl_static",
