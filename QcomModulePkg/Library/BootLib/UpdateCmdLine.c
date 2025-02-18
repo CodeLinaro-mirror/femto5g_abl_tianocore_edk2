@@ -33,7 +33,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -183,6 +183,11 @@ STATIC CONST CHAR8 *MovableNode = " movable_node";
 STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 STATIC CONST CHAR8 *EnableIpcLoggingCmdLine = " qcom_ipc_logging.enabled=1";
+
+#ifdef ENABLE_BOOT_REASON_BOOTPARAM
+#define MAX_BOOT_REASON_CMD_LINE 64
+STATIC CHAR8 BootReasonCmdLine[MAX_BOOT_REASON_CMD_LINE];
+#endif
 
 LIST_ENTRY *BootConfigListHead = NULL;
 EFI_STATUS
@@ -1085,7 +1090,31 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
+#ifdef ENABLE_BOOT_REASON_BOOTPARAM
+  if (BootParamlistPtr->BootReason) {
+    Src = BootReasonCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+#endif
+
   return EFI_SUCCESS;
+}
+CONST CHAR8* Remove_Verity (CONST CHAR8 *cmdline)
+{
+    CHAR8 *Verity_Start = AsciiStrStr (cmdline, "verity=\"");
+    if (Verity_Start) {
+      CHAR8 *Verity_end = AsciiStrStr (Verity_Start + 8, "\"");
+      if (Verity_end) {
+        UINTN Remaining_length = AsciiStrLen (Verity_end);
+        CHAR8 *temp = AllocateZeroPool (Remaining_length + 1);
+        if (temp) {
+          AsciiStrCpy (temp, Verity_end);
+          AsciiStrCpy (Verity_Start + 8, temp);
+          FreePool (temp);
+        }
+      }
+    }
+    return cmdline;
 }
 CHAR8* RemoveSpace (CHAR8* param, UINT32 ParamLen)
 {
@@ -1370,7 +1399,13 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
       if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "Failed to get LEVerityCmdLine: %r\n", Status));
       }
-      CmdLineLen += LEVerityCmdLineLen;
+      else {
+        CmdLineLen += LEVerityCmdLineLen;
+        /* Remove the Verity arguments from cmdline
+         * after dm-verity command line construction
+         */
+        Remove_Verity (CmdLine);
+      }
     }
   }
 
@@ -1813,6 +1848,14 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, 
                     (CHAR16 *)SWAP_PARTITION_NAME);
   }
+
+#ifdef ENABLE_BOOT_REASON_BOOTPARAM
+  if (BootParamlistPtr->BootReason) {
+    AsciiSPrint (BootReasonCmdLine, sizeof (BootReasonCmdLine),
+                 " qcom-reboot-reason.reason=%d", BootParamlistPtr->BootReason);
+    CmdLineLen += AsciiStrLen (BootReasonCmdLine);
+  }
+#endif
 
   Param.Recovery = Recovery;
   Param.MultiSlotBoot = MultiSlotBoot;
