@@ -33,7 +33,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -1099,6 +1099,23 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
 
   return EFI_SUCCESS;
 }
+CONST CHAR8* Remove_Verity (CONST CHAR8 *cmdline)
+{
+    CHAR8 *Verity_Start = AsciiStrStr (cmdline, "verity=\"");
+    if (Verity_Start) {
+      CHAR8 *Verity_end = AsciiStrStr (Verity_Start + 8, "\"");
+      if (Verity_end) {
+        UINTN Remaining_length = AsciiStrLen (Verity_end);
+        CHAR8 *temp = AllocateZeroPool (Remaining_length + 1);
+        if (temp) {
+          AsciiStrCpy (temp, Verity_end);
+          AsciiStrCpy (Verity_Start + 8, temp);
+          FreePool (temp);
+        }
+      }
+    }
+    return cmdline;
+}
 CHAR8* RemoveSpace (CHAR8* param, UINT32 ParamLen)
 {
     UINT32 Iter, NewIter;
@@ -1382,7 +1399,13 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
       if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "Failed to get LEVerityCmdLine: %r\n", Status));
       }
-      CmdLineLen += LEVerityCmdLineLen;
+      else {
+        CmdLineLen += LEVerityCmdLineLen;
+        /* Remove the Verity arguments from cmdline
+         * after dm-verity command line construction
+         */
+        Remove_Verity (CmdLine);
+      }
     }
   }
 
