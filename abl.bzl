@@ -202,9 +202,6 @@ def define_abl_targets():
 def define_abl(msm_target, variant):
     target = msm_target + "_" + variant
 
-    if msm_target == "autogvm":
-        return
-
     clang_version = VARS["CLANG_VERSION"]
     extra_deps = ["//prebuilts/clang/host/linux-x86/clang-{}:binaries".format(clang_version)]
 
