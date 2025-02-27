@@ -130,12 +130,20 @@
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO
   GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\"
 
+  !ifdef $(FORCE_NO_PIE)
+  GCC:*_*_*_ARCHCC_FLAGS  =  -fno-PIE
+  GCC:*_*_*_DLINK_FLAGS = -Wl,--no-pie
+  !endif
+
   GCC:*_*_*_DLINK_FLAGS = $(CLANG_EXTRA_DLINK_FLAGS)
   !ifdef $(TARGET_AUDIO_FRAMEWORK)
   GCC:*_*_*_CC_FLAGS = -DAUDIO_FRAMEWORK='$(TARGET_AUDIO_FRAMEWORK)'
   !endif
   !if $(VERIFIED_BOOT_LE)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE
+  !endif
+  !if $(FORCE_NO_PIE)
+      GCC:*_*_*_CC_FLAGS = -DFORCE_NO_PIE
   !endif
   !if $(SUPPORT_AB_BOOT_LXC)
       GCC:*_*_*_CC_FLAGS = -DSUPPORT_AB_BOOT_LXC
@@ -176,6 +184,9 @@
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
+  !if $(VERITY_LE_ROOTHASH_SIGNED)
+      GCC:*_*_*_CC_FLAGS = -DVERITY_LE_ROOTHASH_SIGNED
+  !endif
   !if $(INTEGRITY_LE_IMA)
       GCC:*_*_*_CC_FLAGS = -DINTEGRITY_LE_IMA
   !endif
@@ -207,6 +218,9 @@
   !endif
   !if $(ENABLE_BOOT_DEVICE_BASED_DT_SELECTION) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_BOOT_DEVICE_BASED_DT_SELECTION
+  !endif
+  !if $(ENABLE_BOOT_REASON_BOOTPARAM) == 1
+      GCC:*_*_*_CC_FLAGS = -DENABLE_BOOT_REASON_BOOTPARAM
   !endif
   !if $(ENABLE_LV_ATOMIC_AB) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LV_ATOMIC_AB
