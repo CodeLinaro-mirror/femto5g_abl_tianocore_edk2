@@ -184,6 +184,9 @@
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
+  !if $(VERITY_LE_ROOTHASH_SIGNED)
+      GCC:*_*_*_CC_FLAGS = -DVERITY_LE_ROOTHASH_SIGNED
+  !endif
   !if $(INTEGRITY_LE_IMA)
       GCC:*_*_*_CC_FLAGS = -DINTEGRITY_LE_IMA
   !endif
