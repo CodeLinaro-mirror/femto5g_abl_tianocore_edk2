@@ -666,6 +666,9 @@ cc_test {
             test_suites: ["mts-conscrypt"],
         },
     },
+    visibility: [
+        "//platform_testing:__subpackages__",
+    ],
 }
 
 cc_test {
@@ -702,6 +705,9 @@ cc_test {
             test_suites: ["mts-conscrypt"],
         },
     },
+    visibility: [
+        "//platform_testing:__subpackages__",
+    ],
 }
 
 // Utility binary for CMVP on-site testing.
