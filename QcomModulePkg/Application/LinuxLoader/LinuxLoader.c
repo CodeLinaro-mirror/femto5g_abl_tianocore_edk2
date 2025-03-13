@@ -33,8 +33,7 @@
 /*
  *  Changes from Qualcomm Innovation Center are provided under the following license:
  *
- *  Copyright (c) 2022 - 2024 Qualcomm Innovation Center, Inc. All rights
- *  reserved.
+ *  Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -321,7 +320,8 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   /* check if it is NetworkBoot, FlashlessBoot or Fastboot */
   if (IsMultiBoot ()) {
     Val = GetBootDeviceType ();
-    if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
+    if (Val == EFI_EMMC_NETWORK_FLASH_TYPE ||
+        Val == EFI_SPI_NETWORK_FLASH_TYPE) {
       NetworkBootImageAddr = BASE_ADDRESS;
       NetworkBoot = TRUE;
       /* In Network boot avoid all access to secondary storage during boot */
