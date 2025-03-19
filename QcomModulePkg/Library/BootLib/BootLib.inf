@@ -30,7 +30,7 @@
 #/*
 # * Changes from Qualcomm Innovation Center are provided under the following license:
 # *
-# * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 # *
 # *  Redistribution and use in source and binary forms, with or without
 # *  modification, are permitted (subject to the limitations in the
@@ -81,6 +81,7 @@
 	GCC:*_*_*_CC_FLAGS = $(UBSAN_UEFI_GCC_FLAG_ALIGNMENT)
 	GCC:*_*_*_CC_FLAGS = $(PVMFW_BCC_ENABLED)
 	GCC:*_*_*_CC_FLAGS = $(PVMFW_USE_DUMMY_BCC)
+	GCC:*_*_*_CC_FLAGS = $(PVMFW_CONFIG_EXT)
 
 [Sources]
 	ShutdownServices.c
@@ -139,6 +140,7 @@
 	StackCanary
 	AvbLib
 	UbsanLib
+	SecretkeeperLib
 
 [LibraryClasses.AARCH64]
 	AesLib

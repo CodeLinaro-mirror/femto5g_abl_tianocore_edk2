@@ -29,40 +29,11 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
- /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/*
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the
+ * following license:
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include <Library/DeviceInfo.h>
@@ -87,6 +58,7 @@
 #include "libfdt.h"
 #include "Bootconfig.h"
 #include <ufdt_overlay.h>
+#include <Secretkeeper.h>
 
 #ifndef DISABLE_KERNEL_PROTOCOL
 #include <Protocol/EFIKernelInterface.h>
@@ -94,7 +66,13 @@
 
 #define HLOS_VMID   3
 #define RM_VMID     255
+#ifdef PVMFW_CONFIG_EXT
+#define PVMFW_CONFIG_MAX_BLOBS 4
+STATIC AvfProperty SkPubKey = {"secretkeeper_public_key", NULL, 0};
+#else
 #define PVMFW_CONFIG_MAX_BLOBS 2
+#endif
+#define MAX_VM_REF_DTB_SIZE 0x1000
 
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
@@ -1069,6 +1047,9 @@ CreatePvmFwConfig (PvmFwConfigHeader *Hdr, UINT32 *EntrySizes,
   Header.Magic = 0x666D7670;
   //version 1,0
   Header.Version = ((UINT32) 1 << 16) | (UINT32) 0;
+#ifdef PVMFW_CONFIG_EXT
+  Header.Version = ((UINT32) 1 << 16) | (UINT32) 2;
+#endif
   //Feature flags; currently reserved and must be zero.
   Header.Flags = 0;
   for (UINTN Index = 0 ; Index < NumEntries ; Index++ ) {
@@ -1082,6 +1063,34 @@ CreatePvmFwConfig (PvmFwConfigHeader *Hdr, UINT32 *EntrySizes,
   memcpy (Hdr, &Header, sizeof (Header));
 }
 
+#ifdef PVMFW_CONFIG_EXT
+// Create reference DTB blob to copy to PvmFw config data.
+STATIC EFI_STATUS
+CreateVmRefDtb (VOID *Fdt)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = fdt_create_empty_tree (Fdt, MAX_VM_REF_DTB_SIZE);
+  if (Status) {
+    DEBUG ((EFI_D_ERROR, "Failed to create VM reference DTB\n"));
+    return Status;
+  }
+
+  if (SkPubKey.Data != NULL &&
+        (SkPubKey.DataLen != 0)) {
+    Status = UpdateAvfNode (Fdt, &SkPubKey, FALSE);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR,
+             "Error: Failed to add update VM ref blob with SK key\n"));
+    }
+  } else {
+      DEBUG ((EFI_D_ERROR, "Error: Secretkeeper public key not available\n"));
+  }
+
+  return Status;
+}
+#endif
+
 STATIC EFI_STATUS
 AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   UINT8 *FinalEncodedBccArtifacts = NULL;
@@ -1090,6 +1099,10 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   PvmFwConfigHeader PvmFwCgfHdr = {0};
   size_t  BccArtifactsValidSize = 0;
   UINT8 Ret;
+  EFI_STATUS Status = EFI_SUCCESS;
+#ifdef PVMFW_CONFIG_EXT
+  CHAR8 *VmRefDtb = NULL;
+#endif
 
   //TODO: Ensure there is enough room to append config data.
 
@@ -1112,13 +1125,33 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
         );
   if (Ret != 0) {
     DEBUG ((EFI_D_ERROR, "BCC handover data generation failed\n"));
-    return EFI_FAILURE;
+    Status = EFI_FAILURE;
+    goto Free;
   }
   EntrySizes[0] = BccArtifactsValidSize;
 
   if (BootParamlistPtr->AvfDpDtboBaseAddr) {
     EntrySizes[1] = fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr);
   }
+
+#ifdef PVMFW_CONFIG_EXT
+  VmRefDtb = AllocateZeroPool (MAX_VM_REF_DTB_SIZE);
+  if (!VmRefDtb) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate memory for VM reference DTB\n"));
+    Status = EFI_OUT_OF_RESOURCES;
+    goto Free;
+  }
+
+  Ret = CreateVmRefDtb ((VOID *)VmRefDtb);
+  if (Ret) {
+    DEBUG ((EFI_D_ERROR, "Failed to create VM reference DTB\n"));
+    Status = EFI_FAILURE;
+    goto Free;
+  }
+
+  EntrySizes[2] = 0;
+  EntrySizes[3] = fdt_totalsize (VmRefDtb);
+#endif
 
   CreatePvmFwConfig (&PvmFwCgfHdr, EntrySizes, PVMFW_CONFIG_MAX_BLOBS);
   PvmFwCfgLoadAddr = (UINT8*)((((BootParamlistPtr->PvmFwLoadAddr +
@@ -1154,9 +1187,60 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
                            fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr));
   }
 
-  FreePool (FinalEncodedBccArtifacts);
+#ifdef PVMFW_CONFIG_EXT
+  if (PvmFwCgfHdr.Entries[3].Offset) {
+    gBS->CopyMem ((CHAR8 *)(PvmFwCfgLoadAddr + PvmFwCgfHdr.Entries[3].Offset),
+                            VmRefDtb, fdt_totalsize (VmRefDtb));
+  }
+#endif
 
-  return EFI_SUCCESS;
+Free:
+  if (FinalEncodedBccArtifacts) {
+    FreePool (FinalEncodedBccArtifacts);
+  }
+#ifdef PVMFW_CONFIG_EXT
+  if (VmRefDtb) {
+    FreePool (VmRefDtb);
+  }
+#endif
+
+  return Status;
+}
+#endif
+
+#ifdef PVMFW_CONFIG_EXT
+// Load the secretkeeper TA and get the public key.
+STATIC EFI_STATUS
+SetupSecretkeeperPublicKey (VOID) {
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 Offset = 0;
+  UINT8 PubKeyRsp[SK_MAX_PUB_KEY_SIZE];
+  UINT32 PubKeyRspLen = 0;
+
+  SetMem (PubKeyRsp, SK_MAX_PUB_KEY_SIZE, 0);
+  SkPubKey.Data = AllocateZeroPool (SK_MAX_PUB_KEY_SIZE);
+  if (!SkPubKey.Data) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate memory for Sk Pub Key\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  Status = SecretkeeperGetCosePublicKey (PubKeyRsp, SK_MAX_PUB_KEY_SIZE,
+                                         &PubKeyRspLen, &Offset);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR,
+           "Error: Failed to get public key from Secretkeeper\n"));
+    return Status;
+  }
+  if (!PubKeyRspLen) {
+    DEBUG ((EFI_D_ERROR, "Error: Secretkeeper public key has no length\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+  SkPubKey.DataLen = PubKeyRspLen - Offset;
+  gBS->CopyMem (SkPubKey.Data,
+                PubKeyRsp + Offset,
+                SkPubKey.DataLen);
+
+  return Status;
 }
 #endif
 
@@ -1250,6 +1334,14 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   RamdiskLoadAddr +=BootParamlistPtr->RamdiskSize;
 
 #ifdef PVMFW_BCC
+// Setting this up here as PVMFw config requires it.
+#ifdef PVMFW_CONFIG_EXT
+  Status = SetupSecretkeeperPublicKey ();
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error: Failed to add AVF data to host DT\n"));
+  }
+#endif
+
   PvmFwLoadAddr = BootParamlistPtr->PvmFwLoadAddr;
 
   /* Write pvmfw to golden region and register
@@ -1336,6 +1428,17 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
     DEBUG ((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
     return Status;
   }
+#ifdef PVMFW_CONFIG_EXT
+  Status = UpdateAvfNode ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
+                          &SkPubKey, TRUE);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error: Failed to add update HOST DT with SK key\n"));
+  }
+
+  if (SkPubKey.Data) {
+    FreePool (SkPubKey.Data);
+  }
+#endif
 
   return EFI_SUCCESS;
 }

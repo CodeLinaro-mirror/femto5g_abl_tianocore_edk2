@@ -27,39 +27,10 @@
 */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the
+ * following license:
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 /* Supporting function of UpdateDeviceTree()
@@ -84,6 +55,7 @@
 #define DEFAULT_CELL_SIZE 2
 #define NUM_RNG_SEED_WORDS 512
 #define NUM_RAMDUMP_PROP_ELEM   2
+#define MAX_AVF_DTB_SIZE 0x1000
 
 STATIC struct FstabNode FstabTable = {"/firmware/android/fstab", "dev",
                                       "/soc/"};
@@ -1354,7 +1326,6 @@ UpdateDeviceTree (VOID *fdt,
   UINT64 UpdateDTStartTime = GetTimerCountms ();
   UINT32 Index;
 
-
   /* Check the device tree header */
   ret = fdt_check_header (fdt) || fdt_check_header_ext (fdt);
   if (ret) {
@@ -1712,5 +1683,100 @@ UpdateFstabNode (VOID *fdt)
     FreePool (BootDevBuf);
   }
   BootDevBuf = NULL;
+  return Status;
+}
+
+/* Update device tree with avf and the reference nodes */
+EFI_STATUS
+UpdateAvfNode (VOID *fdt, AvfProperty *AvfData, BOOLEAN IsHost)
+{
+  EFI_STATUS Status = EFI_NOT_FOUND;
+  UINT32 PaddSize = 0;
+  INT32 Offset;
+
+  if (IsHost) {
+    DEBUG ((EFI_D_INFO, "Modifying Host Kernel DT to add AVF data\n"));
+  } else {
+    DEBUG ((EFI_D_INFO, "Modifying reference VM DT to add AVF data\n"));
+  }
+
+  /* Check the device tree header */
+  Status = fdt_check_header (fdt) ||
+        fdt_check_header_ext (fdt);
+  if (Status) {
+    DEBUG ((EFI_D_ERROR, "ERROR: Invalid device tree header ...\n"));
+    return EFI_NOT_FOUND;
+  }
+
+  /* Add padding to make space for new nodes and properties. */
+  PaddSize = ADD_OF (fdt_totalsize (fdt), MAX_AVF_DTB_SIZE);
+  if (!PaddSize) {
+    DEBUG ((EFI_D_ERROR, "ERROR: Integer Overflow: fdt size = %u\n",
+            fdt_totalsize (fdt)));
+    return EFI_BAD_BUFFER_SIZE;
+  }
+  Status = fdt_open_into (fdt, fdt, PaddSize);
+  if (Status != 0) {
+    DEBUG ((EFI_D_ERROR, "ERROR: Failed to move/resize dtb buffer ...\n"));
+    return EFI_BAD_BUFFER_SIZE;
+  }
+
+  Offset = fdt_path_offset (fdt, "/avf");
+  if (Offset < 0) {
+    Offset = fdt_path_offset (fdt, "/");
+    if (Offset < 0) {
+      DEBUG ((EFI_D_ERROR, "Error finding root offset\n"));
+      return Offset;
+    }
+    Offset = fdt_add_subnode_namelen (fdt, Offset, "avf", AsciiStrLen ("avf"));
+    if (Offset < 0) {
+      DEBUG ((EFI_D_ERROR, "Error adding avf node: %d\n", Offset));
+      return Offset;
+    }
+  } else {
+    DEBUG ((EFI_D_VERBOSE,
+         "Attempted to create a avf node which already exists\n"));
+  }
+
+  if (IsHost) {
+    Offset = fdt_path_offset (fdt, "/avf/reference");
+    if (Offset < 0) {
+      Offset = fdt_path_offset (fdt, "/avf");
+      Offset = fdt_add_subnode_namelen (fdt, Offset, "reference",
+                                        AsciiStrLen ("reference"));
+      if (Offset < 0) {
+        DEBUG ((EFI_D_ERROR, "Error adding reference node: %d\n", Offset));
+        return Offset;
+      }
+    } else {
+      DEBUG ((EFI_D_VERBOSE,
+         "Attempted to create a reference node which already exists\n"));
+    }
+
+    Offset = fdt_path_offset (fdt, "/avf/reference/avf");
+    if (Offset < 0) {
+      Offset = fdt_path_offset (fdt, "/avf/reference");
+      Offset = fdt_add_subnode_namelen (fdt, Offset, "avf",
+                                        AsciiStrLen ("avf"));
+      if (Offset < 0) {
+        DEBUG ((EFI_D_ERROR, "Error adding avf reference node: %d\n", Offset));
+        return Offset;
+      }
+    } else {
+      DEBUG ((EFI_D_VERBOSE,
+         "Attempted to create a avf reference node which already exists\n"));
+    }
+  }
+
+  Status = fdt_setprop (fdt, Offset, AvfData->PropertyName,
+                        AvfData->Data, AvfData->DataLen);
+  if (Status) {
+    DEBUG ((EFI_D_ERROR,
+            "Error setting sk public key property: %d\n", Status));
+    return Status;
+  }
+
+  fdt_pack (fdt);
+
   return Status;
 }
