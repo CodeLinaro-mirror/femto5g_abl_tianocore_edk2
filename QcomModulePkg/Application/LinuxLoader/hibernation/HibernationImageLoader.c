@@ -2347,11 +2347,11 @@ VOID BootIntoHibernationImage (BootInfo *Info,
          */
         *SetRotAndBootStateAndVBH = TRUE;
 
-        Status = KeyMasterFbeSetSeed ();
-        if (Status != EFI_SUCCESS) {
-                printf ("Failed to set seed for fbe : %r\n", Status);
-                goto err;
-        }
+        // Status = KeyMasterFbeSetSeed ();
+        // if (Status != EFI_SUCCESS) {
+        //        printf ("Failed to set seed for fbe : %r\n", Status);
+        //        goto err;
+       // }
 
         Ret = RestoreSnapshotImage ();
         if (Ret) {
