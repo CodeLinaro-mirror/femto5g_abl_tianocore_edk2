@@ -41,7 +41,7 @@ LocationDirective <- FileDirective / LocDirective
 FileDirective <- ".file" WS [^#\n]+
 LocDirective <- ".loc" WS [^#/\n]+
 Args <- Arg ((WS? ',' WS?) Arg)*
-Arg <- QuotedArg / [[0-9a-z%+\-*_@.]]*
+Arg <- QuotedArg / [[0-9a-z%+\-*_@.$]]*
 QuotedArg <- '"' QuotedText '"'
 QuotedText <- (EscapedChar / [^"])*
 LabelContainingDirective <- LabelContainingDirectiveName WS SymbolArgs
@@ -85,7 +85,7 @@ RegisterOrConstant <- (('%'[[A-Z]][[A-Z0-9]]*) /
                        ('#' '~'? '(' [0-9] WS? "<<" WS? [0-9] ')' ) /
                        ARMRegister)
                       ![fb:(+\-]
-ARMConstantTweak <- ((([us] "xt" [xwhb]) / "lsl" / "lsr" / "ror" / "asr") (WS '#' Offset)?) /
+ARMConstantTweak <- ((([us] "xt" [xwhb]) / "lsl" / "lsr" / "ror" / "asr" / "msl") (WS '#' Offset)?) /
                     "mul vl"  / # multiply offset by the hardware's vector length
                     "mul #" [0-9]
 ARMRegister <- "sp" /
