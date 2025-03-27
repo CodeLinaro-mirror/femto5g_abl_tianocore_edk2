@@ -2344,7 +2344,8 @@ get_ptn_name:
     DisplayVerifiedBootScreen (Info);
   }
   DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
-  if (KeymasterEnabled) {
+  if (KeymasterEnabled &&
+      !Info->FlashlessBoot) {
     Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Error sending milestone call to TZ\n"));
