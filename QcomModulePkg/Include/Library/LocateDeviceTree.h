@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -372,6 +372,18 @@ DeviceTreeValidate (UINT8 *DeviceTreeBuff,
                     UINT32 *DeviceTreeSize);
 INT32 GetDtboIdx (VOID);
 INT32 GetDtbIdx (VOID);
+VOID ReadBestPmicMatch (CONST CHAR8 *PmicProp, INT32 PmicMaxIdx,
+                    UINT32 PmicEntCount, PmicIdInfo *BestPmicInfo);
+EFI_STATUS GetPlatformMatchDtb (DtInfo * CurDtbInfo,
+                                       CONST CHAR8 *PlatProp,
+                                       INT32 LenPlatId,
+                                       INT32 MinPlatIdLen);
+EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
+                                    CONST CHAR8 *BoardProp,
+                                    INT32 LenBoardId);
+BOOLEAN
+ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch);
+
 VOID DeleteDtList (struct fdt_entry_node** DtList);
 BOOLEAN AppendToDtList (struct fdt_entry_node **DtList,
                 UINT64 Address,
