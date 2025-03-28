@@ -8,7 +8,7 @@
 
 #include "libavb/avb_slot_verify.h"
 //#include <Library/QcBcc.h>
-#include "KeymasterClient.h"
+#include "Library/KeymasterClient.h"
 
 EFI_STATUS
 PopulateBccParams (AvbSlotVerifyData *SlotData,

@@ -24,7 +24,14 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+ */
+
+/*
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the
+ * following license:
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
 
 #ifndef __VERIFIEDBOOT_H__
 #define __VERIFIEDBOOT_H__
@@ -114,7 +121,13 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
 #ifndef USE_DUMMY_BCC
                   , BccParams_t *BccParamsRecvdFromAVB
 #endif
-                 );
+);
+
+UINT32
+ParseFooterOsVersion (CONST CHAR8 *Ptr, UINTN Size);
+
+UINT32
+ParseFooterSecPatch (CONST CHAR8 *Ptr, UINTN Size);
 
 /**
  *  Free resources/memory allocated by
@@ -125,6 +138,9 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
  */
 VOID
 FreeVerifiedBootResource (BootInfo *Info);
+
+EFI_STATUS
+DisplayVerifiedBootScreen (BootInfo *Info);
 
 /**
  *
