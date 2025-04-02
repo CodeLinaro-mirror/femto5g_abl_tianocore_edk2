@@ -999,7 +999,7 @@ ParseGptHeader (struct GptHeaderData *GptHeader,
 }
 
 STATIC UINT32
-PatchGpt (UINT8 *Gpt,
+PatchGpt (INT32 Lun, UINT8 *Gpt,
           UINT64 DeviceDensity,
           UINT32 PartEntryArrSz,
           struct GptHeaderData *GptHeader,
@@ -1049,8 +1049,13 @@ PatchGpt (UINT8 *Gpt,
       (PrimaryGptHeader + BlkSz + TotalPart * PARTITION_ENTRY_SIZE);
   }
 
-  LastPartOffset =
+  if (!Lun) {
+    LastPartOffset =
       (TotalPart - 1) * PARTITION_ENTRY_SIZE + PARTITION_ENTRY_LAST_LBA;
+  } else {
+    LastPartOffset =
+      TotalPart * PARTITION_ENTRY_SIZE + PARTITION_ENTRY_LAST_LBA;
+  }
 
   PUT_LONG_LONG (PrimaryGptHeader + BlkSz + LastPartOffset,
                  (UINT64) (NumSectors - (PtnEntryBlks + 1)));
@@ -1167,7 +1172,7 @@ WriteGpt (INT32 Lun, UINT32 Sz, UINT8 *Gpt)
     return Ret;
   }
 
-  Ret = PatchGpt (Gpt, DeviceDensity, PartEntryArrSz, &GptHeader, BlkSz);
+  Ret = PatchGpt (Lun, Gpt, DeviceDensity, PartEntryArrSz, &GptHeader, BlkSz);
   if (Ret) {
     DEBUG ((EFI_D_ERROR, "Failed to patch GPT\n"));
     return Ret;
