@@ -1,11 +1,16 @@
-/*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
- *
- * Licensed under the OpenSSL license (the "License").  You may not use
- * this file except in compliance with the License.  You can obtain a copy
- * in the file LICENSE in the source distribution or at
- * https://www.openssl.org/source/license.html
- */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <openssl/base.h>
 
@@ -18,10 +23,8 @@
 #include <string.h>
 
 #if defined(_MSC_VER)
-OPENSSL_MSVC_PRAGMA(warning(push, 3))
 #include <immintrin.h>
 #include <intrin.h>
-OPENSSL_MSVC_PRAGMA(warning(pop))
 #endif
 
 #include "internal.h"
@@ -166,24 +169,12 @@ void OPENSSL_cpuid_setup(void) {
     }
   }
 
-  // Force the hyper-threading bit so that the more conservative path is always
-  // chosen.
-  edx |= 1u << 28;
-
-  // Reserved bit #20 was historically repurposed to control the in-memory
-  // representation of RC4 state. Always set it to zero.
-  edx &= ~(1u << 20);
-
   // Reserved bit #30 is repurposed to signal an Intel CPU.
   if (is_intel) {
     edx |= (1u << 30);
   } else {
     edx &= ~(1u << 30);
   }
-
-  // The SDBG bit is repurposed to denote AMD XOP support. Don't ever use AMD
-  // XOP code paths.
-  ecx &= ~(1u << 11);
 
   uint64_t xcr0 = 0;
   if (ecx & (1u << 27)) {
@@ -214,10 +205,6 @@ void OPENSSL_cpuid_setup(void) {
     // 128-bit or 256-bit vectors, and also volume 2a section 2.7.11 ("#UD
     // Equations for EVEX") which says that all EVEX-coded instructions raise an
     // undefined-instruction exception if any of these XCR0 bits is zero.
-    //
-    // AVX10 fixes this by reorganizing the features that used to be part of
-    // "AVX512" and allowing them to be used independently of 512-bit support.
-    // TODO: add AVX10 detection.
     extended_features[0] &= ~(1u << 16);  // AVX512F
     extended_features[0] &= ~(1u << 17);  // AVX512DQ
     extended_features[0] &= ~(1u << 21);  // AVX512IFMA

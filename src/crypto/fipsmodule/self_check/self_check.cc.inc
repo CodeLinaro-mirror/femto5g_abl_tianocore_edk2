@@ -1,16 +1,16 @@
-/* Copyright 2017 The BoringSSL Authors
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2017 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <openssl/crypto.h>
 
@@ -728,8 +728,9 @@ static int boringssl_self_test_fast(void) {
       0x50, 0x3a, 0xc5, 0x5e, 0x8e, 0x93, 0x40, 0xf2, 0x10, 0xd8,
   };
   memcpy(aes_iv, kAESIV, sizeof(kAESIV));
-  if (AES_set_encrypt_key(kAESKey, 8 * sizeof(kAESKey), &aes_key) != 0) {
-    fprintf(CRYPTO_get_stderr(), "AES_set_encrypt_key failed.\n");
+  if (!bcm_success(
+          BCM_aes_set_encrypt_key(kAESKey, 8 * sizeof(kAESKey), &aes_key))) {
+    fprintf(CRYPTO_get_stderr(), "BCM_aes_set_encrypt_key failed.\n");
     goto err;
   }
   AES_cbc_encrypt(kAESCBCEncPlaintext, output, sizeof(kAESCBCEncPlaintext),
@@ -752,8 +753,9 @@ static int boringssl_self_test_fast(void) {
       0xb2, 0x25, 0x6f, 0xa6, 0xd0, 0xd2, 0x0e, 0x6f, 0x19, 0xb5,
   };
   memcpy(aes_iv, kAESIV, sizeof(kAESIV));
-  if (AES_set_decrypt_key(kAESKey, 8 * sizeof(kAESKey), &aes_key) != 0) {
-    fprintf(CRYPTO_get_stderr(), "AES_set_decrypt_key failed.\n");
+  if (!bcm_success(
+          BCM_aes_set_decrypt_key(kAESKey, 8 * sizeof(kAESKey), &aes_key))) {
+    fprintf(CRYPTO_get_stderr(), "BCM_aes_set_decrypt_key failed.\n");
     goto err;
   }
   AES_cbc_encrypt(kAESCBCDecCiphertext, output, sizeof(kAESCBCDecCiphertext),
@@ -1032,12 +1034,21 @@ err:
 
 int BORINGSSL_self_test(void) {
   if (!boringssl_self_test_fast() ||
-      // When requested to run self tests, also run the lazy tests.
+      // When requested to run self tests, also run some of the lazy tests.
       !boringssl_self_test_rsa() ||    //
       !boringssl_self_test_ecc() ||    //
       !boringssl_self_test_ffdh() ||   //
       !boringssl_self_test_mlkem() ||  //
-      !boringssl_self_test_mldsa() ||  //
+      !boringssl_self_test_mldsa()) {
+    return 0;
+  }
+
+  return 1;
+}
+
+int BORINGSSL_self_test_all(void) {
+  if (!BORINGSSL_self_test() ||
+      // When requested to run all self tests, add in the really slow tests.
       !boringssl_self_test_slhdsa()) {
     return 0;
   }

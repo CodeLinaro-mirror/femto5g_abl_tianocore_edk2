@@ -430,8 +430,7 @@ cc_defaults {
     name: "boringssl_fuzz_unsafe_defaults",
     host_supported: true,
     cflags: [
-        "-DBORINGSSL_UNSAFE_DETERMINISTIC_MODE",
-        "-DBORINGSSL_UNSAFE_FUZZER_MODE",
+        "-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION",
     ],
     visibility: [
         "//frameworks/native/libs/binder/tests:__subpackages__",
