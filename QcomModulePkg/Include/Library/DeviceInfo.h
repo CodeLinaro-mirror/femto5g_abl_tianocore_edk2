@@ -78,7 +78,6 @@
 #define MAX_VALUE_SIZE     32
 #define MAX_ENTRY_SIZE     8
 #define MAX_AUDIO_FW_LENGTH 16
-#define DICE_KM_FRS_SIZE 32
 #define DICE_HIDDEN_SIZE 64
 
 #ifdef HIBERNATION_SWAP_PARTITION_NAME
@@ -119,10 +118,8 @@ typedef struct device_info {
   UINTN GoldenSnapshot;
   CHAR8 AudioFramework[MAX_AUDIO_FW_LENGTH];
   UINT8 FdrFlag;
-  UINT32 Km_frs_sec_len; /*Holds length of Keymaster FRS secret*/
-  UINT8 Km_frs_sec[DICE_KM_FRS_SIZE]; /*Holds plain Keymaster FRS secret*/
-  UINT32 Dice_frs_len; /*Holds length of DICE FRS*/
-  UINT8 Dice_frs[DICE_HIDDEN_SIZE]; /*Holds DICE FRS*/
+  UINT32 FrsSecLen; /*Holds length of FRS secret*/
+  UINT8 FrsSec[DICE_HIDDEN_SIZE]; /*Holds plain secret*/
 } DeviceInfo;
 
 struct verified_boot_verity_mode {
@@ -164,6 +161,4 @@ EFI_STATUS
 ReadAudioFrameWork (CHAR8 **CmdLine, UINT32 *CmdLineLen);
 EFI_STATUS
 SetFDRFlag (VOID);
-EFI_STATUS
-GenerateDICEFRS (DeviceInfo *devinfo);
 #endif

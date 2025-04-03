@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -70,7 +70,6 @@
 #include <Library/PartitionTableUpdate.h>
 #include <Library/Recovery.h>
 #include <Library/StackCanary.h>
-#include <Protocol/EFIRng.h>
 
 #define GOLDEN_SNAPSHOT_MAGIC 0x575757
 
@@ -718,85 +717,17 @@ SetSnapshotGolden (UINTN Val)
   return Status;
 }
 
-/* Generates DICE FRS*/
-EFI_STATUS
-GenerateDICEFRS (DeviceInfo *devinfo)
-{
-  EFI_STATUS Status = EFI_SUCCESS;
-  EFI_QCOM_RNG_PROTOCOL *RngIf;
-
-  Status = gBS->LocateProtocol (&gQcomRngProtocolGuid, NULL, (VOID **)&RngIf);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR,
-            "Error locating PRNG protocol, using default canary :%r\n",
-            Status));
-    return Status;
-  }
-
-  Status = RngIf->GetRNG (RngIf, &gEfiRNGAlgRawGuid, DICE_HIDDEN_SIZE,
-                          (UINT8 *)DevInfo.Dice_frs);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR,
-            "Error getting PRNG random number, using default canary: %r\n",
-            Status));
-    return Status;
-  }
-  DevInfo.Dice_frs_len = DICE_HIDDEN_SIZE;
-
-  Status =
-      ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Unable to Write Device Info: %r\n", Status));
-  }
-
-  /* Copy devinfo in response buffer if not null*/
-  if (devinfo) {
-    gBS->CopyMem (devinfo, &DevInfo, sizeof (DeviceInfo));
-  }
-
-  return Status;
-}
-
-/* Clears DICE and Keymint FRS*/
-EFI_STATUS
-ClearFRS (VOID)
-{
-  EFI_STATUS Status = EFI_SUCCESS;
-  DevInfo.Km_frs_sec_len = 0;
-  gBS->SetMem (DevInfo.Km_frs_sec, sizeof (DevInfo.Km_frs_sec), 0);
-  DevInfo.Dice_frs_len = 0;
-  gBS->SetMem (DevInfo.Dice_frs, sizeof (DevInfo.Dice_frs), 0);
-
-  Status =
-      ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Unable to Write Device Info: %r\n", Status));
-  }
-
-  return Status;
-}
-
-/* Set FDR Flag and clear DICE and Keymint FRS secret
- * from DevInfo. Also, generates new FRS.
- */
+/* Set FDR Flag and clear FRS secret from DevInfo*/
 EFI_STATUS
 SetFDRFlag (VOID)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
   DevInfo.FdrFlag = 1;
-  Status =
-      ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Unable to Write Device Info: %r\n", Status));
-  }
-
-  Status = ClearFRS ();
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Unable to Clear FRS: %r\n", Status));
-  }
-
-  Status = GenerateDICEFRS (NULL);
+  DevInfo.FrsSecLen = 0;
+  gBS->SetMem (DevInfo.FrsSec, sizeof (DevInfo.FrsSec), 0);
+  Status = ReadWriteDeviceInfo (WRITE_CONFIG,
+                        (VOID *)&DevInfo, sizeof (DevInfo));
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to Write Device Info: %r\n", Status));
   }
