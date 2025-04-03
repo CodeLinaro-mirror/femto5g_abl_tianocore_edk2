@@ -15,10 +15,11 @@
   GCC:*_*_*_CC_FLAGS = $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT)
 
 [Sources.AARCH64]
-	open-dice/src/android.c
+	open-dice/src/android/bcc.c
 	open-dice/src/boringssl_hash_kdf_ops.c
 	open-dice/src/boringssl_ed25519_ops.c
 	open-dice/src/cbor_cert_op.c
+	open-dice/src/cbor_ed25519_cert_op.c
 	open-dice/src/cbor_reader.c
 	open-dice/src/cbor_writer.c
 	open-dice/src/clear_memory.c

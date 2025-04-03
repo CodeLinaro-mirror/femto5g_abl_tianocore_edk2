@@ -12,19 +12,13 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// This is an implementation of the ECDSA crypto operations that uses boringssl.
-
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+// This is an implementation of the crypto operations that uses boringssl. The
+// algorithms used are SHA512, HKDF-SHA512, and ECDSA P384-SHA384.
 
 #include "dice/boringssl_ecdsa_utils.h"
 
-#ifdef ENABLE_C_HEADER
 #include <stdint.h>
 #include <stdio.h>
-#endif
 #include <string.h>
 
 #include "openssl/bn.h"
@@ -42,7 +36,7 @@ static int hmac(uint8_t k[64], uint8_t in[64], uint8_t *out,
                 unsigned int out_len) {
   int ret = 0;
 
-  if (out_len != 64) {
+  if (out_len > 64 || out_len < 0) {
     goto out;
   }
   HMAC_CTX ctx;
@@ -61,7 +55,7 @@ out:
 }
 
 static int hmac3(uint8_t k[64], uint8_t in1[64], uint8_t in2,
-                 const uint8_t *in3, unsigned int in3_len, uint8_t out[64]) {
+                  const uint8_t *in3, unsigned int in3_len, uint8_t out[64]) {
   int ret = 0;
 
   HMAC_CTX ctx;
@@ -88,19 +82,15 @@ out:
   return ret;
 }
 
-// Algorithm from section 3.2 of IETF RFC6979; limited to generating up to 64
-// byte private keys.
+// Algorithm from section 3.2 of IETF RFC6979
 static BIGNUM *derivePrivateKey(const EC_GROUP *group, const uint8_t *seed,
-                                size_t seed_size, size_t private_key_len) {
+                                size_t seed_size, uint8_t *private_key,
+                                size_t private_key_len) {
   BIGNUM *candidate = NULL;
   uint8_t v[64];
   uint8_t k[64];
   memset(v, 1, 64);
   memset(k, 0, 64);
-
-  if (private_key_len > 64) {
-    goto err;
-  }
 
   if (1 != hmac3(k, v, 0x00, seed, (unsigned int)seed_size, k)) {
     goto err;
@@ -115,14 +105,14 @@ static BIGNUM *derivePrivateKey(const EC_GROUP *group, const uint8_t *seed,
     if (1 != hmac(k, v, v, sizeof(v))) {
       goto err;
     }
-    if (1 != hmac(k, v, v, sizeof(v))) {
-      goto err;
-    }
-    candidate = BN_bin2bn(v, private_key_len, candidate);
-    if (!candidate) {
+    if (1 != hmac(k, v, private_key, private_key_len)) {
       goto err;
     }
     if (1 != hmac3(k, v, 0x00, NULL, 0, k)) {
+      goto err;
+    }
+    candidate = BN_bin2bn(private_key, private_key_len, NULL);
+    if (!candidate) {
       goto err;
     }
   } while (BN_cmp(candidate, EC_GROUP_get0_order(group)) >= 0 ||
@@ -136,16 +126,16 @@ out:
   return candidate;
 }
 
-static int KeypairFromSeed(int nid, uint8_t *public_key, size_t public_key_size,
-                           uint8_t *private_key, size_t private_key_size,
-                           const uint8_t seed[DICE_PRIVATE_KEY_SEED_SIZE]) {
+int P384KeypairFromSeed(uint8_t public_key[P384_PUBLIC_KEY_SIZE],
+                        uint8_t private_key[P384_PRIVATE_KEY_SIZE],
+                        const uint8_t seed[DICE_PRIVATE_KEY_SEED_SIZE]) {
   int ret = 0;
   EC_POINT *publicKey = NULL;
   BIGNUM *pD = NULL;
   BIGNUM *x = NULL;
   BIGNUM *y = NULL;
 
-  EC_KEY *key = EC_KEY_new_by_curve_name(nid);
+  EC_KEY *key = EC_KEY_new_by_curve_name(NID_secp384r1);
   if (!key) {
     goto out;
   }
@@ -158,12 +148,12 @@ static int KeypairFromSeed(int nid, uint8_t *public_key, size_t public_key_size,
     goto out;
   }
 
-  pD = derivePrivateKey(group, seed, DICE_PRIVATE_KEY_SEED_SIZE,
-                        private_key_size);
+  pD = derivePrivateKey(group, seed, DICE_PRIVATE_KEY_SEED_SIZE, private_key,
+                                P384_PRIVATE_KEY_SIZE);
   if (!pD) {
     goto out;
   }
-  if (1 != BN_bn2bin_padded(private_key, private_key_size, pD)) {
+  if (1 != BN_bn2bin_padded(private_key, P384_PRIVATE_KEY_SIZE, pD)) {
     goto out;
   }
   if (1 != EC_KEY_set_private_key(key, pD)) {
@@ -183,13 +173,14 @@ static int KeypairFromSeed(int nid, uint8_t *public_key, size_t public_key_size,
   if (1 != EC_POINT_get_affine_coordinates_GFp(group, publicKey, x, y, NULL)) {
     goto out;
   }
-  size_t coord_size = public_key_size / 2;
-  if (1 != BN_bn2bin_padded(&public_key[0], coord_size, x)) {
+  if (BN_num_bytes(x) > P384_PRIVATE_KEY_SIZE) {
     goto out;
   }
-  if (1 != BN_bn2bin_padded(&public_key[coord_size], coord_size, y)) {
+  BN_bn2bin(x, &public_key[0]);
+  if (BN_num_bytes(y) > P384_PRIVATE_KEY_SIZE) {
     goto out;
   }
+  BN_bn2bin(y, &public_key[P384_PRIVATE_KEY_SIZE]);
   ret = 1;
 
 out:
@@ -202,56 +193,40 @@ out:
   return ret;
 }
 
-int P256KeypairFromSeed(uint8_t public_key[P256_PUBLIC_KEY_SIZE],
-                        uint8_t private_key[P256_PRIVATE_KEY_SIZE],
-                        const uint8_t seed[DICE_PRIVATE_KEY_SEED_SIZE]) {
-  return KeypairFromSeed(NID_X9_62_prime256v1, public_key, P256_PUBLIC_KEY_SIZE,
-                         private_key, P256_PRIVATE_KEY_SIZE, seed);
-}
-
-int P384KeypairFromSeed(uint8_t public_key[P384_PUBLIC_KEY_SIZE],
-                        uint8_t private_key[P384_PRIVATE_KEY_SIZE],
-                        const uint8_t seed[DICE_PRIVATE_KEY_SEED_SIZE]) {
-  return KeypairFromSeed(NID_secp384r1, public_key, P384_PUBLIC_KEY_SIZE,
-                         private_key, P384_PRIVATE_KEY_SIZE, seed);
-}
-
-static int Sign(int nid, uint8_t *signature, size_t signature_size,
-                const EVP_MD *md_type, const uint8_t *message,
-                size_t message_size, const uint8_t *private_key,
-                size_t private_key_size) {
+int P384Sign(uint8_t signature[P384_SIGNATURE_SIZE], const uint8_t *message,
+             size_t message_size,
+             const uint8_t private_key[P384_PRIVATE_KEY_SIZE]) {
   int ret = 0;
   BIGNUM *pD = NULL;
   EC_KEY *key = NULL;
-  uint8_t output[EVP_MAX_MD_SIZE];
-  unsigned int md_size;
+  uint8_t output[48];
   ECDSA_SIG *sig = NULL;
 
-  pD = BN_bin2bn(private_key, private_key_size, NULL);
+  pD = BN_bin2bn(private_key, P384_PRIVATE_KEY_SIZE, NULL);
   if (!pD) {
     goto out;
   }
-  key = EC_KEY_new_by_curve_name(nid);
+  key = EC_KEY_new_by_curve_name(NID_secp384r1);
   if (!key) {
     goto out;
   }
   if (1 != EC_KEY_set_private_key(key, pD)) {
     goto out;
   }
-  if (1 != EVP_Digest(message, message_size, output, &md_size, md_type, NULL)) {
-    goto out;
-  }
-  sig = ECDSA_do_sign(output, md_size, key);
+  SHA384(message, message_size, output);
+  sig = ECDSA_do_sign(output, 48, key);
   if (!sig) {
     goto out;
   }
-  size_t coord_size = signature_size / 2;
-  if (1 != BN_bn2bin_padded(&signature[0], coord_size, sig->r)) {
+
+  if (BN_num_bytes(sig->r) > P384_PRIVATE_KEY_SIZE) {
     goto out;
   }
-  if (1 != BN_bn2bin_padded(&signature[coord_size], coord_size, sig->s)) {
+  BN_bn2bin(sig->r, &signature[0]);
+  if (BN_num_bytes(sig->s) > P384_PRIVATE_KEY_SIZE) {
     goto out;
   }
+  BN_bn2bin(sig->s, &signature[P384_PRIVATE_KEY_SIZE]);
   ret = 1;
 
 out:
@@ -261,38 +236,19 @@ out:
   return ret;
 }
 
-int P256Sign(uint8_t signature[P256_SIGNATURE_SIZE], const uint8_t *message,
-             size_t message_size,
-             const uint8_t private_key[P256_PRIVATE_KEY_SIZE]) {
-  return Sign(NID_X9_62_prime256v1, signature, P256_SIGNATURE_SIZE,
-              EVP_sha256(), message, message_size, private_key,
-              P256_PRIVATE_KEY_SIZE);
-}
-
-int P384Sign(uint8_t signature[P384_SIGNATURE_SIZE], const uint8_t *message,
-             size_t message_size,
-             const uint8_t private_key[P384_PRIVATE_KEY_SIZE]) {
-  return Sign(NID_secp384r1, signature, P384_SIGNATURE_SIZE, EVP_sha384(),
-              message, message_size, private_key, P384_PRIVATE_KEY_SIZE);
-}
-
-static int Verify(int nid, const EVP_MD *md_type, const uint8_t *message,
-                  size_t message_size, const uint8_t *signature,
-                  size_t signature_size, const uint8_t *public_key,
-                  size_t public_key_size) {
+int P384Verify(const uint8_t *message, size_t message_size,
+               const uint8_t signature[P384_SIGNATURE_SIZE],
+               const uint8_t public_key[P384_PUBLIC_KEY_SIZE]) {
   int ret = 0;
-  uint8_t output[EVP_MAX_MD_SIZE];
-  unsigned int md_size;
+  uint8_t output[48];
   EC_KEY *key = NULL;
   BIGNUM *bn_ret = NULL;
   BIGNUM *x = NULL;
   BIGNUM *y = NULL;
   ECDSA_SIG *sig = NULL;
 
-  if (1 != EVP_Digest(message, message_size, output, &md_size, md_type, NULL)) {
-    goto out;
-  }
-  key = EC_KEY_new_by_curve_name(nid);
+  SHA384(message, message_size, output);
+  key = EC_KEY_new_by_curve_name(NID_secp384r1);
   if (!key) {
     goto out;
   }
@@ -300,8 +256,7 @@ static int Verify(int nid, const EVP_MD *md_type, const uint8_t *message,
   if (!x) {
     goto out;
   }
-  size_t coord_size = public_key_size / 2;
-  bn_ret = BN_bin2bn(&public_key[0], coord_size, x);
+  bn_ret = BN_bin2bn(&public_key[0], P384_PUBLIC_KEY_SIZE / 2, x);
   if (!bn_ret) {
     goto out;
   }
@@ -309,7 +264,7 @@ static int Verify(int nid, const EVP_MD *md_type, const uint8_t *message,
   if (!y) {
     goto out;
   }
-  bn_ret = BN_bin2bn(&public_key[coord_size], coord_size, y);
+  bn_ret = BN_bin2bn(&public_key[P384_PUBLIC_KEY_SIZE / 2], P384_PUBLIC_KEY_SIZE / 2, y);
   if (!bn_ret) {
     goto out;
   }
@@ -317,20 +272,21 @@ static int Verify(int nid, const EVP_MD *md_type, const uint8_t *message,
     goto out;
   }
 
+
   sig = ECDSA_SIG_new();
   if (!sig) {
     goto out;
   }
-  coord_size = signature_size / 2;
-  bn_ret = BN_bin2bn(&signature[0], coord_size, sig->r);
+  bn_ret = BN_bin2bn(&signature[0], P384_SIGNATURE_SIZE / 2, sig->r);
   if (!bn_ret) {
     goto out;
   }
-  bn_ret = BN_bin2bn(&signature[coord_size], coord_size, sig->s);
+  bn_ret = BN_bin2bn(&signature[P384_SIGNATURE_SIZE / 2], P384_SIGNATURE_SIZE / 2,
+            sig->s);
   if (!bn_ret) {
     goto out;
   }
-  ret = ECDSA_do_verify(output, md_size, sig, key);
+  ret = ECDSA_do_verify(output, 48, sig, key);
 
 out:
   BN_clear_free(y);
@@ -338,19 +294,4 @@ out:
   EC_KEY_free(key);
   ECDSA_SIG_free(sig);
   return ret;
-}
-
-int P256Verify(const uint8_t *message, size_t message_size,
-               const uint8_t signature[P256_SIGNATURE_SIZE],
-               const uint8_t public_key[P256_PUBLIC_KEY_SIZE]) {
-  return Verify(NID_X9_62_prime256v1, EVP_sha256(), message, message_size,
-                signature, P256_SIGNATURE_SIZE, public_key,
-                P256_PUBLIC_KEY_SIZE);
-}
-
-int P384Verify(const uint8_t *message, size_t message_size,
-               const uint8_t signature[P384_SIGNATURE_SIZE],
-               const uint8_t public_key[P384_PUBLIC_KEY_SIZE]) {
-  return Verify(NID_secp384r1, EVP_sha384(), message, message_size, signature,
-                P384_SIGNATURE_SIZE, public_key, P384_PUBLIC_KEY_SIZE);
 }

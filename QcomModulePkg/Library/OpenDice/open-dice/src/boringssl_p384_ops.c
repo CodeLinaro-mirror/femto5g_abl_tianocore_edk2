@@ -12,57 +12,34 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// This is an implementation of P-384 signature operations using boringssl.
+// This is an implementation of the crypto operations that uses boringssl. The
+// algorithms used are SHA512, HKDF-SHA512, and Ed25519-SHA512.
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
-
-#ifdef ENABLE_C_HEADER
 #include <stdint.h>
 #include <stdio.h>
-#endif
 
 #include "dice/boringssl_ecdsa_utils.h"
-#include "dice/config/cose_key_config.h"
 #include "dice/dice.h"
 #include "dice/ops.h"
 
 #if DICE_PRIVATE_KEY_SEED_SIZE != 32
 #error "Private key seed is expected to be 32 bytes."
 #endif
-#if DICE_PUBLIC_KEY_BUFFER_SIZE != 96
+#if DICE_PUBLIC_KEY_SIZE != 96
 #error "This P-384 implementation needs 96 bytes to store the public key."
 #endif
-#if DICE_PRIVATE_KEY_BUFFER_SIZE != 48
+#if DICE_PRIVATE_KEY_SIZE != 48
 #error "P-384 needs 48 bytes for the private key."
 #endif
-#if DICE_SIGNATURE_BUFFER_SIZE != 96
+#if DICE_SIGNATURE_SIZE != 96
 #error "P-384 needs 96 bytes to store the signature."
 #endif
 
-DiceResult DiceGetKeyParam(void* context_not_used,
-                           DicePrincipal principal_not_used,
-                           DiceKeyParam* key_param) {
+DiceResult DiceKeypairFromSeed(void* context_not_used,
+                               const uint8_t seed[DICE_PRIVATE_KEY_SEED_SIZE],
+                               uint8_t public_key[DICE_PUBLIC_KEY_SIZE],
+                               uint8_t private_key[DICE_PRIVATE_KEY_SIZE]) {
   (void)context_not_used;
-  (void)principal_not_used;
-  key_param->public_key_size = DICE_PUBLIC_KEY_BUFFER_SIZE;
-  key_param->signature_size = DICE_SIGNATURE_BUFFER_SIZE;
-
-  key_param->cose_key_type = kCoseKeyKtyEc2;
-  key_param->cose_key_algorithm = kCoseAlgEs384;
-  key_param->cose_key_curve = kCoseCrvP384;
-  return kDiceResultOk;
-}
-
-DiceResult DiceKeypairFromSeed(
-    void* context_not_used, DicePrincipal principal_not_used,
-    const uint8_t seed[DICE_PRIVATE_KEY_SEED_SIZE],
-    uint8_t public_key[DICE_PUBLIC_KEY_BUFFER_SIZE],
-    uint8_t private_key[DICE_PRIVATE_KEY_BUFFER_SIZE]) {
-  (void)context_not_used;
-  (void)principal_not_used;
   if (1 == P384KeypairFromSeed(public_key, private_key, seed)) {
     return kDiceResultOk;
   }
@@ -71,8 +48,8 @@ DiceResult DiceKeypairFromSeed(
 
 DiceResult DiceSign(void* context_not_used, const uint8_t* message,
                     size_t message_size,
-                    const uint8_t private_key[DICE_PRIVATE_KEY_BUFFER_SIZE],
-                    uint8_t signature[DICE_SIGNATURE_BUFFER_SIZE]) {
+                    const uint8_t private_key[DICE_PRIVATE_KEY_SIZE],
+                    uint8_t signature[DICE_SIGNATURE_SIZE]) {
   (void)context_not_used;
   if (1 == P384Sign(signature, message, message_size, private_key)) {
     return kDiceResultOk;
@@ -82,8 +59,8 @@ DiceResult DiceSign(void* context_not_used, const uint8_t* message,
 
 DiceResult DiceVerify(void* context_not_used, const uint8_t* message,
                       size_t message_size,
-                      const uint8_t signature[DICE_SIGNATURE_BUFFER_SIZE],
-                      const uint8_t public_key[DICE_PUBLIC_KEY_BUFFER_SIZE]) {
+                      const uint8_t signature[DICE_SIGNATURE_SIZE],
+                      const uint8_t public_key[DICE_PUBLIC_KEY_SIZE]) {
   (void)context_not_used;
   if (1 == P384Verify(message, message_size, signature, public_key)) {
     return kDiceResultOk;

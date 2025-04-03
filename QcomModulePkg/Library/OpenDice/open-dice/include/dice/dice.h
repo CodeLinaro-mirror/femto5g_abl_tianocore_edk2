@@ -12,20 +12,8 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
-
 #ifndef DICE_DICE_H_
 #define DICE_DICE_H_
-
-#ifdef ENABLE_C_HEADER
-#include <stddef.h>
-#include <stdint.h>
-#endif
-
-#include "dice/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,10 +21,29 @@ extern "C" {
 
 #define DICE_CDI_SIZE 32
 #define DICE_HASH_SIZE 64
-#define DICE_HIDDEN_SIZE 64
+#define DICE_HIDDEN_SIZE 32
 #define DICE_INLINE_CONFIG_SIZE 64
 #define DICE_PRIVATE_KEY_SEED_SIZE 32
 #define DICE_ID_SIZE 20
+
+typedef enum {
+  kDiceResultOk,
+  kDiceResultInvalidInput,
+  kDiceResultBufferTooSmall,
+  kDiceResultPlatformError,
+} DiceResult;
+
+typedef enum {
+  kDiceModeNotInitialized,
+  kDiceModeNormal,
+  kDiceModeDebug,
+  kDiceModeMaintenance,
+} DiceMode;
+
+typedef enum {
+  kDiceConfigTypeInline,
+  kDiceConfigTypeDescriptor,
+} DiceConfigType;
 
 // Contains a full set of input values describing the target program or system.
 // See the Open Profile for DICE specification for a detailed explanation of

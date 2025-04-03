@@ -13,27 +13,17 @@
 // the License.
 
 // This is a DiceGenerateCertificate implementation that uses boringssl for
-// crypto and certificate generation.
+// crypto and certificate generation. The algorithms used are SHA512,
+// HKDF-SHA512, and Ed25519-SHA512.
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
-
-#ifdef ENABLE_C_HEADER
 #include <stdint.h>
-#endif
-#include <string.h>
 
-#include "dice/config/cose_key_config.h"
 #include "dice/dice.h"
 #include "dice/ops.h"
-#include "dice/profile_name.h"
 #include "dice/utils.h"
 #include "openssl/asn1.h"
 #include "openssl/asn1t.h"
 #include "openssl/bn.h"
-#include "openssl/crypto.h"
 #include "openssl/curve25519.h"
 #include "openssl/evp.h"
 #include "openssl/is_boringssl.h"
@@ -51,7 +41,6 @@ typedef struct DiceExtensionAsn1 {
   ASN1_OCTET_STRING* authority_hash;
   ASN1_OCTET_STRING* authority_descriptor;
   ASN1_ENUMERATED* mode;
-  ASN1_UTF8STRING* profile_name;
 } DiceExtensionAsn1;
 
 // clang-format off
@@ -63,7 +52,6 @@ ASN1_SEQUENCE(DiceExtensionAsn1) = {
     ASN1_EXP_OPT(DiceExtensionAsn1, authority_hash, ASN1_OCTET_STRING, 4),
     ASN1_EXP_OPT(DiceExtensionAsn1, authority_descriptor, ASN1_OCTET_STRING, 5),
     ASN1_EXP_OPT(DiceExtensionAsn1, mode, ASN1_ENUMERATED, 6),
-    ASN1_EXP_OPT(DiceExtensionAsn1, profile_name, ASN1_UTF8STRING, 7),
 } ASN1_SEQUENCE_END(DiceExtensionAsn1)
 DECLARE_ASN1_FUNCTIONS(DiceExtensionAsn1)
 IMPLEMENT_ASN1_FUNCTIONS(DiceExtensionAsn1)
@@ -438,20 +426,6 @@ static DiceResult GetDiceExtensionData(const DiceInputValues* input_values,
     goto out;
   }
 
-  // Encode profile name.
-  if (DICE_PROFILE_NAME) {
-    asn1->profile_name = ASN1_UTF8STRING_new();
-    if (!asn1->profile_name) {
-      result = kDiceResultPlatformError;
-      goto out;
-    }
-    if (!ASN1_STRING_set(asn1->profile_name, DICE_PROFILE_NAME,
-                         strlen(DICE_PROFILE_NAME))) {
-      result = kDiceResultPlatformError;
-      goto out;
-    }
-  }
-
   *actual_size = i2d_DiceExtensionAsn1(asn1, NULL);
   if (buffer_size < *actual_size) {
     result = kDiceResultBufferTooSmall;
@@ -524,95 +498,15 @@ out:
   return result;
 }
 
-static EVP_PKEY* CreateEcPrivateKey(
-    int nid, const uint8_t private_key[DICE_PRIVATE_KEY_BUFFER_SIZE]) {
-  int success = 0;
-  EC_KEY* ec_key = NULL;
-  BIGNUM* bn = NULL;
-  EC_POINT* point = NULL;
-  EVP_PKEY* pkey = NULL;
-
-  ec_key = EC_KEY_new_by_curve_name(nid);
-  if (!ec_key) {
-    goto out;
+static DiceResult GetIdFromKey(void* context, const EVP_PKEY* key,
+                               uint8_t id[DICE_ID_SIZE]) {
+  uint8_t raw_public_key[32];
+  size_t raw_public_key_size = sizeof(raw_public_key);
+  if (!EVP_PKEY_get_raw_public_key(key, raw_public_key, &raw_public_key_size)) {
+    return kDiceResultPlatformError;
   }
-
-  bn = BN_bin2bn(private_key, DICE_PRIVATE_KEY_BUFFER_SIZE, NULL);
-  if (!bn) {
-    goto out;
-  }
-
-  if (!EC_KEY_set_private_key(ec_key, bn)) {
-    goto out;
-  }
-
-  const EC_GROUP* group = EC_KEY_get0_group(ec_key);
-
-  point = EC_POINT_new(group);
-  if (!point) {
-    goto out;
-  }
-
-  if (!EC_POINT_mul(group, point, bn, NULL, NULL, NULL)) {
-    goto out;
-  }
-  if (!EC_KEY_set_public_key(ec_key, point)) {
-    goto out;
-  }
-
-  pkey = EVP_PKEY_new();
-  if (!pkey) {
-    goto out;
-  }
-
-  success = EVP_PKEY_set1_EC_KEY(pkey, ec_key);
-
-out:
-  if (ec_key) {
-    EC_KEY_free(ec_key);
-  }
-  if (bn) {
-    BN_free(bn);
-  }
-  if (point) {
-    EC_POINT_free(point);
-  }
-  if (!success && pkey) {
-    EVP_PKEY_free(pkey);
-  }
-
-  return pkey;
-}
-
-static EVP_PKEY* CreatePrivateKey(
-    const DiceKeyParam* key_param,
-    const uint8_t private_key[DICE_PRIVATE_KEY_BUFFER_SIZE]) {
-  if (key_param->cose_key_curve == kCoseCrvEd25519) {
-    return EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, private_key,
-                                        32);
-  }
-  if (key_param->cose_key_curve == kCoseCrvP256) {
-    return CreateEcPrivateKey(NID_X9_62_prime256v1, private_key);
-  }
-  if (key_param->cose_key_curve == kCoseCrvP384) {
-    return CreateEcPrivateKey(NID_secp384r1, private_key);
-  }
-  return NULL;
-}
-
-static const EVP_MD* GetDigestForX509Sign(const DiceKeyParam* key_param) {
-  if (key_param->cose_key_curve == kCoseCrvP256) {
-    return EVP_sha256();
-  }
-  if (key_param->cose_key_curve == kCoseCrvP384) {
-    return EVP_sha384();
-  }
-  // The interface for Ed25519 is different from P256 and P384.
-  // It expects NULL and will use SHA512 implicitly.
-  if (key_param->cose_key_curve == kCoseCrvEd25519) {
-    return NULL;
-  }
-  return NULL;
+  return DiceDeriveCdiCertificateId(context, raw_public_key,
+                                    raw_public_key_size, id);
 }
 
 DiceResult DiceGenerateCertificate(
@@ -621,63 +515,44 @@ DiceResult DiceGenerateCertificate(
     const uint8_t authority_private_key_seed[DICE_PRIVATE_KEY_SEED_SIZE],
     const DiceInputValues* input_values, size_t certificate_buffer_size,
     uint8_t* certificate, size_t* certificate_actual_size) {
+  DiceResult result = kDiceResultOk;
+
   // Initialize variables that are cleaned up on 'goto out'.
   X509* x509 = NULL;
   EVP_PKEY* authority_key = NULL;
   EVP_PKEY* subject_key = NULL;
-
-  DiceResult result = kDiceResultOk;
-
-  DiceKeyParam key_param;
-  result = DiceGetKeyParam(context, kDicePrincipalSubject, &key_param);
-  if (result != kDiceResultOk) {
-    return result;
-  }
-
-  uint8_t authority_public_key[DICE_PUBLIC_KEY_BUFFER_SIZE];
-  uint8_t authority_private_key[DICE_PRIVATE_KEY_BUFFER_SIZE];
-  result = DiceKeypairFromSeed(context, kDicePrincipalAuthority,
-                               authority_private_key_seed, authority_public_key,
-                               authority_private_key);
-
-  authority_key = CreatePrivateKey(&key_param, authority_private_key);
-  if (!authority_key) {
-    goto out;
-  }
-
-  uint8_t subject_public_key[DICE_PUBLIC_KEY_BUFFER_SIZE];
-  uint8_t subject_private_key[DICE_PRIVATE_KEY_BUFFER_SIZE];
-  result = DiceKeypairFromSeed(context, kDicePrincipalSubject,
-                               subject_private_key_seed, subject_public_key,
-                               subject_private_key);
-
-  subject_key = CreatePrivateKey(&key_param, subject_private_key);
-  if (!subject_key) {
-    result = kDiceResultPlatformError;
-    goto out;
-  }
 
   x509 = X509_new();
   if (!x509) {
     result = kDiceResultPlatformError;
     goto out;
   }
-
+  authority_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL,
+                                               authority_private_key_seed,
+                                               DICE_PRIVATE_KEY_SEED_SIZE);
+  if (!authority_key) {
+    result = kDiceResultPlatformError;
+    goto out;
+  }
+  subject_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL,
+                                             subject_private_key_seed,
+                                             DICE_PRIVATE_KEY_SEED_SIZE);
+  if (!subject_key) {
+    result = kDiceResultPlatformError;
+    goto out;
+  }
   if (!X509_set_pubkey(x509, subject_key)) {
     result = kDiceResultPlatformError;
     goto out;
   }
 
   uint8_t authority_id[DICE_ID_SIZE];
-  result =
-      DiceDeriveCdiCertificateId(context, authority_public_key,
-                                 sizeof(authority_public_key), authority_id);
+  result = GetIdFromKey(context, authority_key, authority_id);
   if (result != kDiceResultOk) {
     goto out;
   }
   uint8_t subject_id[DICE_ID_SIZE];
-  result = DiceDeriveCdiCertificateId(context, subject_public_key,
-                                      sizeof(subject_public_key), subject_id);
+  result = GetIdFromKey(context, subject_key, subject_id);
   if (result != kDiceResultOk) {
     goto out;
   }
@@ -694,8 +569,7 @@ DiceResult DiceGenerateCertificate(
   if (result != kDiceResultOk) {
     goto out;
   }
-
-  if (!X509_sign(x509, authority_key, GetDigestForX509Sign(&key_param))) {
+  if (!X509_sign(x509, authority_key, NULL /*ED25519 always uses SHA-512*/)) {
     result = kDiceResultPlatformError;
     goto out;
   }

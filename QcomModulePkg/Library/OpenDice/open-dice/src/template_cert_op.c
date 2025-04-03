@@ -30,19 +30,11 @@
 //   * authority_descriptor_size must be zero
 //   * config_type must be kDiceConfigTypeInline
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
-
-#ifdef ENABLE_C_HEADER
 #include <stdint.h>
 #include <string.h>
-#endif
 
 #include "dice/dice.h"
 #include "dice/ops.h"
-#include "dice/profile_name.h"
 #include "dice/utils.h"
 #include "openssl/curve25519.h"
 #include "openssl/is_boringssl.h"
@@ -182,16 +174,10 @@ DiceResult DiceGenerateCertificate(
     uint8_t* certificate, size_t* certificate_actual_size) {
   DiceResult result = kDiceResultOk;
 
-  DiceKeyParam key_param;
-  result = DiceGetKeyParam(context, kDicePrincipalSubject, &key_param);
-  if (result != kDiceResultOk) {
-    goto out;
-  }
-
   // Variable length descriptors are not supported.
   if (input_values->code_descriptor_size > 0 ||
       input_values->config_type != kDiceConfigTypeInline ||
-      input_values->authority_descriptor_size > 0 || DICE_PROFILE_NAME) {
+      input_values->authority_descriptor_size > 0) {
     return kDiceResultInvalidInput;
   }
 

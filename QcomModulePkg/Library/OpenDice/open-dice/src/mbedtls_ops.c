@@ -14,21 +14,13 @@
 
 // This is an implementation of DiceGenerateCertificate and the crypto
 // operations that uses mbedtls. The algorithms used are SHA512, HKDF-SHA512,
-// and deterministic ECDSA-P256-SHA256.
+// and deterministic ECDSA-P256-SHA512.
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
-
-#ifdef ENABLE_C_HEADER
 #include <stdint.h>
 #include <string.h>
-#endif
 
 #include "dice/dice.h"
 #include "dice/ops.h"
-#include "dice/profile_name.h"
 #include "dice/utils.h"
 #include "mbedtls/asn1.h"
 #include "mbedtls/asn1write.h"
@@ -81,22 +73,17 @@ out:
 static DiceResult GetIdFromKey(void* context,
                                const mbedtls_pk_context* pk_context,
                                uint8_t id[DICE_ID_SIZE]) {
-  uint8_t formatted_public_key[DICE_PUBLIC_KEY_BUFFER_SIZE];
-  size_t formatted_public_key_size = 0;
+  uint8_t raw_public_key[33];
+  size_t raw_public_key_size = 0;
   mbedtls_ecp_keypair* key = mbedtls_pk_ec(*pk_context);
 
   if (0 != mbedtls_ecp_point_write_binary(
-               &key->grp, &key->Q, MBEDTLS_ECP_PF_UNCOMPRESSED,
-               &formatted_public_key_size, formatted_public_key,
-               sizeof(formatted_public_key))) {
+               &key->grp, &key->Q, MBEDTLS_ECP_PF_COMPRESSED,
+               &raw_public_key_size, raw_public_key, sizeof(raw_public_key))) {
     return kDiceResultPlatformError;
   }
-
-  // mbedtls puts a format byte at the start of a binary representation
-  // of an elliptic curve point. For consistency with other uses of the function
-  // below, this byte is not used in the derivation of the certificate ID.
-  return DiceDeriveCdiCertificateId(context, &formatted_public_key[1],
-                                    formatted_public_key_size - 1, id);
+  return DiceDeriveCdiCertificateId(context, raw_public_key,
+                                    raw_public_key_size, id);
 }
 
 // 54 byte name is prefix (13), hex id (40), and a null terminator.
@@ -164,45 +151,6 @@ static uint8_t GetFieldTag(uint8_t tag) {
 }
 
 // Can be used with MBEDTLS_ASN1_CHK_ADD.
-static int WriteExplicitModeField(uint8_t tag, int value, uint8_t** pos,
-                                  uint8_t* start) {
-  // ASN.1 constants not defined by mbedtls.
-  const uint8_t kEnumTypeTag = 10;
-
-  int ret = 0;  // Used by MBEDTLS_ASN1_CHK_ADD.
-  int field_length = 0;
-  MBEDTLS_ASN1_CHK_ADD(field_length, mbedtls_asn1_write_int(pos, start, value));
-  // Overwrite the 'int' type.
-  ++(*pos);
-  --field_length;
-  MBEDTLS_ASN1_CHK_ADD(field_length,
-                       mbedtls_asn1_write_tag(pos, start, kEnumTypeTag));
-
-  // Explicitly tagged, so add the field tag too.
-  MBEDTLS_ASN1_CHK_ADD(field_length,
-                       mbedtls_asn1_write_len(pos, start, field_length));
-  MBEDTLS_ASN1_CHK_ADD(field_length,
-                       mbedtls_asn1_write_tag(pos, start, GetFieldTag(tag)));
-  return field_length;
-}
-
-// Can be used with MBEDTLS_ASN1_CHK_ADD.
-static int WriteExplicitUtf8StringField(uint8_t tag, const void* value,
-                                        size_t value_size, uint8_t** pos,
-                                        uint8_t* start) {
-  int ret = 0;  // Used by MBEDTLS_ASN1_CHK_ADD.
-  int field_length = 0;
-  MBEDTLS_ASN1_CHK_ADD(field_length, mbedtls_asn1_write_utf8_string(
-                                         pos, start, value, value_size));
-  // Explicitly tagged, so add the field tag too.
-  MBEDTLS_ASN1_CHK_ADD(field_length,
-                       mbedtls_asn1_write_len(pos, start, field_length));
-  MBEDTLS_ASN1_CHK_ADD(field_length,
-                       mbedtls_asn1_write_tag(pos, start, GetFieldTag(tag)));
-  return field_length;
-}
-
-// Can be used with MBEDTLS_ASN1_CHK_ADD.
 static int WriteExplicitOctetStringField(uint8_t tag, const uint8_t* value,
                                          size_t value_size, uint8_t** pos,
                                          uint8_t* start) {
@@ -220,6 +168,8 @@ static int WriteExplicitOctetStringField(uint8_t tag, const uint8_t* value,
 
 static int GetDiceExtensionDataHelper(const DiceInputValues* input_values,
                                       uint8_t** pos, uint8_t* start) {
+  // ASN.1 constants not defined by mbedtls.
+  const uint8_t kEnumTypeTag = 10;
   // ASN.1 tags for extension fields.
   const uint8_t kDiceFieldCodeHash = 0;
   const uint8_t kDiceFieldCodeDescriptor = 1;
@@ -228,23 +178,24 @@ static int GetDiceExtensionDataHelper(const DiceInputValues* input_values,
   const uint8_t kDiceFieldAuthorityHash = 4;
   const uint8_t kDiceFieldAuthorityDescriptor = 5;
   const uint8_t kDiceFieldMode = 6;
-  const uint8_t kDiceFieldProfileName = 7;
 
   // Build up the extension ASN.1 in reverse order.
   int ret = 0;  // Used by MBEDTLS_ASN1_CHK_ADD.
   int length = 0;
 
-  // Add the profile name field.
-  if (DICE_PROFILE_NAME) {
-    MBEDTLS_ASN1_CHK_ADD(length, WriteExplicitUtf8StringField(
-                                     kDiceFieldProfileName, DICE_PROFILE_NAME,
-                                     strlen(DICE_PROFILE_NAME), pos, start));
-  }
-
   // Add the mode field.
+  MBEDTLS_ASN1_CHK_ADD(length,
+                       mbedtls_asn1_write_int(pos, start, input_values->mode));
+  // Overwrite the 'int' type.
+  ++(*pos);
+  --length;
+  MBEDTLS_ASN1_CHK_ADD(length,
+                       mbedtls_asn1_write_tag(pos, start, kEnumTypeTag));
+
+  // Explicitly tagged, so add the field tag too.
+  MBEDTLS_ASN1_CHK_ADD(length, mbedtls_asn1_write_len(pos, start, length));
   MBEDTLS_ASN1_CHK_ADD(
-      length,
-      WriteExplicitModeField(kDiceFieldMode, input_values->mode, pos, start));
+      length, mbedtls_asn1_write_tag(pos, start, GetFieldTag(kDiceFieldMode)));
 
   // Add the authorityDescriptor field, if applicable.
   if (input_values->authority_descriptor_size > 0) {
@@ -367,6 +318,8 @@ DiceResult DiceGenerateCertificate(
   mbedtls_pk_init(&subject_key_context);
   mbedtls_x509write_cert cert_context;
   mbedtls_x509write_crt_init(&cert_context);
+  mbedtls_mpi serial_number;
+  mbedtls_mpi_init(&serial_number);
 
   // Derive key pairs and IDs.
   result = SetupKeyPair(authority_private_key_seed, &authority_key_context);
@@ -422,8 +375,12 @@ DiceResult DiceGenerateCertificate(
 
   // Construct the certificate.
   mbedtls_x509write_crt_set_version(&cert_context, MBEDTLS_X509_CRT_VERSION_3);
-  if (0 != mbedtls_x509write_crt_set_serial_raw(&cert_context, subject_id,
-                                                sizeof(subject_id))) {
+  if (0 !=
+      mbedtls_mpi_read_binary(&serial_number, subject_id, sizeof(subject_id))) {
+    result = kDiceResultPlatformError;
+    goto out;
+  }
+  if (0 != mbedtls_x509write_crt_set_serial(&cert_context, &serial_number)) {
     result = kDiceResultPlatformError;
     goto out;
   }
@@ -448,7 +405,7 @@ DiceResult DiceGenerateCertificate(
   }
   mbedtls_x509write_crt_set_subject_key(&cert_context, &subject_key_context);
   mbedtls_x509write_crt_set_issuer_key(&cert_context, &authority_key_context);
-  mbedtls_x509write_crt_set_md_alg(&cert_context, MBEDTLS_MD_SHA256);
+  mbedtls_x509write_crt_set_md_alg(&cert_context, MBEDTLS_MD_SHA512);
   if (0 != mbedtls_x509write_crt_set_extension(
                &cert_context, MBEDTLS_OID_AUTHORITY_KEY_IDENTIFIER,
                MBEDTLS_OID_SIZE(MBEDTLS_OID_AUTHORITY_KEY_IDENTIFIER),
@@ -510,6 +467,7 @@ DiceResult DiceGenerateCertificate(
          *certificate_actual_size);
 
 out:
+  mbedtls_mpi_free(&serial_number);
   mbedtls_x509write_crt_free(&cert_context);
   mbedtls_pk_free(&authority_key_context);
   mbedtls_pk_free(&subject_key_context);

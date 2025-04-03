@@ -12,18 +12,14 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
-
-#ifndef DICE_CONFIG_BORINGSSL_ECDSA_P384_DICE_CONFIG_H_
-#define DICE_CONFIG_BORINGSSL_ECDSA_P384_DICE_CONFIG_H_
+#ifndef DICE_CONFIG_H_
+#define DICE_CONFIG_H_
 
 // ECDSA P384
 // From table 1 of RFC 9053
-#define DICE_PUBLIC_KEY_BUFFER_SIZE 96
-#define DICE_PRIVATE_KEY_BUFFER_SIZE 48
-#define DICE_SIGNATURE_BUFFER_SIZE 96
+#define DICE_COSE_KEY_ALG_VALUE (-35)
+#define DICE_PUBLIC_KEY_SIZE 96
+#define DICE_PRIVATE_KEY_SIZE 48
+#define DICE_SIGNATURE_SIZE 96
 
-#endif  // DICE_CONFIG_BORINGSSL_ECDSA_P384_DICE_CONFIG_H_
+#endif  // DICE_DICE_CONFIG_H_
