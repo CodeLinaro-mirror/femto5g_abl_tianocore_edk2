@@ -30,7 +30,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -621,7 +621,6 @@ SwitchPtnSlots (CONST CHAR16 *SetActive)
   struct BootPartsLinkedList *TempNode = NULL;
   EFI_STATUS Status;
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
-  UINT32 PtnLen = 0;
 
   /* Create the partition name string for active and non active slots*/
   if (!StrnCmp (SetActive, (CONST CHAR16 *)L"_a",
@@ -655,13 +654,10 @@ SwitchPtnSlots (CONST CHAR16 *SetActive)
     /* Find the pointer to partition table entry for active and non-active
      * slots*/
     for (i = 0; i < PartitionCount; i++) {
-      PtnLen = StrLen (PtnEntries[i].PartEntry.PartitionName);
-      if ((PtnLen == StrLen (CurSlot)) &&
-           !StrnCmp (PtnEntries[i].PartEntry.PartitionName, CurSlot,
+      if (!StrnCmp (PtnEntries[i].PartEntry.PartitionName, CurSlot,
                     StrLen (CurSlot))) {
         PtnCurrent = &PtnEntries[i];
-      } else if ((PtnLen == StrLen (NewSlot)) &&
-                 !StrnCmp (PtnEntries[i].PartEntry.PartitionName, NewSlot,
+      } else if (!StrnCmp (PtnEntries[i].PartEntry.PartitionName, NewSlot,
                            StrLen (NewSlot))) {
         PtnNew = &PtnEntries[i];
       }
