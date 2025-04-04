@@ -26,9 +26,9 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// Changes from Qualcomm Innovation Center, Inc. are provided
+// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
 // under the following license:
-// Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #include "KeymasterClient.h"
@@ -161,7 +161,7 @@ typedef struct {
 
 typedef struct {
   UINT32 FrsSecLen;                 /*Holds length of FRS secret*/
-  uint8_t FrsSec[DICE_HIDDEN_SIZE]; /*Holds plain secret*/
+  uint8_t FrsSec[DICE_KM_FRS_SIZE]; /*Holds plain secret*/
 } __attribute__ ((packed)) KMFrsSec;
 
 typedef struct {
@@ -174,10 +174,10 @@ typedef struct {
   INT32 Status;
   UINT32 FrsLen;
   UINT32 UdsLen;
-  uint8_t Frs[DICE_HIDDEN_SIZE];    /*Factory reset Secret */
+  uint8_t Frs[DICE_KM_FRS_SIZE];    /*Factory reset Secret */
   uint8_t Uds[DICE_CDI_SIZE];       /*Unique Device Secret*/
   UINT32 FrsSecLen;                 /*Holds length of FRS secret*/
-  uint8_t FrsSec[DICE_HIDDEN_SIZE]; /*Holds plain secret*/
+  uint8_t FrsSec[DICE_KM_FRS_SIZE]; /*Holds plain secret*/
 } __attribute__ ((packed)) KMGetFRSUDSRsp;
 
 #ifndef AUTO_VIRT_ABL
@@ -757,8 +757,8 @@ KeyMasterGetFRSAndUDS (BccParams_t *bcc_params)
   DeviceInfo *Devinfo = NULL;
 
   if (bcc_params == NULL ||
-      bcc_params->FRS == NULL ||
-      bcc_params->UDS == NULL) {
+      bcc_params->Frs == NULL ||
+      bcc_params->Uds == NULL) {
     DEBUG ((EFI_D_ERROR, "KeyMasterGetFRSAndUDS: Parameter received"
                          "is NULL"));
     Status = EFI_INVALID_PARAMETER;
@@ -791,12 +791,12 @@ KeyMasterGetFRSAndUDS (BccParams_t *bcc_params)
   }
 
   FRSUDSReq.FdrFlag = Devinfo->FdrFlag;
-  if (Devinfo->FrsSecLen != 0) {
+  if (Devinfo->Km_frs_sec_len != 0) {
     /* If any FRS secret is maintained in DevInfo,
      * copy it into request buffer.
      */
-    FRSUDSReq.FrsSecData.FrsSecLen = Devinfo->FrsSecLen;
-    CopyMem (FRSUDSReq.FrsSecData.FrsSec, Devinfo->FrsSec,
+    FRSUDSReq.FrsSecData.FrsSecLen = Devinfo->Km_frs_sec_len;
+    CopyMem (FRSUDSReq.FrsSecData.FrsSec, Devinfo->Km_frs_sec,
              FRSUDSReq.FrsSecData.FrsSecLen);
   }
 #ifndef AUTO_VIRT_ABL
@@ -818,7 +818,7 @@ KeyMasterGetFRSAndUDS (BccParams_t *bcc_params)
     goto out;
   }
 
-  if (FRSUDSRsp.FrsLen != DICE_HIDDEN_SIZE &&
+  if (FRSUDSRsp.FrsLen != DICE_KM_FRS_SIZE &&
       FRSUDSRsp.UdsLen != DICE_CDI_SIZE) {
     DEBUG ((EFI_D_ERROR,
             "KeyMasterGetFRSAndUDS: Invalid Length Received:"
@@ -840,8 +840,8 @@ KeyMasterGetFRSAndUDS (BccParams_t *bcc_params)
   }
 
   /* Copy FRS secret on devinfo populated by Keymint in response.*/
-  Devinfo->FrsSecLen = FRSUDSRsp.FrsSecLen;
-  CopyMem (Devinfo->FrsSec, FRSUDSRsp.FrsSec, FRSUDSRsp.FrsSecLen);
+  Devinfo->Km_frs_sec_len = FRSUDSRsp.FrsSecLen;
+  CopyMem (Devinfo->Km_frs_sec, FRSUDSRsp.FrsSec, FRSUDSRsp.FrsSecLen);
 
   /* Write in devinfo, only when secret is updated or FDR flag is set*/
   Status =
@@ -854,8 +854,8 @@ KeyMasterGetFRSAndUDS (BccParams_t *bcc_params)
     goto out;
   }
 
-  CopyMem (bcc_params->FRS, FRSUDSRsp.Frs, FRSUDSRsp.FrsLen);
-  CopyMem (bcc_params->UDS, FRSUDSRsp.Uds, FRSUDSRsp.UdsLen);
+  CopyMem (bcc_params->Frs, FRSUDSRsp.Frs, FRSUDSRsp.FrsLen);
+  CopyMem (bcc_params->Uds, FRSUDSRsp.Uds, FRSUDSRsp.UdsLen);
 
 out:
   if (Devinfo) {

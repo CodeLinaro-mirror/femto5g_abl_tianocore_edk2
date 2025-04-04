@@ -12,12 +12,17 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-#ifndef DICE_CONFIG_H_
-#define DICE_CONFIG_H_
+// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
+// under the following license:
+// Copyright (c) 2025 Qualcomm Innovation Center, Inc.
+// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+
+#ifndef DICE_CONFIG_MBEDTLS_ECDSA_P256_DICE_CONFIG_H_
+#define DICE_CONFIG_MBEDTLS_ECDSA_P256_DICE_CONFIG_H_
 
 // ECDSA-P256
-#define DICE_PUBLIC_KEY_SIZE 33
-#define DICE_PRIVATE_KEY_SIZE 32
-#define DICE_SIGNATURE_SIZE 64
+#define DICE_PUBLIC_KEY_BUFFER_SIZE 65
+#define DICE_PRIVATE_KEY_BUFFER_SIZE 32
+#define DICE_SIGNATURE_BUFFER_SIZE 64
 
-#endif  // DICE_DICE_CONFIG_H_
+#endif  // DICE_CONFIG_MBEDTLS_ECDSA_P256_DICE_DICE_CONFIG_H_

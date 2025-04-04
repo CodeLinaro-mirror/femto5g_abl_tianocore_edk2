@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
+ * Copyright (c) 2022, 2025 Qualcomm Innovation Center, Inc.
+ * All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "AvbPopulateBccParams.h"
@@ -61,7 +61,7 @@ PopulateAuthorityHash (AvbSlotVerifyData *SlotData, BccParams_t *bcc_params)
         }
     }
     if (&Ctx == NULL ||
-        bcc_params->ChildImage.authorityHash == NULL) {
+        bcc_params->ChildImage.AuthorityHash == NULL) {
         Status = EFI_INVALID_PARAMETER;
         goto out;
     }
@@ -71,7 +71,7 @@ PopulateAuthorityHash (AvbSlotVerifyData *SlotData, BccParams_t *bcc_params)
         Status = EFI_INVALID_PARAMETER;
         goto out;
     }
-    avb_memcpy (bcc_params->ChildImage.authorityHash, authoritydigest,
+    avb_memcpy (bcc_params->ChildImage.AuthorityHash, authoritydigest,
                 DICE_HASH_SIZE);
 out:
     return Status;
@@ -98,14 +98,14 @@ PopulateBccImgParams (AvbSlotVerifyData *SlotData, BccParams_t *bcc_params,
     }
 
     if (SlotData->loaded_partitions[PartitionIndex].partition_name == NULL ||
-        bcc_params->ChildImage.componentName == NULL ||
+        bcc_params->ChildImage.ComponentName == NULL ||
         SlotData->loaded_partitions[PartitionIndex].data == NULL ||
-        bcc_params->ChildImage.codeHash == NULL) {
+        bcc_params->ChildImage.CodeHash == NULL) {
         Status = EFI_INVALID_PARAMETER;
     }
     PnameLen =
         sizeof (SlotData->loaded_partitions[PartitionIndex].partition_name);
-    avb_memcpy (bcc_params->ChildImage.componentName,
+    avb_memcpy (bcc_params->ChildImage.ComponentName,
                 SlotData->loaded_partitions[PartitionIndex].partition_name,
                 PnameLen);
 
@@ -118,7 +118,7 @@ PopulateBccImgParams (AvbSlotVerifyData *SlotData, BccParams_t *bcc_params,
         Status = EFI_INVALID_PARAMETER;
         goto out;
     }
-    avb_memcpy (bcc_params->ChildImage.codeHash, CodeDigest, DICE_HASH_SIZE);
+    avb_memcpy (bcc_params->ChildImage.CodeHash, CodeDigest, DICE_HASH_SIZE);
 
 out:
     return Status;

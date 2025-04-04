@@ -12,7 +12,6 @@
 #
 from __future__ import print_function
 import Common.LongFilePathOs as os, codecs, re
-import distutils.util
 import Common.EdkLogger as EdkLogger
 from io import BytesIO
 from Common.BuildToolError import *
@@ -20,6 +19,7 @@ from Common.StringUtils import GetLineNo
 from Common.Misc import PathClass
 from Common.LongFilePathSupport import LongFilePath
 from Common.GlobalData import *
+import shlex
 ##
 # Static definitions
 #
@@ -233,7 +233,7 @@ class UniFileClassObject(object):
     # Get Language definition
     #
     def GetLangDef(self, File, Line):
-        Lang = distutils.util.split_quoted((Line.split(u"//")[0]))
+        Lang = shlex.split_quoted((Line.split(u"//")[0]))
         if len(Lang) != 3:
             try:
                 FileIn = UniFileClassObject.OpenUniFile(LongFilePath(File.Path))
