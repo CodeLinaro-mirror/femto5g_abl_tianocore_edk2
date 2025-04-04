@@ -192,6 +192,7 @@ typedef struct BootInfo {
   VOID *VBData;
   UINT32 HeaderVersion;
   BOOLEAN HasBootInitRamdisk;
+  UINT32 BootReason;
 } BootInfo;
 
 typedef struct BootLinuxParamlist {
@@ -242,6 +243,8 @@ typedef struct BootLinuxParamlist {
   UINT32 KernelSizeActual;
   UINT32 FinalBootConfigLen;
 
+  UINT32 BootReason;
+
   CHAR8 *FinalCmdLine;
   CHAR8 *FinalBootConfig;
   CHAR8 *CmdLine;
@@ -282,6 +285,7 @@ BOOLEAN IsMultiBoot (VOID);
 BOOLEAN IsPowerKeyMultiplex (VOID);
 BOOLEAN ClearResetReason (VOID);
 BOOLEAN SlotSwitchOnImageCorruption (VOID);
+BOOLEAN BootDeviceBasedDtSelection (VOID);
 BOOLEAN IsBuildAsSystemRootImage (BootParamlist *BootParamlistPtr);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
 VOID SetRecoveryHasNoKernel (VOID);

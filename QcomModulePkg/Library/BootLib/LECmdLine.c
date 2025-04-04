@@ -32,9 +32,10 @@
 #include "LECmdLine.h"
 #include "Board.h"
 #include <Library/MemoryAllocationLib.h>
+#include "RecoveryInfo.h"
 
 /* verity command line related structures */
-#define MAX_VERITY_CMD_LINE 512
+#define MAX_VERITY_CMD_LINE 2048
 #define MAX_VERITY_SECTOR_LEN 12
 #define MAX_VERITY_HASH_LEN 65
 #define MAX_VERITY_NAND_IGNORE_LEN 2
@@ -55,7 +56,14 @@ STATIC CONST CHAR8 *FecRoot = "fec_roots";
 STATIC CONST CHAR8 *FecBlock = "fec_blocks";
 STATIC CONST CHAR8 *FecStart = "fec_start";
 
+#if VERITY_LE_ROOTHASH_SIGNED
+#define MAX_VERITY_HASH_SIG_LEN 1024
+#define FEATUREARGS 12
+STATIC CONST CHAR8 *RootHashSigKeyName = "root_hash_sig_key_value";
+#else
 #define FEATUREARGS 10
+#endif
+
 #if VERITY_LE
 BOOLEAN IsLEVerity (VOID)
 {
@@ -163,6 +171,9 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
   BOOLEAN MultiSlotBoot = FALSE;
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
   INT32 Index = 0;
+#if VERITY_LE_ROOTHASH_SIGNED
+  CHAR8 *HashSig = NULL;
+#endif
 
   /* Get verity command line from SourceCmdLine */
   DMDataStr = AsciiStrStr (SourceCmdLine, "verity=");
@@ -229,6 +240,23 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       DEBUG ((EFI_D_ERROR, "GetLEVerityCmdLine: Fec Offset error \n"));
       goto ErrLEVerityout;
     }
+#if VERITY_LE_ROOTHASH_SIGNED
+    DMDataStr += Length;
+
+    HashSig = AllocateZeroPool (sizeof (CHAR8) * MAX_VERITY_HASH_SIG_LEN);
+    if (!HashSig) {
+      DEBUG ((EFI_D_ERROR, "Failed to allocate memory for HashSig\n"));
+      Status = EFI_OUT_OF_RESOURCES;
+      goto ErrLEVerityout;
+    }
+
+    Status = LEVerityWordnCpy ((CHAR8 *) &HashSig[0],
+                               MAX_VERITY_HASH_SIG_LEN, DMDataStr, &Length);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "GetLEVerityCmdLine: HashSig error \n"));
+      goto ErrLEVerityout;
+    }
+#endif
 
     /* Get HashSize which is always greater by 8 bytes to DataSize.
      * When using the  veritysetup utlity we see that it should be
@@ -244,9 +272,13 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
     StrnCpyS (PartitionName, MAX_GPT_NAME_SIZE, (CONST CHAR16 *)L"system",
           StrLen ((CONST CHAR16 *)L"system"));
     if (MultiSlotBoot) {
-      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE,
-            GetCurrentSlotSuffix ().Suffix,
-            StrLen (GetCurrentSlotSuffix ().Suffix));
+      if (!IsRecoveryInfo () ||
+         (StrCmp (GetCurrentSlotSuffix ().Suffix, L"_a")) ||
+         (IsRecoveryInfoWithSlotA ())) {
+        StrnCatS (PartitionName, MAX_GPT_NAME_SIZE,
+        GetCurrentSlotSuffix ().Suffix,
+        StrLen (GetCurrentSlotSuffix ().Suffix));
+      }
       DEBUG ((EFI_D_VERBOSE, "Partition name:%s\n", PartitionName));
     }
     Index = GetPartitionIndex (PartitionName);
@@ -301,6 +333,34 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       );
     }
 
+#if VERITY_LE_ROOTHASH_SIGNED
+    /* Construct complete verity command line with RootHashSigned */
+    if (AsciiStrCmp (FecOff, "0") == 0) {
+      AsciiSPrint (
+      DMTemp,
+      MAX_VERITY_CMD_LINE,
+      " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a %a %a %a %a %d %a %a %a %a %a\"",
+      VerityRoot, VerityAppliedOn, SectorSize, VerityName,
+      VeritySystemPartitionStr, VeritySystemPartitionStr,
+      VerityBlockSize, VerityBlockSize, DataSize, HashSize,
+      VerityEncriptionName, Hash, VeritySalt,
+      RootHashSigKeyName, HashSig
+      );
+    }
+    else {
+      AsciiSPrint (
+      DMTemp,
+      MAX_VERITY_CMD_LINE,
+      " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a %a %a %a %a %d %a %a %a %d %a %a %a %a %a 2 %a %a %a %a %a %a\"",
+      VerityRoot, VerityAppliedOn, SectorSize, VerityName,
+      VeritySystemPartitionStr, VeritySystemPartitionStr, VerityBlockSize,
+      VerityBlockSize, DataSize, HashSize, VerityEncriptionName, Hash,
+      VeritySalt, FEATUREARGS, OptionalParam0, OptionalParam1, UseFec,
+      VeritySystemPartitionStr, FecRoot, FecBlock, FecOff, FecStart, FecOff,
+      RootHashSigKeyName, HashSig
+      );
+    }
+#else
     /* Construct complete verity command line */
     if (AsciiStrCmp (FecOff, "0") == 0) {
         AsciiSPrint (
@@ -325,6 +385,7 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
         VeritySystemPartitionStr, FecRoot, FecBlock, FecOff, FecStart, FecOff
         );
     }
+#endif
 
     Length = AsciiStrLen (DMTemp) + 1; /* 1 extra byte for NULL */
 
@@ -367,5 +428,11 @@ ErrLEVerityout:
     FreePool (DMTemp);
     DMTemp = NULL;
   }
+#if VERITY_LE_ROOTHASH_SIGNED
+  if (HashSig != NULL) {
+    FreePool (HashSig);
+    HashSig = NULL;
+  }
+#endif
   return Status;
 }
