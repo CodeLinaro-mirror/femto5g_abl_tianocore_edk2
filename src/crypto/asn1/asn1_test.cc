@@ -1,22 +1,23 @@
-/* Copyright 2016 The BoringSSL Authors
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2016 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <limits.h>
 #include <stdio.h>
 
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -949,9 +950,10 @@ TEST(ASN1Test, StringToUTF8) {
   }
 }
 
-static std::string ASN1StringToStdString(const ASN1_STRING *str) {
-  return std::string(ASN1_STRING_get0_data(str),
-                     ASN1_STRING_get0_data(str) + ASN1_STRING_length(str));
+static std::string_view ASN1StringToStringView(const ASN1_STRING *str) {
+  return std::string_view(
+      reinterpret_cast<const char *>(ASN1_STRING_get0_data(str)),
+      ASN1_STRING_length(str));
 }
 
 static bool ASN1Time_check_posix(const ASN1_TIME *s, int64_t t) {
@@ -1031,7 +1033,7 @@ TEST(ASN1Test, SetTime) {
     if (t.utc) {
       ASSERT_TRUE(utc);
       EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(utc.get()));
-      EXPECT_EQ(t.utc, ASN1StringToStdString(utc.get()));
+      EXPECT_EQ(t.utc, ASN1StringToStringView(utc.get()));
       EXPECT_TRUE(ASN1Time_check_posix(utc.get(), t.time));
       EXPECT_EQ(ASN1_TIME_to_posix(utc.get(), &tt), 1);
       EXPECT_EQ(tt, t.time);
@@ -1046,7 +1048,7 @@ TEST(ASN1Test, SetTime) {
     if (t.generalized) {
       ASSERT_TRUE(generalized);
       EXPECT_EQ(V_ASN1_GENERALIZEDTIME, ASN1_STRING_type(generalized.get()));
-      EXPECT_EQ(t.generalized, ASN1StringToStdString(generalized.get()));
+      EXPECT_EQ(t.generalized, ASN1StringToStringView(generalized.get()));
       EXPECT_TRUE(ASN1Time_check_posix(generalized.get(), t.time));
       EXPECT_EQ(ASN1_TIME_to_posix(generalized.get(), &tt), 1);
       EXPECT_EQ(tt, t.time);
@@ -1064,10 +1066,10 @@ TEST(ASN1Test, SetTime) {
       ASSERT_TRUE(choice);
       if (t.utc) {
         EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(choice.get()));
-        EXPECT_EQ(t.utc, ASN1StringToStdString(choice.get()));
+        EXPECT_EQ(t.utc, ASN1StringToStringView(choice.get()));
       } else {
         EXPECT_EQ(V_ASN1_GENERALIZEDTIME, ASN1_STRING_type(choice.get()));
-        EXPECT_EQ(t.generalized, ASN1StringToStdString(choice.get()));
+        EXPECT_EQ(t.generalized, ASN1StringToStringView(choice.get()));
       }
       EXPECT_TRUE(ASN1Time_check_posix(choice.get(), t.time));
       EXPECT_EQ(ASN1_TIME_to_posix(choice.get(), &tt), 1);
@@ -1084,47 +1086,47 @@ TEST(ASN1Test, TimeSetString) {
 
   ASSERT_TRUE(ASN1_UTCTIME_set_string(s.get(), "700101000000Z"));
   EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("700101000000Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("700101000000Z", ASN1StringToStringView(s.get()));
 
   ASSERT_TRUE(ASN1_GENERALIZEDTIME_set_string(s.get(), "19700101000000Z"));
   EXPECT_EQ(V_ASN1_GENERALIZEDTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("19700101000000Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("19700101000000Z", ASN1StringToStringView(s.get()));
 
   // |ASN1_TIME_set_string| accepts either format. It relies on there being no
   // overlap between the two.
   ASSERT_TRUE(ASN1_TIME_set_string(s.get(), "700101000000Z"));
   EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("700101000000Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("700101000000Z", ASN1StringToStringView(s.get()));
 
   ASSERT_TRUE(ASN1_TIME_set_string(s.get(), "19700101000000Z"));
   EXPECT_EQ(V_ASN1_GENERALIZEDTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("19700101000000Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("19700101000000Z", ASN1StringToStringView(s.get()));
 
   // |ASN1_TIME_set_string_X509| behaves similarly except it additionally
   // converts GeneralizedTime to UTCTime if it fits.
   ASSERT_TRUE(ASN1_TIME_set_string_X509(s.get(), "700101000000Z"));
   EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("700101000000Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("700101000000Z", ASN1StringToStringView(s.get()));
 
   ASSERT_TRUE(ASN1_TIME_set_string_X509(s.get(), "19700101000000Z"));
   EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("700101000000Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("700101000000Z", ASN1StringToStringView(s.get()));
 
   ASSERT_TRUE(ASN1_TIME_set_string_X509(s.get(), "19500101000000Z"));
   EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("500101000000Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("500101000000Z", ASN1StringToStringView(s.get()));
 
   ASSERT_TRUE(ASN1_TIME_set_string_X509(s.get(), "19491231235959Z"));
   EXPECT_EQ(V_ASN1_GENERALIZEDTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("19491231235959Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("19491231235959Z", ASN1StringToStringView(s.get()));
 
   ASSERT_TRUE(ASN1_TIME_set_string_X509(s.get(), "20491231235959Z"));
   EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("491231235959Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("491231235959Z", ASN1StringToStringView(s.get()));
 
   ASSERT_TRUE(ASN1_TIME_set_string_X509(s.get(), "20500101000000Z"));
   EXPECT_EQ(V_ASN1_GENERALIZEDTIME, ASN1_STRING_type(s.get()));
-  EXPECT_EQ("20500101000000Z", ASN1StringToStdString(s.get()));
+  EXPECT_EQ("20500101000000Z", ASN1StringToStringView(s.get()));
 
   // Invalid inputs are rejected.
   EXPECT_FALSE(ASN1_UTCTIME_set_string(s.get(), "nope"));
@@ -1157,6 +1159,52 @@ TEST(ASN1Test, TimeSetString) {
   EXPECT_FALSE(ASN1_GENERALIZEDTIME_set_string(nullptr, "19700101000000-0400"));
   EXPECT_FALSE(ASN1_TIME_set_string(nullptr, "19700101000000-0400"));
   EXPECT_FALSE(ASN1_TIME_set_string_X509(nullptr, "19700101000000-0400"));
+}
+
+TEST(ASN1Test, UTCTimeZoneOffsets) {
+  bssl::UniquePtr<ASN1_STRING> s(ASN1_STRING_new());
+  ASSERT_TRUE(s);
+
+  ASSERT_TRUE(ASN1_UTCTIME_set_string(s.get(), "700101000000Z"));
+  EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(s.get()));
+  EXPECT_EQ("700101000000Z", ASN1StringToStringView(s.get()));
+
+  // UTCTIME_set_string should not allow a timezone offset
+  EXPECT_FALSE(ASN1_UTCTIME_set_string(s.get(), "700101000000-0400"));
+
+  // Forcibly construct a utc time with a timezone offset.
+  ASSERT_TRUE(ASN1_STRING_set(s.get(), "700101000000-0400",
+                              strlen("700101000000-0400")));
+  EXPECT_EQ(V_ASN1_UTCTIME, ASN1_STRING_type(s.get()));
+  EXPECT_EQ("700101000000-0400", ASN1StringToStringView(s.get()));
+
+  // check is expected to be valid with timezone offsets
+  ASSERT_TRUE(ASN1_UTCTIME_check(s.get()));
+
+  int64_t posix_time;
+  EXPECT_FALSE(ASN1_TIME_to_posix(s.get(), &posix_time));
+  ASSERT_TRUE(ASN1_TIME_to_posix_nonstandard(s.get(), &posix_time));
+  EXPECT_EQ(posix_time, (4 * 60 * 60 * -1));
+
+  // Conscrypt expects a utc time with an arbitrary offset to be
+  // accepted by ASN1_TIME_to_generalizedtime.
+  bssl::UniquePtr<ASN1_STRING> g(
+      ASN1_TIME_to_generalizedtime(s.get(), nullptr));
+  ASSERT_TRUE(g);
+  EXPECT_EQ(V_ASN1_GENERALIZEDTIME, ASN1_STRING_type(g.get()));
+  // crbug.com/389147378
+  // This should be the correct value
+  // EXPECT_EQ("19691231200000Z", ASN1StringToStringView(g.get()));
+  // But this function currently generates invalid times.
+  EXPECT_EQ("19700101000000-0400", ASN1StringToStringView(g.get()));
+  // Force this to be a generalized time the same as our utc time
+  EXPECT_TRUE(ASN1_GENERALIZEDTIME_set_string(g.get(), "19691231200000Z"));
+
+  // ASN1_TIME_diff is expected to accept timezone offsets
+  int days, secs;
+  EXPECT_TRUE(ASN1_TIME_diff(&days, &secs, s.get(), g.get()));
+  EXPECT_EQ(days, 0);
+  EXPECT_EQ(secs, 0);
 }
 
 TEST(ASN1Test, AdjTime) {

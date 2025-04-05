@@ -187,6 +187,8 @@ _CET_ENDBR
 
 	vpshufb	%xmm1,%xmm0,%xmm0
 	vmovdqu	%xmm0,(%rdi)
+
+
 	ret
 
 
@@ -202,14 +204,24 @@ _CET_ENDBR
 
 
 
-	vbroadcasti128	L$bswap_mask(%rip),%ymm6
+
+
+
+	vmovdqu	L$bswap_mask(%rip),%xmm6
+	vmovdqu	L$gfpoly(%rip),%xmm7
+
+
 	vmovdqu	(%rdi),%xmm5
 	vpshufb	%xmm6,%xmm5,%xmm5
-	vbroadcasti128	L$gfpoly(%rip),%ymm7
 
 
 	cmpq	$32,%rcx
 	jb	L$ghash_lastblock
+
+
+
+	vinserti128	$1,%xmm6,%ymm6,%ymm6
+	vinserti128	$1,%xmm7,%ymm7,%ymm7
 
 	cmpq	$127,%rcx
 	jbe	L$ghash_loop_1x
@@ -319,9 +331,6 @@ L$ghash_loop_1x:
 L$ghash_loop_1x_done:
 
 
-	vzeroupper
-
-
 L$ghash_lastblock:
 	testq	%rcx,%rcx
 	jz	L$ghash_done
@@ -348,6 +357,8 @@ L$ghash_done:
 
 	vpshufb	%xmm6,%xmm5,%xmm5
 	vmovdqu	%xmm5,(%rdi)
+
+	vzeroupper
 	ret
 
 
@@ -366,7 +377,7 @@ _CET_ENDBR
 	movq	16(%rsp),%r12
 #ifdef BORINGSSL_DISPATCH_TEST
 
-	movb	$1,_BORINGSSL_function_hit+8(%rip)
+	movb	$1,_BORINGSSL_function_hit+6(%rip)
 #endif
 	vbroadcasti128	L$bswap_mask(%rip),%ymm0
 
@@ -498,6 +509,8 @@ L$aes192__func1:
 	vaesenc	%ymm2,%ymm15,%ymm15
 
 L$aes128__func1:
+	prefetcht0	512(%rdi)
+	prefetcht0	512+64(%rdi)
 
 	vmovdqu	0(%rsi),%ymm3
 	vpshufb	%ymm0,%ymm3,%ymm3
@@ -983,6 +996,8 @@ L$aes192__func2:
 	vaesenc	%ymm2,%ymm15,%ymm15
 
 L$aes128__func2:
+	prefetcht0	512(%rdi)
+	prefetcht0	512+64(%rdi)
 
 	vmovdqu	0(%rdi),%ymm3
 	vpshufb	%ymm0,%ymm3,%ymm3

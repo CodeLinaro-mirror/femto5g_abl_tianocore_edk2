@@ -1,16 +1,16 @@
-/* Copyright 2014 The BoringSSL Authors
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2014 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <openssl/base.h>
 
@@ -57,7 +57,6 @@ OPENSSL_MSVC_PRAGMA(comment(lib, "Ws2_32.lib"))
 #include <vector>
 
 #include "../../crypto/internal.h"
-#include "../internal.h"
 #include "async_bio.h"
 #include "handshake_util.h"
 #include "mock_quic_transport.h"
@@ -1277,13 +1276,26 @@ static bool DoExchange(bssl::UniquePtr<SSL_SESSION> *out_session,
     }
 
     if (expect_new_session) {
-      bool got_early_data = test_state->new_session->ticket_max_early_data != 0;
+      bool got_early_data =
+          !!SSL_SESSION_early_data_capable(test_state->new_session.get());
       if (config->expect_ticket_supports_early_data != got_early_data) {
         fprintf(stderr,
                 "new session did%s support early data, but we expected the "
                 "opposite\n",
                 got_early_data ? "" : " not");
         return false;
+      }
+
+      if (config->expect_resumable_across_names.has_value()) {
+        bool actual = !!SSL_SESSION_is_resumable_across_names(
+            test_state->new_session.get());
+        if (config->expect_resumable_across_names.value() != actual) {
+          fprintf(stderr,
+                  "new session did%s support cross-name resumption, but we "
+                  "expected the opposite\n",
+                  actual ? "" : " not");
+          return false;
+        }
       }
     }
   }
@@ -1311,7 +1323,7 @@ static bool DoExchange(bssl::UniquePtr<SSL_SESSION> *out_session,
   }
 
   if (SSL_total_renegotiations(ssl) > 0) {
-    if (!SSL_get_session(ssl)->not_resumable) {
+    if (SSL_SESSION_is_resumable(SSL_get_session(ssl))) {
       fprintf(stderr,
               "Renegotiations should never produce resumable sessions.\n");
       return false;
@@ -1401,8 +1413,13 @@ int main(int argc, char **argv) {
 #endif
   }
 
-  bssl::UniquePtr<SSL_CTX> ssl_ctx;
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+  if (initial_config.fuzzer_mode) {
+    CRYPTO_set_fuzzer_mode(1);
+  }
+#endif
 
+  bssl::UniquePtr<SSL_CTX> ssl_ctx;
   bssl::UniquePtr<SSL_SESSION> session;
   for (int i = 0; i < initial_config.resume_count + 1; i++) {
     bool is_resume = i > 0;

@@ -43,9 +43,8 @@ fi
 
 rm -Rf src/.git
 rm -Rf src/fuzz
-# Omit the experimental new certificate verifier library for now.
-rm -Rf src/pki
 rm -Rf src/third_party/googletest
+rm -Rf src/pki/testdata
 rm -Rf apple-aarch64 apple-arm apple-x86 apple-x86_64 ios-aarch64 ios-arm \
    linux-aarch64 linux-arm linux-ppc64le linux-x86 linux-x86_64 win-aarch64 win-x86 win-x86_64
 

@@ -1,20 +1,21 @@
-/* Copyright 2019 The BoringSSL Authors
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2019 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <assert.h>
@@ -1074,8 +1075,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
         ]
       }
     ])";
-  return write_reply({Span<const uint8_t>(
-      reinterpret_cast<const uint8_t *>(kConfig), sizeof(kConfig) - 1)});
+  return write_reply({bssl::StringAsBytes(kConfig)});
 }
 
 static bool Flush(const Span<const uint8_t> args[], ReplyCallback write_reply) {
@@ -1114,8 +1114,7 @@ static bool HashMCT(const Span<const uint8_t> args[],
     memcpy(buf + DigestLength * 2, digest, DigestLength);
   }
 
-  return write_reply(
-      {Span<const uint8_t>(buf + 2 * DigestLength, DigestLength)});
+  return write_reply({Span(buf).subspan(2 * DigestLength, DigestLength)});
 }
 
 static uint32_t GetIterations(const Span<const uint8_t> iterations_bytes) {
@@ -2120,7 +2119,7 @@ static bool TLSKDF(const Span<const uint8_t> args[],
                    ReplyCallback write_reply) {
   const Span<const uint8_t> out_len_bytes = args[0];
   const Span<const uint8_t> secret = args[1];
-  const Span<const uint8_t> label = args[2];
+  const std::string_view label = bssl::BytesAsStringView(args[2]);
   const Span<const uint8_t> seed1 = args[3];
   const Span<const uint8_t> seed2 = args[4];
   const EVP_MD *md = MDFunc();
@@ -2131,11 +2130,10 @@ static bool TLSKDF(const Span<const uint8_t> args[],
   }
   memcpy(&out_len, out_len_bytes.data(), sizeof(out_len));
 
-  std::vector<uint8_t> out(static_cast<size_t>(out_len));
+  std::vector<uint8_t> out(size_t{out_len});
   if (!CRYPTO_tls1_prf(md, out.data(), out.size(), secret.data(), secret.size(),
-                       reinterpret_cast<const char *>(label.data()),
-                       label.size(), seed1.data(), seed1.size(), seed2.data(),
-                       seed2.size())) {
+                       label.data(), label.size(), seed1.data(), seed1.size(),
+                       seed2.data(), seed2.size())) {
     return 0;
   }
 
@@ -2278,7 +2276,7 @@ static bool MLDSAKeyGen(const Span<const uint8_t> args[],
   }
 
   return write_reply(
-      {pub_key_bytes, MakeConstSpan(CBB_data(cbb.get()), CBB_len(cbb.get()))});
+      {pub_key_bytes, Span(CBB_data(cbb.get()), CBB_len(cbb.get()))});
 }
 
 template <typename PrivateKey, size_t SignatureBytes,
@@ -2289,7 +2287,7 @@ template <typename PrivateKey, size_t SignatureBytes,
                                      const uint8_t *)>
 static bool MLDSASigGen(const Span<const uint8_t> args[],
                         ReplyCallback write_reply) {
-  CBS cbs = bssl::MakeConstSpan(args[0]);
+  CBS cbs = args[0];
   auto priv = std::make_unique<PrivateKey>();
   if (ParsePrivateKey(priv.get(), &cbs) != bcm_status::approved) {
     LOG_ERROR("Failed to parse ML-DSA private key.\n");
@@ -2328,7 +2326,7 @@ static bool MLDSASigVer(const Span<const uint8_t> args[],
   const Span<const uint8_t> msg = args[1];
   const Span<const uint8_t> signature = args[2];
 
-  CBS cbs = bssl::MakeConstSpan(pub_key_bytes);
+  CBS cbs = pub_key_bytes;
   auto pub = std::make_unique<PublicKey>();
   if (ParsePublicKey(pub.get(), &cbs) != bcm_status::approved) {
     LOG_ERROR("Failed to parse ML-DSA public key.\n");
@@ -2372,7 +2370,7 @@ static bool MLKEMKeyGen(const Span<const uint8_t> args[],
   }
 
   return write_reply(
-      {pub_key_bytes, MakeConstSpan(CBB_data(cbb.get()), CBB_len(cbb.get()))});
+      {pub_key_bytes, Span(CBB_data(cbb.get()), CBB_len(cbb.get()))});
 }
 
 template <typename PublicKey, bcm_status (*ParsePublic)(PublicKey *, CBS *),
@@ -2390,7 +2388,7 @@ static bool MLKEMEncap(const Span<const uint8_t> args[],
   }
 
   auto pub = std::make_unique<PublicKey>();
-  CBS cbs = bssl::MakeConstSpan(pub_key_bytes);
+  CBS cbs = pub_key_bytes;
   if (!bcm_success(ParsePublic(pub.get(), &cbs)) || CBS_len(&cbs) != 0) {
     LOG_ERROR("Failed to parse public key.\n");
     return false;
@@ -2412,7 +2410,7 @@ static bool MLKEMDecap(const Span<const uint8_t> args[],
   const Span<const uint8_t> ciphertext = args[1];
 
   auto priv = std::make_unique<PrivateKey>();
-  CBS cbs = bssl::MakeConstSpan(priv_key_bytes);
+  CBS cbs = priv_key_bytes;
   if (!bcm_success(ParsePrivate(priv.get(), &cbs))) {
     LOG_ERROR("Failed to parse private key.\n");
     return false;
@@ -2635,10 +2633,9 @@ static constexpr struct {
 };
 
 Handler FindHandler(Span<const Span<const uint8_t>> args) {
-  const bssl::Span<const uint8_t> algorithm = args[0];
+  auto algorithm = bssl::BytesAsStringView(args[0]);
   for (const auto &func : kFunctions) {
-    if (algorithm.size() == strlen(func.name) &&
-        memcmp(algorithm.data(), func.name, algorithm.size()) == 0) {
+    if (algorithm == func.name) {
       if (args.size() - 1 != func.num_expected_args) {
         LOG_ERROR("\'%s\' operation received %zu arguments but expected %u.\n",
                   func.name, args.size() - 1, func.num_expected_args);
@@ -2649,9 +2646,7 @@ Handler FindHandler(Span<const Span<const uint8_t>> args) {
     }
   }
 
-  const std::string name(reinterpret_cast<const char *>(algorithm.data()),
-                         algorithm.size());
-  LOG_ERROR("Unknown operation: %s\n", name.c_str());
+  LOG_ERROR("Unknown operation: %s\n", std::string(algorithm).c_str());
   return nullptr;
 }
 
