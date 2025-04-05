@@ -1,21 +1,24 @@
-/* Copyright 2024 The BoringSSL Authors
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2024 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-#ifndef OPENSSL_HEADER_CRYPTO_BCM_INTERFACE_H
-#define OPENSSL_HEADER_CRYPTO_BCM_INTERFACE_H
+#ifndef OPENSSL_HEADER_CRYPTO_FIPSMODULE_BCM_INTERFACE_H
+#define OPENSSL_HEADER_CRYPTO_FIPSMODULE_BCM_INTERFACE_H
 
+// For the moment, we reach out for AES_KEY.
+#include <openssl/aes.h>
 #include <openssl/bcm_public.h>
+
 
 // This header will eventually become the interface between BCM and the
 // rest of libcrypto. More cleanly separating the two is still a work in
@@ -713,10 +716,18 @@ OPENSSL_EXPORT bcm_status BCM_mlkem1024_marshal_private_key(
 // SLH-DSA-SHA2-128s signature.
 #define BCM_SLHDSA_SHA2_128S_SIGNATURE_BYTES 7856
 
-// SLHDSA_SHA2_128S_generate_key_from_seed generates an SLH-DSA-SHA2-128s key
-// pair from a 48-byte seed and writes the result to |out_public_key| and
+// BCM_slhdsa_sha2_128s_generate_key_from_seed generates an SLH-DSA-SHA2-128s
+// key pair from a 48-byte seed and writes the result to |out_public_key| and
 // |out_secret_key|.
 OPENSSL_EXPORT bcm_infallible BCM_slhdsa_sha2_128s_generate_key_from_seed(
+    uint8_t out_public_key[BCM_SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES],
+    uint8_t out_secret_key[BCM_SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES],
+    const uint8_t seed[3 * BCM_SLHDSA_SHA2_128S_N]);
+
+// BCM_slhdsa_sha2_128s_generate_key_from_seed_fips does the same thing as
+// `BCM_slhdsa_sha2_128s_generate_key_from_seed` but implements the required
+// second check before generating a key by testing for nullptr arguments.
+OPENSSL_EXPORT bcm_status BCM_slhdsa_sha2_128s_generate_key_from_seed_fips(
     uint8_t out_public_key[BCM_SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES],
     uint8_t out_secret_key[BCM_SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES],
     const uint8_t seed[3 * BCM_SLHDSA_SHA2_128S_N]);
@@ -745,6 +756,10 @@ OPENSSL_EXPORT bcm_status BCM_slhdsa_sha2_128s_verify_internal(
     size_t context_len, const uint8_t *msg, size_t msg_len);
 
 OPENSSL_EXPORT bcm_infallible BCM_slhdsa_sha2_128s_generate_key(
+    uint8_t out_public_key[BCM_SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES],
+    uint8_t out_private_key[BCM_SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES]);
+
+OPENSSL_EXPORT bcm_status BCM_slhdsa_sha2_128s_generate_key_fips(
     uint8_t out_public_key[BCM_SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES],
     uint8_t out_private_key[BCM_SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES]);
 
@@ -777,8 +792,34 @@ OPENSSL_EXPORT bcm_status BCM_slhdsa_sha2_128s_prehash_verify(
     const uint8_t *context, size_t context_len);
 
 
+// AES
+
+// BCM_aes_encrypt encrypts a single block from |in| to |out| with |key|. The
+// |in| and |out| pointers may overlap.
+OPENSSL_EXPORT bcm_infallible BCM_aes_encrypt(const uint8_t *in, uint8_t *out,
+                                              const AES_KEY *key);
+// BCM_aes_decrypt decrypts a single block from |in| to |out| with |key|. The
+// |in| and |out| pointers may overlap.
+OPENSSL_EXPORT bcm_infallible BCM_aes_decrypt(const uint8_t *in, uint8_t *out,
+                                              const AES_KEY *key);
+
+// BCM_aes_set_encrypt_key configures |aeskey| to encrypt with the |bits|-bit
+// key, |key|. |key| must point to |bits|/8 bytes. It will return failure if
+// |bits| is an invalid AES key size.
+OPENSSL_EXPORT bcm_status BCM_aes_set_encrypt_key(const uint8_t *key,
+                                                  unsigned bits,
+                                                  AES_KEY *aeskey);
+
+// BCM_aes_set_decrypt_key configures |aeskey| to decrypt with the |bits|-bit
+// key, |key|. |key| must point to |bits|/8 bytes. It will return failure if
+// |bits| is an invalid AES key size.
+OPENSSL_EXPORT bcm_status BCM_aes_set_decrypt_key(const uint8_t *key,
+                                                  unsigned bits,
+                                                  AES_KEY *aeskey);
+
+
 #if defined(__cplusplus)
 }  // extern C
 #endif
 
-#endif  // OPENSSL_HEADER_CRYPTO_BCM_INTERFACE_H
+#endif  // OPENSSL_HEADER_CRYPTO_FIPSMODULE_BCM_INTERFACE_H

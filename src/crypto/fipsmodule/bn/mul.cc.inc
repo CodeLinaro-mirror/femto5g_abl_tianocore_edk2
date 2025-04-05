@@ -1,11 +1,16 @@
-/*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
- *
- * Licensed under the OpenSSL license (the "License").  You may not use
- * this file except in compliance with the License.  You can obtain a copy
- * in the file LICENSE in the source distribution or at
- * https://www.openssl.org/source/license.html
- */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <openssl/bn.h>
 
@@ -398,6 +403,10 @@ static int bn_mul_impl(BIGNUM *r, const BIGNUM *a, const BIGNUM *b,
   }
 
   top = al + bl;
+  // TODO(crbug.com/406497222): The recursive implementation is actually worse
+  // for cryptographic use cases, but we need to retain it in |BN_mul| for the
+  // projects misusing BIGNUM as a general-purpose calculator library with
+  // giant integers. Disconnect this code from our cryptographic primitives.
   static const int kMulNormalSize = 16;
   if (al >= kMulNormalSize && bl >= kMulNormalSize) {
     if (-1 <= i && i <= 1) {
@@ -641,6 +650,12 @@ int bn_sqr_consttime(BIGNUM *r, const BIGNUM *a, BN_CTX *ctx) {
       bn_sqr_normal(rr->d, a->d, al, t);
     } else {
       // If |al| is a power of two, we can use |bn_sqr_recursive|.
+      //
+      // TODO(crbug.com/406497222): The recursive implementation is actually
+      // worse for cryptographic use cases, but we need to retain it in |BN_mul|
+      // for the projects misusing BIGNUM as a general-purpose calculator
+      // library with giant integers. Disconnect this code from our
+      // cryptographic primitives.
       if (al != 0 && (al & (al - 1)) == 0) {
         if (!bn_wexpand(tmp, al * 4)) {
           goto err;

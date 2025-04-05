@@ -1,11 +1,16 @@
-/*
- * Copyright 2015-2016 The OpenSSL Project Authors. All Rights Reserved.
- *
- * Licensed under the OpenSSL license (the "License").  You may not use
- * this file except in compliance with the License.  You can obtain a copy
- * in the file LICENSE in the source distribution or at
- * https://www.openssl.org/source/license.html
- */
+// Copyright 2015-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <openssl/evp.h>
 
@@ -14,15 +19,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-OPENSSL_MSVC_PRAGMA(warning(push))
-OPENSSL_MSVC_PRAGMA(warning(disable: 4702))
-
 #include <map>
 #include <string>
 #include <utility>
 #include <vector>
-
-OPENSSL_MSVC_PRAGMA(warning(pop))
 
 #include <gtest/gtest.h>
 

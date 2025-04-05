@@ -1,22 +1,27 @@
-/*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
- *
- * Licensed under the OpenSSL license (the "License").  You may not use
- * this file except in compliance with the License.  You can obtain a copy
- * in the file LICENSE in the source distribution or at
- * https://www.openssl.org/source/license.html
- */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_CRYPTO_INTERNAL_H
 #define OPENSSL_HEADER_CRYPTO_INTERNAL_H
 
-#include <openssl/arm_arch.h>
 #include <openssl/crypto.h>
 #include <openssl/ex_data.h>
 #include <openssl/stack.h>
 #include <openssl/thread.h>
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(BORINGSSL_CONSTANT_TIME_VALIDATION)
@@ -43,9 +48,7 @@
 #endif
 
 #if defined(OPENSSL_WINDOWS_THREADS)
-OPENSSL_MSVC_PRAGMA(warning(push, 3))
 #include <windows.h>
-OPENSSL_MSVC_PRAGMA(warning(pop))
 #endif
 
 #if defined(__cplusplus)
@@ -779,9 +782,6 @@ static inline uint64_t CRYPTO_bswap8(uint64_t x) {
   return __builtin_bswap64(x);
 }
 #elif defined(_MSC_VER)
-OPENSSL_MSVC_PRAGMA(warning(push, 3))
-#include <stdlib.h>
-OPENSSL_MSVC_PRAGMA(warning(pop))
 #pragma intrinsic(_byteswap_uint64, _byteswap_ulong, _byteswap_ushort)
 static inline uint16_t CRYPTO_bswap2(uint16_t x) { return _byteswap_ushort(x); }
 
@@ -1090,13 +1090,9 @@ inline int boringssl_fips_break_test(const char *test) { return 0; }
 //
 //   Index 0:
 //     EDX for CPUID where EAX = 1
-//     Bit 20 is always zero
-//     Bit 28 is adjusted to reflect whether the data cache is shared between
-//       multiple logical cores
 //     Bit 30 is used to indicate an Intel CPU
 //   Index 1:
 //     ECX for CPUID where EAX = 1
-//     Bit 11 is used to indicate AMD XOP support, not SDBG
 //   Index 2:
 //     EBX for CPUID where EAX = 7, ECX = 0
 //     Bit 14 (for removed feature MPX) is used to indicate a preference for ymm
@@ -1108,7 +1104,7 @@ inline int boringssl_fips_break_test(const char *test) { return 0; }
 // and AVX512 bits in XCR0, so it is not necessary to check those. (WARNING: See
 // caveats in cpu_intel.c.)
 //
-// From C, this symbol should only be accessed with |OPENSSL_get_ia32cap|.
+// This symbol should only be accessed with |OPENSSL_get_ia32cap|.
 extern uint32_t OPENSSL_ia32cap_P[4];
 
 // OPENSSL_get_ia32cap initializes the library if needed and returns the |idx|th
@@ -1117,14 +1113,6 @@ extern uint32_t OPENSSL_ia32cap_P[4];
 OPENSSL_ATTR_CONST uint32_t OPENSSL_get_ia32cap(int idx);
 
 // See Intel manual, volume 2A, table 3-11.
-
-inline int CRYPTO_is_FXSR_capable(void) {
-#if defined(__FXSR__)
-  return 1;
-#else
-  return (OPENSSL_get_ia32cap(0) & (1u << 24)) != 0;
-#endif
-}
 
 inline int CRYPTO_is_intel_cpu(void) {
   // The reserved bit 30 is used to indicate an Intel CPU.
@@ -1227,27 +1215,11 @@ inline int CRYPTO_is_ADX_capable(void) {
 
 // SHA-1 and SHA-256 are defined as a single extension.
 inline int CRYPTO_is_x86_SHA_capable(void) {
-  // We should check __SHA__ here, but for now we ignore it. We've run into a
-  // few places where projects build with -march=goldmont, but need a build that
-  // does not require SHA extensions:
-  //
-  // - Some CrOS toolchain definitions are incorrect and build with
-  //   -march=goldmont when targetting boards that are not Goldmont. b/320482539
-  //   tracks fixing this.
-  //
-  // - Sometimes projects build with -march=goldmont as a rough optimized
-  //   baseline. However, Intel CPU capabilities are not strictly linear, so
-  //   this does not quite work. Some combination of -mtune and
-  //   -march=x86-64-v{1,2,3,4} would be a better strategy here.
-  //
-  // - QEMU versions before 8.2 do not support SHA extensions and disable it
-  //   with a warning. Projects that target Goldmont and test on QEMU will
-  //   break. The long-term fix is to update to 8.2. A principled short-term fix
-  //   would be -march=goldmont -mno-sha, to reflect that the binary needs to
-  //   run on both QEMU-8.1-Goldmont and actual-Goldmont.
-  //
-  // TODO(b/320482539): Once the CrOS toolchain is fixed, try this again.
+#if defined(__SHA__)
+  return 1;
+#else
   return (OPENSSL_get_ia32cap(2) & (1u << 29)) != 0;
+#endif
 }
 
 // CRYPTO_cpu_perf_is_like_silvermont returns one if, based on a heuristic, the
@@ -1318,8 +1290,26 @@ inline int CRYPTO_is_VPCLMULQDQ_capable(void) {
 
 #if defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
 
-// OPENSSL_armcap_P contains ARM CPU capabilities. From C, this should only be
-// accessed with |OPENSSL_get_armcap|.
+// ARMV7_NEON indicates support for NEON.
+#define ARMV7_NEON (1 << 0)
+
+// ARMV8_AES indicates support for hardware AES instructions.
+#define ARMV8_AES (1 << 2)
+
+// ARMV8_SHA1 indicates support for hardware SHA-1 instructions.
+#define ARMV8_SHA1 (1 << 3)
+
+// ARMV8_SHA256 indicates support for hardware SHA-256 instructions.
+#define ARMV8_SHA256 (1 << 4)
+
+// ARMV8_PMULL indicates support for carryless multiplication.
+#define ARMV8_PMULL (1 << 5)
+
+// ARMV8_SHA512 indicates support for hardware SHA-512 instructions.
+#define ARMV8_SHA512 (1 << 6)
+
+// OPENSSL_armcap_P contains ARM CPU capabilities as a bitmask of the above
+// constants. This should only be accessed with |OPENSSL_get_armcap|.
 extern uint32_t OPENSSL_armcap_P;
 
 // OPENSSL_get_armcap initializes the library if needed and returns ARM CPU
@@ -1410,6 +1400,7 @@ inline int CRYPTO_is_ARMv8_SHA512_capable(void) {
 
 #endif  // OPENSSL_ARM || OPENSSL_AARCH64
 
+
 #if defined(BORINGSSL_DISPATCH_TEST)
 // Runtime CPU dispatch testing support
 
@@ -1421,11 +1412,11 @@ inline int CRYPTO_is_ARMv8_SHA512_capable(void) {
 //   3: aes_hw_set_encrypt_key
 //   4: vpaes_encrypt
 //   5: vpaes_set_encrypt_key
-//   6: aes_gcm_enc_update_vaes_avx10_256 [reserved]
-//   7: aes_gcm_enc_update_vaes_avx10_512
-//   8: aes_gcm_enc_update_vaes_avx2
-extern uint8_t BORINGSSL_function_hit[9];
+//   6: aes_gcm_enc_update_vaes_avx2
+//   7: aes_gcm_enc_update_vaes_avx512
+extern uint8_t BORINGSSL_function_hit[8];
 #endif  // BORINGSSL_DISPATCH_TEST
+
 
 // OPENSSL_vasprintf_internal is just like |vasprintf(3)|. If |system_malloc| is
 // 0, memory will be allocated with |OPENSSL_malloc| and must be freed with
@@ -1434,6 +1425,19 @@ extern uint8_t BORINGSSL_function_hit[9];
 OPENSSL_EXPORT int OPENSSL_vasprintf_internal(char **str, const char *format,
                                               va_list args, int system_malloc)
     OPENSSL_PRINTF_FORMAT_FUNC(2, 0);
+
+
+// Fuzzer mode.
+
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+// CRYPTO_fuzzer_mode_enabled returns whether fuzzer mode is enabled. See
+// |CRYPTO_set_fuzzer_mode|. In non-fuzzer builds, this function statically
+// returns zero so the codepaths will be deleted by the optimizer.
+int CRYPTO_fuzzer_mode_enabled(void);
+#else
+inline int CRYPTO_fuzzer_mode_enabled(void) { return 0; }
+#endif
+
 
 #if defined(__cplusplus)
 }  // extern C

@@ -1,16 +1,16 @@
-/* Copyright 2024 The BoringSSL Authors
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2024 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <openssl/mldsa.h>
 
@@ -63,7 +63,7 @@ TEST(MLDSATest, DISABLED_BitFlips) {
                            sizeof(kMessage), nullptr, 0));
 
   auto pub = std::make_unique<MLDSA65_public_key>();
-  CBS cbs = bssl::MakeConstSpan(encoded_public_key);
+  CBS cbs = CBS(encoded_public_key);
   ASSERT_TRUE(MLDSA65_parse_public_key(pub.get(), &cbs));
 
   EXPECT_EQ(MLDSA65_verify(pub.get(), encoded_signature.data(),
@@ -104,7 +104,7 @@ static void MLDSABasicTest() {
 
   const std::vector<uint8_t> encoded_private_key =
       Marshal(MarshalPrivate, reinterpret_cast<BCMPrivateKey *>(priv.get()));
-  CBS cbs = bssl::MakeConstSpan(encoded_private_key);
+  CBS cbs = CBS(encoded_private_key);
   EXPECT_TRUE(bcm_success(
       ParsePrivate(reinterpret_cast<BCMPrivateKey *>(priv.get()), &cbs)));
 
@@ -116,7 +116,7 @@ static void MLDSABasicTest() {
                    sizeof(kMessage), kContext, sizeof(kContext)));
 
   auto pub = std::make_unique<PublicKey>();
-  cbs = bssl::MakeConstSpan(encoded_public_key);
+  cbs = CBS(encoded_public_key);
   ASSERT_TRUE(ParsePublicKey(pub.get(), &cbs));
 
   EXPECT_EQ(
@@ -220,7 +220,7 @@ TEST(MLDSATest, SignatureIsRandomized) {
       MLDSA65_generate_key(encoded_public_key.data(), seed, priv.get()));
 
   auto pub = std::make_unique<MLDSA65_public_key>();
-  CBS cbs = bssl::MakeConstSpan(encoded_public_key);
+  CBS cbs = CBS(encoded_public_key);
   ASSERT_TRUE(MLDSA65_parse_public_key(pub.get(), &cbs));
 
   std::vector<uint8_t> encoded_signature1(MLDSA65_SIGNATURE_BYTES);
@@ -273,17 +273,17 @@ TEST(MLDSATest, InvalidPublicKeyEncodingLength) {
       MLDSA65_generate_key(encoded_public_key.data(), seed, priv.get()));
 
   // Public key is 1 byte too short.
-  CBS cbs = bssl::MakeConstSpan(encoded_public_key)
-                .first(MLDSA65_PUBLIC_KEY_BYTES - 1);
+  CBS cbs =
+      CBS(bssl::Span(encoded_public_key).first(MLDSA65_PUBLIC_KEY_BYTES - 1));
   auto parsed_pub = std::make_unique<MLDSA65_public_key>();
   EXPECT_FALSE(MLDSA65_parse_public_key(parsed_pub.get(), &cbs));
 
   // Public key has the correct length.
-  cbs = bssl::MakeConstSpan(encoded_public_key).first(MLDSA65_PUBLIC_KEY_BYTES);
+  cbs = CBS(bssl::Span(encoded_public_key).first(MLDSA65_PUBLIC_KEY_BYTES));
   EXPECT_TRUE(MLDSA65_parse_public_key(parsed_pub.get(), &cbs));
 
   // Public key is 1 byte too long.
-  cbs = bssl::MakeConstSpan(encoded_public_key);
+  cbs = CBS(encoded_public_key);
   EXPECT_FALSE(MLDSA65_parse_public_key(parsed_pub.get(), &cbs));
 }
 
@@ -545,6 +545,20 @@ TEST(MLDSATest, PWCT) {
   auto priv87 = std::make_unique<BCM_mldsa87_private_key>();
   ASSERT_EQ(BCM_mldsa87_generate_key_fips(pub87.get(), seed, priv87.get()),
             bcm_status::approved);
+}
+
+TEST(MLDSATest, NullptrArgumentsToCreate) {
+  // For FIPS reasons, this should fail rather than crash.
+  ASSERT_EQ(BCM_mldsa65_generate_key_fips(nullptr, nullptr, nullptr),
+            bcm_status::failure);
+  ASSERT_EQ(BCM_mldsa87_generate_key_fips(nullptr, nullptr, nullptr),
+            bcm_status::failure);
+  ASSERT_EQ(
+      BCM_mldsa65_generate_key_external_entropy_fips(nullptr, nullptr, nullptr),
+      bcm_status::failure);
+  ASSERT_EQ(
+      BCM_mldsa87_generate_key_external_entropy_fips(nullptr, nullptr, nullptr),
+      bcm_status::failure);
 }
 
 }  // namespace
