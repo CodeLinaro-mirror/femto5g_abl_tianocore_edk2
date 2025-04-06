@@ -234,6 +234,7 @@ typedef struct BootLinuxParamlist {
    */
   VOID *RamdiskBuffer;
   VOID *PvmFwBuffer;
+  VOID *QtvmDtboImgBuffer;
 } BootParamlist;
 
 typedef struct {
@@ -286,6 +287,8 @@ GetImage (CONST BootInfo *Info,
 BOOLEAN
 LoadAndValidateDtboImg (BootInfo *Info,
                         BootParamlist *BootParamlistPtr);
+BOOLEAN
+LoadAndValidateQtvmDtboImg (BootInfo *Info, BootParamlist *BootParamlistPtr);
 VOID SetBootDevImage (VOID);
 VOID ResetBootDevImage (VOID);
 BOOLEAN IsBootDevImage (VOID);

@@ -859,6 +859,16 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
       SetVmDisable ();
     }
   }
+  // Loads qtvm_dtbo partition
+  DtboImgInvalid = LoadAndValidateQtvmDtboImg (Info, BootParamlistPtr);
+  if (DtboImgInvalid) {
+    if (!GetBoardQtVmDtbos (Info, BootParamlistPtr->QtvmDtboImgBuffer)) {
+      DEBUG ((EFI_D_ERROR, "Error: No VM dtbos found for this board\n"));
+    }
+  } else {
+      DEBUG ((EFI_D_ERROR, "Error: Failed to read qtvm_dtbo partition\n\n\n"));
+  }
+
   return EFI_SUCCESS;
 }
 

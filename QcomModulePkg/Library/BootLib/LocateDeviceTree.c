@@ -94,6 +94,18 @@ INT32 GetDtbIdx (VOID)
    return DtbIdx;
 }
 
+STATIC INT32 TuiVmDtboIdx = INVALID_PTN;
+INT32 GetTuiVmDtboIdx (VOID)
+{
+   return TuiVmDtboIdx;
+}
+
+STATIC INT32 OemVmDtboIdx = INVALID_PTN;
+INT32 GetOemVmDtboIdx (VOID)
+{
+   return OemVmDtboIdx;
+}
+
 BOOLEAN GetDtboNeeded (VOID)
 {
   return DtboNeed;
@@ -1377,6 +1389,93 @@ err:
   return Status;
 }
 
+
+/*
+  Function to extract dtbo image from qtvm_dtbo partition.
+*/
+EFI_STATUS
+GetQtvmDtboImg (BootInfo *Info, VOID **DtboImgBuffer, UINT32 *ImageSize)
+{
+  VOID *QtvmDtboPartitionBuffer = NULL;
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 QtvmDtboPartitionSz = 0;
+  CHAR16 PtnName[MAX_GPT_NAME_SIZE] = {0};
+
+  /** Get size of partition **/
+  UINT32 BlkIOAttrib = 0;
+  PartiSelectFilter HandleFilter;
+  UINT32 MaxHandles = 1;
+  EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
+  HandleInfo HandleInfoList[1];
+  Slot CurrentSlot = {{0}};
+
+  GUARD ( StrnCpyS (PtnName,
+              MAX_GPT_NAME_SIZE,
+              (CONST CHAR16 *)L"qtvm_dtbo",
+              (UINTN)StrLen (L"qtvm_dtbo")));
+
+  if (Info->MultiSlotBoot) {
+      CurrentSlot = GetCurrentSlotSuffix ();
+      GUARD ( StrnCatS (PtnName, MAX_GPT_NAME_SIZE,
+                  CurrentSlot.Suffix, StrLen (CurrentSlot.Suffix)));
+  }
+
+  BlkIOAttrib |= BLK_IO_SEL_PARTITIONED_MBR;
+  BlkIOAttrib |= BLK_IO_SEL_PARTITIONED_GPT;
+  BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_NON_REMOVABLE;
+  BlkIOAttrib |= BLK_IO_SEL_MATCH_PARTITION_LABEL;
+
+  HandleFilter.RootDeviceType = NULL;
+  HandleFilter.PartitionLabel = NULL;
+  HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionLabel = PtnName;
+
+  Status =
+     GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
+  if (Status != EFI_SUCCESS ||
+       MaxHandles != 1) {
+    DEBUG ((EFI_D_ERROR,
+            "QTVM dtbo: GetBlkIOHandles failed for loading QTVM dtbo: "
+            "Status:%r, MaxHandles:%u\n",
+            Status, MaxHandles));
+    Status = EFI_LOAD_ERROR;
+    goto err;
+  }
+
+  BlockIo = HandleInfoList[0].BlkIo;
+  QtvmDtboPartitionSz = GetPartitionSize (BlockIo);
+  if (!QtvmDtboPartitionSz) {
+    Status = EFI_BAD_BUFFER_SIZE;
+    goto err;
+  }
+  QtvmDtboPartitionBuffer = AllocateZeroPool (QtvmDtboPartitionSz);
+  if (QtvmDtboPartitionBuffer == NULL) {
+    DEBUG ((EFI_D_ERROR, "QTVM dtbo: partition buffer allocation failure\n"));
+    Status = EFI_OUT_OF_RESOURCES;
+    goto err;
+  }
+
+  /** Load image. **/
+  Status = LoadImageFromPartition (QtvmDtboPartitionBuffer,
+                                   &QtvmDtboPartitionSz,
+                                   PtnName);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "QTVM dtbo: partition buffer loading falied\n"));
+    goto err;
+  }
+
+  *DtboImgBuffer = QtvmDtboPartitionBuffer;
+  *ImageSize = QtvmDtboPartitionSz;
+
+  return Status;
+
+err:
+  if (QtvmDtboPartitionBuffer) {
+    FreePool (QtvmDtboPartitionBuffer);
+  }
+  return Status;
+}
+
 VOID *
 GetBoardDtb (BootInfo *Info, VOID *DtboImgBuffer)
 {
@@ -1440,6 +1539,93 @@ GetBoardDtb (BootInfo *Info, VOID *DtboImgBuffer)
   }
 
   return BestDtbInfo.Dtb;
+}
+
+BOOLEAN
+GetBoardQtVmDtbos (BootInfo *Info, VOID *DtboImgBuffer)
+{
+  struct DtboTableHdr *DtboTableHdr = DtboImgBuffer;
+  struct DtboTableEntry *DtboTableEntry = NULL;
+  UINT32 DtboCount = 0;
+  VOID *BoardDtb = NULL;
+  UINT32 DtboTableEntriesCount = 0;
+  UINT32 FirstDtboTableEntryOffset = 0;
+  DtInfo CurDtbInfo = {0};
+  DtInfo BestDtbInfo = {0};
+  BOOLEAN FindBestDtb = FALSE;
+
+  if (!DtboImgBuffer) {
+    DEBUG ((EFI_D_ERROR, "Dtbo Img buffer is NULL\n"));
+    return FALSE;
+  }
+
+  FirstDtboTableEntryOffset = fdt32_to_cpu (DtboTableHdr->DtEntryOffset);
+  if (CHECK_ADD64 ((UINT64)DtboImgBuffer, FirstDtboTableEntryOffset)) {
+    DEBUG ((EFI_D_ERROR, "Integer overflow deteced with Dtbo address\n"));
+    return FALSE;
+  }
+
+  DtboTableEntry =
+      (struct DtboTableEntry *)(DtboImgBuffer + FirstDtboTableEntryOffset);
+  if (!DtboTableEntry) {
+    DEBUG ((EFI_D_ERROR, "No proper DtTable\n"));
+    return FALSE;
+  }
+
+  DtboTableEntriesCount = fdt32_to_cpu (DtboTableHdr->DtEntryCount);
+  DEBUG ((EFI_D_VERBOSE, "QTVM dtbo: Number of dtbos in image: %u\n",
+          DtboTableEntriesCount));
+  for (DtboCount = 0; DtboCount < DtboTableEntriesCount; DtboCount++) {
+    if (CHECK_ADD64 ((UINT64)DtboImgBuffer,
+                     fdt32_to_cpu (DtboTableEntry->DtOffset))) {
+      DEBUG ((EFI_D_ERROR, "Integer overflow detected with Dtbo address\n"));
+      return FALSE;
+    }
+    BoardDtb = DtboImgBuffer + fdt32_to_cpu (DtboTableEntry->DtOffset);
+    if (fdt_check_header (BoardDtb) ||
+        fdt_check_header_ext (BoardDtb)) {
+      DEBUG ((EFI_D_ERROR, "No Valid Dtb\n"));
+      break;
+    }
+
+    CurDtbInfo.Dtb = BoardDtb;
+    FindBestDtb = ReadDtbFindMatch (&CurDtbInfo, &BestDtbInfo, VARIANT_MATCH);
+    DEBUG ((EFI_D_VERBOSE, "QTVM dtbo: Dtbo count = %u LocalBoardDtMatch = %x"
+                           "\n",
+            DtboCount, CurDtbInfo.DtMatchVal));
+
+    if (FindBestDtb) {
+      DEBUG ((EFI_D_VERBOSE, "Found a board Dtbo: Idx=%d, Id=%d\n",
+              DtboCount, fdt32_to_cpu (DtboTableEntry->Id)));
+      switch (fdt32_to_cpu (DtboTableEntry->Id)) {
+      case TRUSTEDVM_ID:
+        TuiVmDtboIdx = DtboCount;
+        break;
+      case OEMVM_ID:
+        OemVmDtboIdx = DtboCount;
+        break;
+      default:
+        DEBUG ((EFI_D_ERROR, "QTVM dtbo: Unsupported VM ID: %d\n",
+                fdt32_to_cpu (DtboTableEntry->Id)));
+        break;
+      }
+    }
+    DtboTableEntry++;
+  }
+
+  /* If all VM dtbos are absent, return false.
+   * Caller may ignore it and still allow boot */
+  if ((TuiVmDtboIdx < 0) &&
+      (OemVmDtboIdx < 0)) {
+    return FALSE;
+  } else if ((TuiVmDtboIdx < 0)) {
+    DEBUG ((EFI_D_ERROR, "Unable to find TrustedVM DTBO for this board\n"));
+  } else if (OemVmDtboIdx < 0) {
+    DEBUG ((EFI_D_ERROR, "Unable to find OemVM DTBO for this board\n"));
+  }
+
+  return TRUE;
+
 }
 
 /* Returns 0 if the device tree is valid. */

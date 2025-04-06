@@ -99,6 +99,8 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *InitCmdline;
   CHAR8 *DtboIdxStr;
   CHAR8 *DtbIdxStr;
+  CHAR8 *TuiVmDtboIdxStr;
+  CHAR8 *OemVmDtboIdxStr;
   CHAR8 *LEVerityCmdLine;
   CHAR8 *FstabSuffix;
   UINT32 HeaderVersion;
