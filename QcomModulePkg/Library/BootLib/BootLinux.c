@@ -1679,7 +1679,8 @@ BootLinux (BootInfo *Info)
 
     if (Status ||
         BootParamlistPtr.PvmFwSize <= 0) {
-        DEBUG ((EFI_D_WARN, "Get pvmfw image failed!\n"));
+        DEBUG ((EFI_D_ERROR, "ERROR: BootLinux: Get pvmfw Image failed!\n"));
+        return EFI_LOAD_ERROR;
     } else {
         DEBUG ((EFI_D_VERBOSE, "pvmfw size fetched from partition = 0x%x\n",
                BootParamlistPtr.PvmFwSize));
