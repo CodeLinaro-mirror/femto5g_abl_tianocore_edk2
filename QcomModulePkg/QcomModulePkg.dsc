@@ -121,6 +121,9 @@
   !if $(EARLY_ETH_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED
   !endif
+  !if $(AUTO_LVGVM_ABL)
+      GCC:*_*_*_CC_FLAGS = -DAUTO_LVGVM_ABL
+  !endif
   !if $(HIBERNATION_SUPPORT_NO_AES)
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_NO_AES
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT_NO_AES
@@ -158,6 +161,9 @@
   !endif
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
+  !endif
+  !if $(WEAR_OS)
+      GCC:*_*_*_CC_FLAGS = -DWEAR_OS
   !endif
   !if $(ENABLE_LV_ATOMIC_AB) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LV_ATOMIC_AB
