@@ -214,7 +214,7 @@ cc_object {
 
 bootstrap_go_package {
     name: "bssl_ar",
-    pkgPath: "boringssl.googlesource.com/boringssl/util/ar",
+    pkgPath: "boringssl.googlesource.com/boringssl.git/util/ar",
     srcs: [
         "src/util/ar/ar.go",
     ],
@@ -225,7 +225,7 @@ bootstrap_go_package {
 
 bootstrap_go_package {
     name: "bssl_fipscommon",
-    pkgPath: "boringssl.googlesource.com/boringssl/util/fipstools/fipscommon",
+    pkgPath: "boringssl.googlesource.com/boringssl.git/util/fipstools/fipscommon",
     srcs: [
         "src/util/fipstools/fipscommon/const.go",
     ],
@@ -856,6 +856,7 @@ rust_defaults {
     visibility: [
         "//external/rust/crates/openssl",
         "//external/rust/android-crates-io/crates/tokio-openssl",
+        "//system/gatekeeper/rust/boringssl",
         "//system/keymint/boringssl",
         "//system/security/prng_seeder",
     ],
