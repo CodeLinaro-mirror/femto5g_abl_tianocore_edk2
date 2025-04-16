@@ -103,6 +103,7 @@
   StackCanary
   DebugLib
   UbsanLib
+  GblLib
 
 [Protocols]
   gEfiSimpleTextInProtocolGuid
