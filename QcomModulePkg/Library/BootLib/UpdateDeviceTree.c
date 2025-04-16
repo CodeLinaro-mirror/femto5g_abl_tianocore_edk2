@@ -65,6 +65,10 @@ STATIC struct FstabNode DynamicFstabTable = {"/firmware/android/fstab",
 STATIC struct DisplaySplashBufferInfo splashBuf;
 STATIC UINTN splashBufSize = sizeof (splashBuf);
 
+#define MAX_DISP_OP_CMD_LINE 256
+STATIC CHAR8 DispOpData[MAX_DISP_OP_CMD_LINE];
+STATIC UINTN DispOpDataLen = sizeof (DispOpData);
+
 STATIC VOID
 PrintSplashMemInfo (CONST CHAR8 *data, INT32 datalen)
 {
@@ -225,6 +229,104 @@ UpdateRamDumpMemInfo (VOID *fdt)
 
   return Status;
 }
+
+STATIC EFI_STATUS
+UpdateDispOpModeInfo (VOID *fdt)
+{
+  EFI_STATUS Status;
+  INT32 ParentOffSet  = 0;
+  INT32 SubNodeOffset = 0;
+  char *NodeName = NULL;
+  char *Compatible = NULL;
+  char *Label = NULL;
+  INT32 Len;
+  BOOLEAN IsLabelHWIO;
+  BOOLEAN IsLabelHFI;
+  BOOLEAN IsCompatible;
+  BOOLEAN IsClkCtrl;
+
+  Status = gRT->GetVariable ((CHAR16 *)L"DispOpModeConfig",
+                             &gQcomTokenSpaceGuid, NULL, &DispOpDataLen,
+                             DispOpData);
+
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Unable to get disp op Config, %r\n", Status));
+    goto error;
+  }
+
+  /* Update devicetree nodes only if disp op is set to HFI/loopback */
+  if ((AsciiStrnCmp (DispOpData, "loopback", AsciiStrLen (DispOpData))) &&
+      (AsciiStrnCmp (DispOpData, "hfi", AsciiStrLen (DispOpData)))) {
+    Status = EFI_SUCCESS;
+    goto error;
+  }
+
+  /* Get offset of the soc reservation node */
+  ParentOffSet = FdtPathOffset (fdt, "/soc");
+  if (ParentOffSet < 0) {
+    DEBUG ((EFI_D_WARN, "INFO: Could not find soc node in device tree\n"));
+    Status = EFI_NOT_FOUND;
+    goto error;
+  }
+
+  for (SubNodeOffset = fdt_first_subnode (fdt, ParentOffSet);
+    SubNodeOffset >= 0;
+    SubNodeOffset = fdt_next_subnode (fdt, SubNodeOffset)) {
+    NodeName = (char *)(uintptr_t)fdt_get_name (fdt, SubNodeOffset, NULL);
+    Label = (char *)(uintptr_t)fdt_getprop (fdt,
+      SubNodeOffset, "qcom,op-label", &Len);
+    if (Label) {
+      IsLabelHWIO = (AsciiStrCmp (Label, "hwio") == 0);
+      IsLabelHFI = (AsciiStrCmp (Label, "hfi") == 0);
+      /* Get offset of the display devicetree HWIO nodes */
+      if (IsLabelHWIO) {
+        /* Update the status property to disable in place */
+        Status = FdtSetProp (fdt, SubNodeOffset, "status",
+          (CONST VOID *)"disabled",
+          (AsciiStrLen ("disabled") + 1));
+        if (Status < 0) {
+          DEBUG ((EFI_D_ERROR,
+            "ERROR: Update failed for hwio node %a info\n",
+            NodeName));
+          goto error;
+        }
+      /* Get offset of the display devicetree HFI nodes */
+      } else if (IsLabelHFI) {
+        /* Update the status property to ok in place */
+        Status = FdtSetProp (fdt, SubNodeOffset, "status",
+          (CONST VOID *)"ok",
+          (AsciiStrLen ("ok") + 1));
+        if (Status < 0) {
+          DEBUG ((EFI_D_ERROR,
+            "ERROR: Update failed for hfi node %a info\n",
+            NodeName));
+          goto error;
+        }
+      }
+    }
+    /* Get offset of the clock controller reservation nodes */
+    IsClkCtrl = (AsciiStrStr (NodeName, "clock-controller") != NULL);
+    if (IsClkCtrl) {
+      /* Get offset of the dispcc node based on Compatible string */
+      Compatible = (char *)(uintptr_t)fdt_getprop (fdt,
+                    SubNodeOffset, "compatible", &Len);
+      IsCompatible = (AsciiStrStr (Compatible, "dispcc") != NULL);
+      if (IsCompatible) {
+        /* Update the status property value in place */
+        Status = fdt_setprop_string (fdt, SubNodeOffset,
+          "status", "disabled");
+        if (Status < 0) {
+          DEBUG ((EFI_D_ERROR, "ERROR: Could not update dispcc info\n"));
+          goto error;
+        }
+      }
+    }
+  }
+
+error:
+  return Status;
+}
+
 
 STATIC EFI_STATUS
 UpdateSplashMemInfo (VOID *fdt)
@@ -1450,6 +1552,7 @@ UpdateDeviceTree (VOID *fdt,
 OutofUpdateRankChannel:
 
   UpdateSplashMemInfo (fdt);
+  UpdateDispOpModeInfo (fdt);
   UpdateDemuraInfo (fdt);
   UpdatePLLCodesInfo (fdt);
   UpdateRamDumpMemInfo (fdt);
