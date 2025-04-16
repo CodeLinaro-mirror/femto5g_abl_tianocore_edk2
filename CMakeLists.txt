@@ -329,6 +329,7 @@ add_library(
   src/crypto/cipher/e_tls.cc
   src/crypto/cipher/get_cipher.cc
   src/crypto/cipher/tls_cbc.cc
+  src/crypto/cms/cms.cc
   src/crypto/conf/conf.cc
   src/crypto/cpu_aarch64_apple.cc
   src/crypto/cpu_aarch64_fuchsia.cc
