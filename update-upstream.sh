@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -xe
+set -e
 
 # If a branch name is passed on the command line then sync
 # to that instead of HEAD.
