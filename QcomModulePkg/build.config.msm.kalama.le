@@ -11,6 +11,7 @@ BUILD_USES_RECOVERY_AS_BOOT=0
 ENABLE_LE_VARIANT=true
 HIBERNATION_SUPPORT_NO_AES=1
 HIBERNATION_PARTITION_NAME="hibernation"
+ENABLE_EARLY_SERVICES=1
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.signature_v2
