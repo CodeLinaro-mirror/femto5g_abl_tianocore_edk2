@@ -149,6 +149,15 @@ STATIC UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
 STATIC CHAR8 HwFenceCmdLine[MAX_HW_FENCE_CMD_LINE];
 STATIC UINTN HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
 
+#define MAX_DISP_OP_CMD_LINE 256
+STATIC CHAR8 DispOpCmdLine[MAX_DISP_OP_CMD_LINE];
+STATIC UINTN DispOpCmdLineLen = sizeof (DispOpCmdLine);
+STATIC CHAR8 *DispOpStr = " msm_drm.disp_op=";
+
+STATIC CHAR8 HfiDbgCmdLine[MAX_DISP_OP_CMD_LINE];
+STATIC UINTN HfiDbgCmdLineLen = sizeof (HfiDbgCmdLine);
+STATIC CHAR8 *HfiCoreStr = " msm_hfi_core.dbg_mode=";
+
 /* GPU command line related structures */
 #define MAX_GPU_CMD_LINE 256
 STATIC CHAR8 GpuCmdLine[MAX_GPU_CMD_LINE];
@@ -401,6 +410,38 @@ STATIC VOID GetHwFenceCmdline (VOID)
                              HwFenceCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get hw fence Config, %r\n", Status));
+  }
+}
+
+STATIC VOID GetDispOpCmdLine (VOID)
+{
+  EFI_STATUS Status;
+  CHAR8 Data[MAX_DISP_OP_CMD_LINE];
+
+  Status = gRT->GetVariable ((CHAR16 *)L"DispOpModeConfig",
+                             &gQcomTokenSpaceGuid, NULL, &DispOpCmdLineLen,
+                             Data);
+  if (Status == EFI_SUCCESS) {
+    AsciiSPrint (DispOpCmdLine, sizeof (DispOpCmdLine),
+                    "%a%a", DispOpStr, Data);
+  } else {
+    DEBUG ((EFI_D_ERROR, "Unable to get disp op Config, %r\n", Status));
+  }
+}
+
+STATIC VOID GetHfiCoreDbgCmdline (VOID)
+{
+  EFI_STATUS Status;
+  CHAR8 Data[MAX_DISP_OP_CMD_LINE];
+
+  Status = gRT->GetVariable ((CHAR16 *)L"DispOpModeConfig",
+                             &gQcomTokenSpaceGuid, NULL, &HfiDbgCmdLineLen,
+                             Data);
+  if (Status == EFI_SUCCESS) {
+    AsciiSPrint (HfiDbgCmdLine, sizeof (HfiDbgCmdLine),
+                      "%a%a", HfiCoreStr, Data);
+  } else {
+    DEBUG ((EFI_D_ERROR, "Unable to get hfi debug Config, %r\n", Status));
   }
 }
 
@@ -842,6 +883,12 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
   AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
   Src = Param->HwFenceCmdLine;
+  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+
+  Src = Param->DispOpCmdLine;
+  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+
+  Src = Param->HfiDbgCmdLine;
   AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
   Src = Param->GpuCmdLine;
@@ -1540,6 +1587,24 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   AddtoBootConfigList (BootConfigFlag, HwFenceCmdLine, NULL,
                    BootConfigListHead, ParamLen, 0);
 
+  GetDispOpCmdLine ();
+  ParamLen = AsciiStrLen (DispOpCmdLine);
+  BootConfigFlag = IsAndroidBootParam (DispOpCmdLine,
+                             ParamLen, HeaderVersion);
+  ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+                                       BootConfigLen);
+  AddtoBootConfigList (BootConfigFlag, DispOpCmdLine, NULL,
+                   BootConfigListHead, ParamLen, 0);
+
+  GetHfiCoreDbgCmdline ();
+  ParamLen = AsciiStrLen (HfiDbgCmdLine);
+  BootConfigFlag = IsAndroidBootParam (HfiDbgCmdLine,
+                             ParamLen, HeaderVersion);
+  ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+                                       BootConfigLen);
+  AddtoBootConfigList (BootConfigFlag, HfiDbgCmdLine, NULL,
+                   BootConfigListHead, ParamLen, 0);
+
   if (EFI_SUCCESS == GetGpuCmdline ()) {
       ParamLen = AsciiStrLen (GpuCmdLine);
       BootConfigFlag = IsAndroidBootParam (GpuCmdLine,
@@ -1758,6 +1823,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.ChipBaseBand = ChipBaseBand;
   Param.DisplayCmdLine = DisplayCmdLine;
   Param.HwFenceCmdLine = HwFenceCmdLine;
+  Param.DispOpCmdLine = DispOpCmdLine;
+  Param.HfiDbgCmdLine = HfiDbgCmdLine;
   Param.GpuCmdLine = GpuCmdLine;
   Param.CmdLine = CmdLine;
   Param.AlarmBootCmdLine = AlarmBootCmdLine;
