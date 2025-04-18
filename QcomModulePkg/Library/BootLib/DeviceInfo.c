@@ -262,7 +262,7 @@ SetDeviceUnlockValue (UINT32 Type, BOOLEAN State)
   }
 
   gBS->SetMem ((VOID *)&Msg, sizeof (Msg), 0);
-  Status = AsciiStrnCpyS (Msg.recovery, sizeof (Msg.recovery),
+  Status = AsciiStrnCpyS (Msg.Recovery, sizeof (Msg.Recovery),
                           RECOVERY_WIPE_DATA, AsciiStrLen (RECOVERY_WIPE_DATA));
   if (Status == EFI_SUCCESS) {
     CardType = CheckRootDeviceType ();
@@ -330,7 +330,7 @@ ResetDeviceStateAndRecovery (UINT32 Type, BOOLEAN State)
   }
 
   gBS->SetMem ((VOID *)&Msg, sizeof (Msg), 0);
-  Status = AsciiStrnCpyS (Msg.recovery, sizeof (Msg.recovery),
+  Status = AsciiStrnCpyS (Msg.Recovery, sizeof (Msg.Recovery),
                           RECOVERY_WIPE_DATA, AsciiStrLen (RECOVERY_WIPE_DATA));
   if (Status == EFI_SUCCESS) {
     Status = WriteToPartition (&Ptype, &Msg, sizeof (Msg));

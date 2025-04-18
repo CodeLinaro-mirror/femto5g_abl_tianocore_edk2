@@ -65,6 +65,9 @@
 
 #include "PartitionTableUpdate.h"
 #include "AutoGen.h"
+#ifdef AUTO_VIRT_ABL
+#include <Library/Recovery.h>
+#endif
 #include <Library/Board.h>
 #include <Library/BootLinux.h>
 #include <Library/LinuxLoaderLib.h>
@@ -996,7 +999,7 @@ ParseGptHeader (struct GptHeaderData *GptHeader,
 }
 
 STATIC UINT32
-PatchGpt (UINT8 *Gpt,
+PatchGpt (INT32 Lun, UINT8 *Gpt,
           UINT64 DeviceDensity,
           UINT32 PartEntryArrSz,
           struct GptHeaderData *GptHeader,
@@ -1046,8 +1049,13 @@ PatchGpt (UINT8 *Gpt,
       (PrimaryGptHeader + BlkSz + TotalPart * PARTITION_ENTRY_SIZE);
   }
 
-  LastPartOffset =
+  if (!Lun) {
+    LastPartOffset =
       (TotalPart - 1) * PARTITION_ENTRY_SIZE + PARTITION_ENTRY_LAST_LBA;
+  } else {
+    LastPartOffset =
+      TotalPart * PARTITION_ENTRY_SIZE + PARTITION_ENTRY_LAST_LBA;
+  }
 
   PUT_LONG_LONG (PrimaryGptHeader + BlkSz + LastPartOffset,
                  (UINT64) (NumSectors - (PtnEntryBlks + 1)));
@@ -1164,7 +1172,7 @@ WriteGpt (INT32 Lun, UINT32 Sz, UINT8 *Gpt)
     return Ret;
   }
 
-  Ret = PatchGpt (Gpt, DeviceDensity, PartEntryArrSz, &GptHeader, BlkSz);
+  Ret = PatchGpt (Lun, Gpt, DeviceDensity, PartEntryArrSz, &GptHeader, BlkSz);
   if (Ret) {
     DEBUG ((EFI_D_ERROR, "Failed to patch GPT\n"));
     return Ret;
@@ -1325,7 +1333,15 @@ GetBootPartitionEntry (Slot *BootSlot)
 BOOLEAN IsCurrentSlotBootable (VOID)
 {
   Slot CurrentSlot = {{0}};
+#ifdef AUTO_VIRT_ABL
+  BOOLEAN Ret = FALSE;
+  struct RecoveryMessage *Msg = NULL;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  VOID *PartitionData = NULL;
+  UINT32 PageSize;
+#else
   struct PartitionEntry *BootPartition = NULL;
+#endif
   EFI_STATUS Status = GetActiveSlot (&CurrentSlot);
 
   if (Status != EFI_SUCCESS) {
@@ -1333,6 +1349,35 @@ BOOLEAN IsCurrentSlotBootable (VOID)
     return FALSE;
   }
 
+#ifdef AUTO_VIRT_ABL
+  GetPageSize (&PageSize);
+  Status = ReadFromPartition (&Ptype, (VOID **)&PartitionData, (PageSize * 4));
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error Reading from misc partition: %r\n", Status));
+    return FALSE;
+  }
+
+  if (!PartitionData) {
+    DEBUG ((EFI_D_ERROR, "Error in loading Data from misc partition\n"));
+    return FALSE;
+  }
+
+  Msg = (struct RecoveryMessage *) PartitionData;
+  if (Msg->Reserved[3] == 'y') {
+    Ret = TRUE;
+  } else if (Msg->Reserved[5] == 'y') {
+    Ret = TRUE;
+  }
+
+  FreePool (PartitionData);
+  PartitionData = NULL;
+  Msg = NULL;
+
+  if (Ret) {
+    DEBUG ((EFI_D_VERBOSE, "Slot %s is bootable\n", CurrentSlot.Suffix));
+    return TRUE;
+  }
+#else
   BootPartition = GetBootPartitionEntry (&CurrentSlot);
   if (BootPartition == NULL) {
     DEBUG ((EFI_D_ERROR, "IsCurrentSlotBootable: No boot partition "
@@ -1348,6 +1393,7 @@ BOOLEAN IsCurrentSlotBootable (VOID)
     DEBUG ((EFI_D_VERBOSE, "Slot %s is bootable\n", CurrentSlot.Suffix));
     return TRUE;
   }
+#endif
 
   DEBUG ((EFI_D_VERBOSE, "Slot %s is unbootable \n", CurrentSlot.Suffix));
   return FALSE;
