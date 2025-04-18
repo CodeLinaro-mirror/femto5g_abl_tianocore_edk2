@@ -33,7 +33,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -140,6 +140,7 @@ STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 QosAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 WaitSwitchRdyBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
@@ -1048,6 +1049,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyQosCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyWaitSwitchRdyCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1784,7 +1787,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                  PhyAddrBufCmdLineCmdLine,
                                  IFaceAddrBufCmdLine,
                                  SpeedAddrBufCmdLine,
-                                 QosAddrBufCmdLine);
+                                 QosAddrBufCmdLine,
+                                 WaitSwitchRdyBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
@@ -1792,6 +1796,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (QosAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (WaitSwitchRdyBufCmdLine);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1871,6 +1876,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
     Param.EarlyQosCmdLine = QosAddrBufCmdLine;
+    Param.EarlyWaitSwitchRdyCmdLine = WaitSwitchRdyBufCmdLine;
   }
 
   if (EarlyUsbInitEnabled ()) {
