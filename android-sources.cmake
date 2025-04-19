@@ -80,6 +80,7 @@ set(crypto_sources
   ${BORINGSSL_ROOT}src/crypto/cipher/e_tls.cc
   ${BORINGSSL_ROOT}src/crypto/cipher/get_cipher.cc
   ${BORINGSSL_ROOT}src/crypto/cipher/tls_cbc.cc
+  ${BORINGSSL_ROOT}src/crypto/cms/cms.cc
   ${BORINGSSL_ROOT}src/crypto/conf/conf.cc
   ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_apple.cc
   ${BORINGSSL_ROOT}src/crypto/cpu_aarch64_fuchsia.cc
@@ -508,6 +509,7 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/chacha/chacha_test.cc
   ${BORINGSSL_ROOT}src/crypto/cipher/aead_test.cc
   ${BORINGSSL_ROOT}src/crypto/cipher/cipher_test.cc
+  ${BORINGSSL_ROOT}src/crypto/cms/cms_test.cc
   ${BORINGSSL_ROOT}src/crypto/compiler_test.cc
   ${BORINGSSL_ROOT}src/crypto/conf/conf_test.cc
   ${BORINGSSL_ROOT}src/crypto/constant_time_test.cc
@@ -649,6 +651,15 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem768_keygen_tests.txt
   ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem768_nist_decap_tests.txt
   ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem768_nist_keygen_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/nss.p7c
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/openssl_crl.p7c
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/sign_cert.pem
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/sign_key.pem
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/sign_sha1.p7s
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/sign_sha1_key_id.p7s
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/sign_sha256.p7s
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/sign_sha256_key_id.p7s
+  ${BORINGSSL_ROOT}src/crypto/pkcs7/test/windows.p7c
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/bad1.p12
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/bad2.p12
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/bad3.p12
