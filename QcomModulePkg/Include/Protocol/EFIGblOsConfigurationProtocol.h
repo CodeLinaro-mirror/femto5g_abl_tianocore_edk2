@@ -54,7 +54,16 @@
 extern EFI_GUID gEfiGblOsConfigurationProtocolGuid;
 
 /**
-  Enumeration of possible device tree sources.
+  Enumeration of possible device tree component types.
+**/
+typedef enum {
+  DEVICE_TREE,
+  OVERLAY,
+  PVM_DA_OVERLAY,
+} EFI_GBL_DEVICE_TREE_TYPE;
+
+/**
+  Enumeration of possible device tree component sources.
 **/
 typedef enum {
   BOOT,
@@ -68,13 +77,11 @@ typedef enum {
 **/
 typedef struct {
   UINT32 Source;    // EFI_GBL_DEVICE_TREE_SOURCE
+  UINT32 Type;      // EFI_GBL_DEVICE_TREE_TYPE
   // Values are zeroed and must not be used in case of VENDOR_BOOT source
   UINT32 Id;
   UINT32 Rev;
   UINT32 Custom[4];
-  // Make sure EFI_GBL_DEVICE_TREE_METADATA size is 8-bytes aligned. Also reserved for
-  // the future cases
-  UINT32 Reserved;
 } EFI_GBL_DEVICE_TREE_METADATA;
 
 /**
