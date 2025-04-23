@@ -171,9 +171,10 @@ EfiGblSelectDeviceTreesMinimalBoot (
   UINTN CurrentBaseDeviceTreeIndex = 0;
   UINTN CurrentOverlayIndex = 0;
   for (UINTN i = 0; i < NumDeviceTrees; i++) {
-    BOOLEAN IsOverlay = DeviceTrees[i].Metadata.Source == DTBO;
+    BOOLEAN IsBaseDeviceTree = DeviceTrees[i].Metadata.Type == DEVICE_TREE;
+    BOOLEAN IsOverlay = DeviceTrees[i].Metadata.Type == OVERLAY;
 
-    if (!IsOverlay &&
+    if (IsBaseDeviceTree &&
         CurrentBaseDeviceTreeIndex == SelectedBaseDeviceTreeIndex) {
       DEBUG ((EFI_D_INFO,
               "EFI_GBL_OS_CONFIGURATION_PROTOCOL: "
@@ -195,7 +196,7 @@ EfiGblSelectDeviceTreesMinimalBoot (
 
     if (IsOverlay) {
       CurrentOverlayIndex++;
-    } else {
+    } else if (IsBaseDeviceTree) {
       CurrentBaseDeviceTreeIndex++;
     }
   }
