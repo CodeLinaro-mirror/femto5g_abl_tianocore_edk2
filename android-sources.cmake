@@ -60,7 +60,9 @@ set(crypto_sources
   ${BORINGSSL_ROOT}src/crypto/blake2/blake2.cc
   ${BORINGSSL_ROOT}src/crypto/bn/bn_asn1.cc
   ${BORINGSSL_ROOT}src/crypto/bn/convert.cc
+  ${BORINGSSL_ROOT}src/crypto/bn/div.cc
   ${BORINGSSL_ROOT}src/crypto/bn/exponentiation.cc
+  ${BORINGSSL_ROOT}src/crypto/bn/sqrt.cc
   ${BORINGSSL_ROOT}src/crypto/buf/buf.cc
   ${BORINGSSL_ROOT}src/crypto/bytestring/asn1_compat.cc
   ${BORINGSSL_ROOT}src/crypto/bytestring/ber.cc
