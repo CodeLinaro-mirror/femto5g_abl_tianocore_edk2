@@ -309,7 +309,9 @@ add_library(
   src/crypto/blake2/blake2.cc
   src/crypto/bn/bn_asn1.cc
   src/crypto/bn/convert.cc
+  src/crypto/bn/div.cc
   src/crypto/bn/exponentiation.cc
+  src/crypto/bn/sqrt.cc
   src/crypto/buf/buf.cc
   src/crypto/bytestring/asn1_compat.cc
   src/crypto/bytestring/ber.cc

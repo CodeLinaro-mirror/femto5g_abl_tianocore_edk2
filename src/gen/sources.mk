@@ -297,7 +297,9 @@ boringssl_crypto_sources := \
   crypto/blake2/blake2.cc \
   crypto/bn/bn_asn1.cc \
   crypto/bn/convert.cc \
+  crypto/bn/div.cc \
   crypto/bn/exponentiation.cc \
+  crypto/bn/sqrt.cc \
   crypto/buf/buf.cc \
   crypto/bytestring/asn1_compat.cc \
   crypto/bytestring/ber.cc \
@@ -1104,6 +1106,13 @@ boringssl_fuzz_sources := \
   fuzz/verify_name_match_fuzzer.cc \
   fuzz/verify_name_match_normalizename_fuzzer.cc \
   fuzz/verify_name_match_verifynameinsubtree_fuzzer.cc
+
+boringssl_modulewrapper_sources := \
+  util/fipstools/acvp/modulewrapper/main.cc \
+  util/fipstools/acvp/modulewrapper/modulewrapper.cc
+
+boringssl_modulewrapper_internal_headers := \
+  util/fipstools/acvp/modulewrapper/modulewrapper.h
 
 boringssl_pki_sources := \
   pki/cert_error_id.cc \
