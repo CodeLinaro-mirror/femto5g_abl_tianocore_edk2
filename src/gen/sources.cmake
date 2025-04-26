@@ -317,7 +317,9 @@ set(
   crypto/blake2/blake2.cc
   crypto/bn/bn_asn1.cc
   crypto/bn/convert.cc
+  crypto/bn/div.cc
   crypto/bn/exponentiation.cc
+  crypto/bn/sqrt.cc
   crypto/buf/buf.cc
   crypto/bytestring/asn1_compat.cc
   crypto/bytestring/ber.cc
@@ -1154,6 +1156,19 @@ set(
   fuzz/verify_name_match_fuzzer.cc
   fuzz/verify_name_match_normalizename_fuzzer.cc
   fuzz/verify_name_match_verifynameinsubtree_fuzzer.cc
+)
+
+set(
+  MODULEWRAPPER_SOURCES
+
+  util/fipstools/acvp/modulewrapper/main.cc
+  util/fipstools/acvp/modulewrapper/modulewrapper.cc
+)
+
+set(
+  MODULEWRAPPER_INTERNAL_HEADERS
+
+  util/fipstools/acvp/modulewrapper/modulewrapper.h
 )
 
 set(
