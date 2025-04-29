@@ -141,6 +141,7 @@ STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 QosAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 WaitSwitchRdyBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 AutonegBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
@@ -1051,6 +1052,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyWaitSwitchRdyCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyAutonegCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1788,7 +1791,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                  IFaceAddrBufCmdLine,
                                  SpeedAddrBufCmdLine,
                                  QosAddrBufCmdLine,
-                                 WaitSwitchRdyBufCmdLine);
+                                 WaitSwitchRdyBufCmdLine,
+                                 AutonegBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
@@ -1797,6 +1801,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (QosAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (WaitSwitchRdyBufCmdLine);
+    CmdLineLen += AsciiStrLen (AutonegBufCmdLine);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1877,6 +1882,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
     Param.EarlyQosCmdLine = QosAddrBufCmdLine;
     Param.EarlyWaitSwitchRdyCmdLine = WaitSwitchRdyBufCmdLine;
+    Param.EarlyAutonegCmdLine = AutonegBufCmdLine;
   }
 
   if (EarlyUsbInitEnabled ()) {
