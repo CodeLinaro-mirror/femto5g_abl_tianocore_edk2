@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -581,7 +581,7 @@ CheckAllBitsSet (UINT64 DtMatchVal)
   return (DtMatchVal & ALL_BITS_SET) == (ALL_BITS_SET);
 }
 
-STATIC VOID
+VOID
 ReadBestPmicMatch (CONST CHAR8 *PmicProp, INT32 PmicMaxIdx,
                     UINT32 PmicEntCount, PmicIdInfo *BestPmicInfo)
 {
@@ -653,7 +653,7 @@ next:
   }
 }
 
-STATIC EFI_STATUS GetPlatformMatchDtb (DtInfo * CurDtbInfo,
+EFI_STATUS GetPlatformMatchDtb (DtInfo * CurDtbInfo,
                                        CONST CHAR8 *PlatProp,
                                        INT32 LenPlatId,
                                        INT32 MinPlatIdLen)
@@ -758,7 +758,7 @@ STATIC EFI_STATUS GetPlatformMatchDtb (DtInfo * CurDtbInfo,
   return EFI_SUCCESS;
 }
 
-STATIC EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
+EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
                                     CONST CHAR8 *BoardProp,
                                     INT32 LenBoardId)
 {
@@ -871,7 +871,7 @@ STATIC EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
   |     |  qcom,oem-id  |                 |       |      |         |
   |     |               | OEMVariantId    | Y     | N    | 0       |
 */
-STATIC BOOLEAN
+BOOLEAN
 ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
 {
   EFI_STATUS Status;

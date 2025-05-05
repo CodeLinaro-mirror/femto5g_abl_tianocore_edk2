@@ -259,6 +259,7 @@
 			StackCanary|QcomModulePkg/Library/StackCanary/StackCanary.inf
 			FastbootLib|QcomModulePkg/Library/FastbootLib/FastbootLib.inf
 			AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
+			GblLib|QcomModulePkg/Library/gbl/GblLib.inf
 			OpenDice|QcomModulePkg/Library/OpenDice/open-dice.inf
 			AesLib|QcomModulePkg/Library/aes/AesLib.inf
 			UbsanLib|QcomModulePkg/Library/UbsanLib/UbsanLib.inf

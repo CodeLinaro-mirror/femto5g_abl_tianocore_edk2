@@ -31,7 +31,7 @@
 // Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
-#include "KeymasterClient.h"
+#include "Library/KeymasterClient.h"
 #include "VerifiedBoot.h"
 #include <Library/BaseMemoryLib.h>
 #include <Library/Debug.h>
