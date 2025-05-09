@@ -79,7 +79,8 @@
 EFI_STATUS
 GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
                               CHAR8 *phyaddrbuf, CHAR8 *ifacebuf,
-                              CHAR8 *speedbuf, CHAR8 *qosbuf, CHAR8 *wait_switch_rdy_buf)
+                              CHAR8 *speedbuf, CHAR8 *qosbuf, CHAR8 *wait_switch_rdy_buf,
+                              CHAR8 *autonegbuf)
 {
   EFI_STATUS Status;
   VOID *Buffer;
@@ -87,7 +88,8 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
   UINT32 DataSize = 0;
   UINT32 Pidx;
   UINT32 Qidx;
-  UINT32 Qcount, QPhycount, QIfacecount, QSpeedcount, Qqoscfgcount, QwaitSwitchRdyCount;
+  UINT32 Qcount, QPhycount, QIfacecount, QSpeedcount, Qqoscfgcount, QwaitSwitchRdyCount, 
+         QautonegCount;
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
 
   memset (ipv4buf, '\0', MAX_IP_ADDR_BUF);
@@ -98,6 +100,7 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
   memset (speedbuf, '\0', MAX_IP_ADDR_BUF);
   memset (qosbuf, '\0' , MAX_IP_ADDR_BUF);
   memset (wait_switch_rdy_buf, '\0', MAX_IP_ADDR_BUF);
+  memset (autonegbuf, '\0', MAX_IP_ADDR_BUF);
 #if EARLY_ETH_AS_DLKM
   AsciiStrnCpyS (ipv4buf, MAX_IP_ADDR_BUF, " dwmac_qcom_eth.eipv4=", 22);
   AsciiStrnCpyS (ipv6buf, MAX_IP_ADDR_BUF, " dwmac_qcom_eth.eipv6=", 22);
@@ -111,6 +114,7 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
   AsciiStrnCpyS (speedbuf, MAX_IP_ADDR_BUF, " espeed=", 8);
   AsciiStrnCpyS (qosbuf, MAX_IP_ADDR_BUF, " eqos=", 6);
   AsciiStrnCpyS (wait_switch_rdy_buf, MAX_IP_ADDR_BUF, " ewait_switch_rdy=", 18);
+  AsciiStrnCpyS (autonegbuf, MAX_IP_ADDR_BUF, " eautoneg=", 10);
 #endif
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
@@ -152,6 +156,7 @@ QPhycount = 10;
 QIfacecount = QSpeedcount = 8;
 Qqoscfgcount = 6;
 QwaitSwitchRdyCount = 18;
+QautonegCount = 10;
   Pidx = IP_ADDR_STR_OFFSET;
   Qidx = 0;
   while (((CHAR8)rawbuf[Pidx] !=
@@ -275,6 +280,16 @@ QwaitSwitchRdyCount = 18;
        Qidx++;
   }
 
+  /* Extract autoneg on/off string (1 or 0) */
+  ++Pidx;
+  Qidx = 0;
+  while (((CHAR8)rawbuf[Pidx] !=
+         EARLY_ADDR_TERMINATOR) &&
+        (Qidx < AUTONEG_LEN)) {
+       autonegbuf[Qidx + QautonegCount] = rawbuf[Pidx];
+       Pidx++;
+       Qidx++;
+  }
 
   FreePages (Buffer, 1);
   return EFI_SUCCESS;
