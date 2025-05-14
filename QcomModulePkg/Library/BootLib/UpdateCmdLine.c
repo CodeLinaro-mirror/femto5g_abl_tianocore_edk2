@@ -172,6 +172,12 @@ STATIC CHAR8 *AndroidBootAudioFW = " androidboot.audio=";
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
 STATIC CHAR8 *AndroidBootDtbIdx = " androidboot.dtb_idx=";
 
+#define MAX_DTBO_IDX_STR 64
+STATIC CHAR8 *AndroidBootTuiVmDtboIdx =
+                                     " androidboot.hypervisor.tuivm_dtbo_idx=";
+STATIC CHAR8 *AndroidBootOemVmDtboIdx =
+                                     " androidboot.hypervisor.oemvm_dtbo_idx=";
+
 STATIC CHAR8 *AndroidBootForceNormalBoot =
                                       " androidboot.force_normal_boot=";
 CHAR8 BootForceNormalBoot = '0';
@@ -1335,6 +1341,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   UpdateCmdLineParamList Param = {0};
   CHAR8 DtboIdxStr[MAX_DTBO_IDX_STR] = "\0";
   CHAR8 DtbIdxStr[MAX_DTBO_IDX_STR] = "\0";
+  CHAR8 TuiVmDtboIdxStr[MAX_DTBO_IDX_STR] = "\0";
+  CHAR8 OemVmDtboIdxStr[MAX_DTBO_IDX_STR] = "\0";
   INT32 DtboIdx = INVALID_PTN;
   INT32 DtbIdx = INVALID_PTN;
   CHAR8 *LEVerityCmdLine = NULL;
@@ -1664,6 +1672,32 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
       AddtoBootConfigList (BootConfigFlag, DtbIdxStr, NULL,
                   BootConfigListHead, ParamLen, 0);
     }
+
+    DtboIdx = GetTuiVmDtboIdx ();
+    if (DtboIdx != INVALID_PTN) {
+      AsciiSPrint (TuiVmDtboIdxStr, sizeof (TuiVmDtboIdxStr),
+                   "%a%d", AndroidBootTuiVmDtboIdx, DtboIdx);
+      ParamLen = AsciiStrLen (TuiVmDtboIdxStr);
+      BootConfigFlag = IsAndroidBootParam (TuiVmDtboIdxStr,
+                             ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                   CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, TuiVmDtboIdxStr, NULL,
+                   BootConfigListHead, ParamLen, 0);
+    }
+
+    DtboIdx = GetOemVmDtboIdx ();
+    if (DtboIdx != INVALID_PTN) {
+      AsciiSPrint (OemVmDtboIdxStr, sizeof (OemVmDtboIdxStr),
+                   "%a%d", AndroidBootOemVmDtboIdx, DtboIdx);
+      ParamLen = AsciiStrLen (OemVmDtboIdxStr);
+      BootConfigFlag = IsAndroidBootParam (OemVmDtboIdxStr,
+                             ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                   CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, OemVmDtboIdxStr, NULL,
+                   BootConfigListHead, ParamLen, 0);
+    }
   }
 
   if (!IsRecoveryHasNoKernel () &&
@@ -1843,6 +1877,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.InitCmdline = InitCmdline;
   Param.DtboIdxStr = DtboIdxStr;
   Param.DtbIdxStr = DtbIdxStr;
+  Param.TuiVmDtboIdxStr = TuiVmDtboIdxStr;
+  Param.OemVmDtboIdxStr = OemVmDtboIdxStr;
   Param.LEVerityCmdLine = LEVerityCmdLine;
   Param.HeaderVersion = HeaderVersion;
   Param.SystemdSlotEnv = SystemdSlotEnv;
