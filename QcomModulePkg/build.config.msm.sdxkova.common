@@ -9,6 +9,8 @@ BUILD_USES_RECOVERY_AS_BOOT=0
 ENABLE_LE_VARIANT=true
 VERIFIED_BOOT_LE=1
 VERITY_LE=1
+VERITY_LE_ROOTHASH_SIGNED=1
+ENABLE_SLOT_SWITCH_IMAGE_CORRUPTION=true
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.signature_v2
