@@ -26,11 +26,10 @@
 # * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # *
-# * Changes from Qualcomm Innovation Center are provided under the following
-# * license:
-# * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+# * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # * SPDX-License-Identifier: BSD-3-Clause-Clear
-#*/
+# */
 
 [Defines]
   DEC_SPECIFICATION              = 0x00010005
@@ -124,6 +123,8 @@
   gEfiRmVmProtocolGuid =                { 0x0F987C66, 0x6694, 0x4663, { 0x93, 0x63, 0x10, 0x6B, 0x57, 0xB4, 0xFD, 0xBD } }
   # Charger Detection Protocol
   gChargerExProtocolGuid =              { 0x6edc8a6d, 0x2663, 0x43cd, { 0x90, 0xff, 0x46, 0x21, 0xff, 0xd1, 0x0d, 0xf5 } }
+  #PMIC Charger
+  gQcomChargerProtocolGuid =            { 0x21bfb78b, 0x02ea, 0x4ab7, { 0x99, 0x40, 0xb5, 0x8a, 0x2a, 0xd6, 0x58, 0x29 } }
   # Pon Reason Protocol
   gQcomPmicPonProtocolGuid =            { 0x97044b58, 0xfea4, 0x4ad0, { 0x9d, 0xb, 0xe4, 0x17, 0xd6, 0xf, 0x11, 0xa1 }}
   # Throttle limit Protocol

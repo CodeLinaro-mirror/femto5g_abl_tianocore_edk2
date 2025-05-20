@@ -116,6 +116,14 @@
 #define OEM_ID_SHIFT 24
 #define DDR_MASK (0x00000700)
 #define BOOT_DEVICE_MASK (0x000f0000)
+#define OEMID_MASK1 24
+#define OEMID_MASK2 8
+#define REVERSE_32_BITS(num) ( ((num & 0xFF000000) >> OEMID_MASK1) \
+                   | ((num & 0x00FF0000) >> OEMID_MASK2) \
+                   | ((num & 0x0000FF00) << OEMID_MASK2) \
+                   | ((num & 0x000000FF) << OEMID_MASK1) )
+#define TRUSTEDVM_ID 45
+#define OEMVM_ID 49
 
 typedef enum {
   NONE_MATCH,
@@ -363,6 +371,10 @@ EFI_STATUS
 GetOvrdDtb (VOID **DtboImgBuffer);
 EFI_STATUS
 GetAvfDpDtbo ( VOID **DtboImgBuffer);
+EFI_STATUS
+GetQtvmDtboImg (BootInfo *Info, VOID **DtboImgBuffer, UINT32 *ImageSize);
+BOOLEAN
+GetBoardQtVmDtbos (BootInfo *Info, VOID *DtboImgBuffer);
 VOID
 PopulateBoardParams ();
 
@@ -372,6 +384,8 @@ DeviceTreeValidate (UINT8 *DeviceTreeBuff,
                     UINT32 *DeviceTreeSize);
 INT32 GetDtboIdx (VOID);
 INT32 GetDtbIdx (VOID);
+INT32 GetTuiVmDtboIdx (VOID);
+INT32 GetOemVmDtboIdx (VOID);
 VOID ReadBestPmicMatch (CONST CHAR8 *PmicProp, INT32 PmicMaxIdx,
                     UINT32 PmicEntCount, PmicIdInfo *BestPmicInfo);
 EFI_STATUS GetPlatformMatchDtb (DtInfo * CurDtbInfo,
