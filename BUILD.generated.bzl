@@ -227,6 +227,7 @@ crypto_headers = [
     "src/include/openssl/x509_vfy.h",
     "src/include/openssl/x509v3.h",
     "src/include/openssl/x509v3_errors.h",
+    "src/include/openssl/xwing.h",
 ]
 
 crypto_internal_headers = [
@@ -277,6 +278,7 @@ crypto_internal_headers = [
     "src/crypto/kyber/internal.h",
     "src/crypto/lhash/internal.h",
     "src/crypto/md5/internal.h",
+    "src/crypto/mem_internal.h",
     "src/crypto/obj/obj_dat.h",
     "src/crypto/pem/internal.h",
     "src/crypto/pkcs7/internal.h",
@@ -288,7 +290,6 @@ crypto_internal_headers = [
     "src/crypto/rsa/internal.h",
     "src/crypto/spake2plus/internal.h",
     "src/crypto/trust_token/internal.h",
-    "src/crypto/x509/ext_dat.h",
     "src/crypto/x509/internal.h",
     "src/third_party/fiat/curve25519_32.h",
     "src/third_party/fiat/curve25519_64.h",
@@ -391,6 +392,7 @@ crypto_sources = [
     "src/crypto/ec/hash_to_curve.cc",
     "src/crypto/ecdh/ecdh.cc",
     "src/crypto/ecdsa/ecdsa_asn1.cc",
+    "src/crypto/ecdsa/ecdsa_p1363.cc",
     "src/crypto/engine/engine.cc",
     "src/crypto/err/err.cc",
     "src/crypto/evp/evp.cc",
@@ -544,6 +546,7 @@ crypto_sources = [
     "src/crypto/x509/x_val.cc",
     "src/crypto/x509/x_x509.cc",
     "src/crypto/x509/x_x509a.cc",
+    "src/crypto/xwing/xwing.cc",
     "src/gen/crypto/err_data.cc",
 ]
 
