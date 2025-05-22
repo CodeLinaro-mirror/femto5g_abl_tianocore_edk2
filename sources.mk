@@ -106,6 +106,7 @@ crypto_sources := \
   src/crypto/ec/hash_to_curve.cc\
   src/crypto/ecdh/ecdh.cc\
   src/crypto/ecdsa/ecdsa_asn1.cc\
+  src/crypto/ecdsa/ecdsa_p1363.cc\
   src/crypto/engine/engine.cc\
   src/crypto/err/err.cc\
   src/crypto/evp/evp.cc\
@@ -259,6 +260,7 @@ crypto_sources := \
   src/crypto/x509/x_val.cc\
   src/crypto/x509/x_x509.cc\
   src/crypto/x509/x_x509a.cc\
+  src/crypto/xwing/xwing.cc\
   src/gen/crypto/err_data.cc\
 
 crypto_sources_asm := \
