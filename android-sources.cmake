@@ -108,6 +108,7 @@ set(crypto_sources
   ${BORINGSSL_ROOT}src/crypto/ec/hash_to_curve.cc
   ${BORINGSSL_ROOT}src/crypto/ecdh/ecdh.cc
   ${BORINGSSL_ROOT}src/crypto/ecdsa/ecdsa_asn1.cc
+  ${BORINGSSL_ROOT}src/crypto/ecdsa/ecdsa_p1363.cc
   ${BORINGSSL_ROOT}src/crypto/engine/engine.cc
   ${BORINGSSL_ROOT}src/crypto/err/err.cc
   ${BORINGSSL_ROOT}src/crypto/evp/evp.cc
@@ -261,6 +262,7 @@ set(crypto_sources
   ${BORINGSSL_ROOT}src/crypto/x509/x_val.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x_x509.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x_x509a.cc
+  ${BORINGSSL_ROOT}src/crypto/xwing/xwing.cc
   ${BORINGSSL_ROOT}src/gen/crypto/err_data.cc
 )
 set(crypto_sources_asm
@@ -524,6 +526,7 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/digest/digest_test.cc
   ${BORINGSSL_ROOT}src/crypto/dsa/dsa_test.cc
   ${BORINGSSL_ROOT}src/crypto/ecdh/ecdh_test.cc
+  ${BORINGSSL_ROOT}src/crypto/ecdsa/ecdsa_p1363_test.cc
   ${BORINGSSL_ROOT}src/crypto/err/err_test.cc
   ${BORINGSSL_ROOT}src/crypto/evp/evp_extra_test.cc
   ${BORINGSSL_ROOT}src/crypto/evp/evp_test.cc
@@ -549,6 +552,7 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/kyber/kyber_test.cc
   ${BORINGSSL_ROOT}src/crypto/lhash/lhash_test.cc
   ${BORINGSSL_ROOT}src/crypto/md5/md5_test.cc
+  ${BORINGSSL_ROOT}src/crypto/mem_test.cc
   ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_test.cc
   ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem_test.cc
   ${BORINGSSL_ROOT}src/crypto/obj/obj_test.cc
@@ -571,9 +575,9 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/test/gtest_main.cc
   ${BORINGSSL_ROOT}src/crypto/thread_test.cc
   ${BORINGSSL_ROOT}src/crypto/trust_token/trust_token_test.cc
-  ${BORINGSSL_ROOT}src/crypto/x509/tab_test.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x509_test.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x509_time_test.cc
+  ${BORINGSSL_ROOT}src/crypto/xwing/xwing_test.cc
 )
 set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/blake2/blake2b256_tests.txt
@@ -779,13 +783,21 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdh_secp256r1_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdh_secp384r1_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdh_secp521r1_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp224r1_sha224_p1363_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp224r1_sha224_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp224r1_sha256_p1363_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp224r1_sha256_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp224r1_sha512_p1363_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp224r1_sha512_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp256r1_sha256_p1363_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp256r1_sha256_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp256r1_sha512_p1363_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp256r1_sha512_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp384r1_sha384_p1363_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp384r1_sha384_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp384r1_sha512_p1363_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp384r1_sha512_test.txt
+  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp521r1_sha512_p1363_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/ecdsa_secp521r1_sha512_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/eddsa_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/hkdf_sha1_test.txt
