@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -153,6 +153,7 @@
 
 /* Macros to check the boot type */
 #define EFI_EMMC_NETWORK_FLASH_TYPE 14
+#define EFI_SPI_NETWORK_FLASH_TYPE 13
 #define EFI_MMC_FLASH_TYPE 5
 #define EFI_PCIE_FLASH_TYPE 7
 #define EFI_MAX_FLASH_TYPE  0x7FFFFFFF
