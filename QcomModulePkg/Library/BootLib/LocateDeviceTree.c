@@ -839,6 +839,34 @@ EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
   return EFI_SUCCESS;
 }
 
+STATIC EFI_STATUS GetSoftSkuMatchDtb (DtInfo *CurDtbInfo,
+                          CONST CHAR8 *SoftSkuProp, INT32 LenSoftSkuId)
+{
+  if (CurDtbInfo == NULL) {
+    DEBUG ((EFI_D_VERBOSE, "Input parameters null\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if ((SoftSkuProp) &&
+      (LenSoftSkuId >= 0)) {
+    CurDtbInfo->DtSoftSkuId =
+           fdt32_to_cpu (((struct softsku_id *)SoftSkuProp)->SkuId);
+  } else {
+    CurDtbInfo->DtSoftSkuId = 0;
+  }
+
+  DEBUG ((EFI_D_VERBOSE, "BoardSoftSkuId = %x, DtSoftSkuId = %x\n",
+                   BoardSoftSkuId (), CurDtbInfo->DtSoftSkuId));
+
+  if (CurDtbInfo->DtSoftSkuId == BoardSoftSkuId ()) {
+    CurDtbInfo->DtMatchVal |= BIT (SOFTSKU_EXACT_MATCH);
+  } else {
+    DEBUG ((EFI_D_VERBOSE, "qcom,softsku-id does not match\n"));
+  }
+
+  return EFI_SUCCESS;
+}
+
 /* Dt selection table for quick reference
   | SNO | Dt Property   | CDT Property    | Exact | Best | Default |
   |-----+---------------+-----------------+-------+------+---------+
@@ -868,7 +896,9 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   CONST CHAR8 *PmicProp = NULL;
   CONST CHAR8 *PmicPropSz = NULL;
   CONST CHAR8 *OemVarProp = NULL;
+  CONST CHAR8 *SoftSkuProp = NULL;
   INT32 LenBoardId;
+  INT32 LenSoftSkuId;
   INT32 LenPlatId;
   INT32 LenPmicId;
   INT32 LenPmicIdSz;
@@ -948,6 +978,14 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   Status = GetBoardMatchDtb (CurDtbInfo, BoardProp, LenBoardId);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_VERBOSE, "Board dt prop search failed.\n"));
+    goto cleanup;
+  }
+
+  SoftSkuProp = (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "qcom,softsku-id",
+                                        &LenSoftSkuId);
+  Status = GetSoftSkuMatchDtb (CurDtbInfo, SoftSkuProp, LenSoftSkuId);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_VERBOSE, "SoftSkuId dt prop search failed.\n"));
     goto cleanup;
   }
 
@@ -1041,6 +1079,8 @@ cleanup:
                           CurDtbInfo->DtPlatformSubtype) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else if (BestDtbInfo->DtOEMVariantId < CurDtbInfo->DtOEMVariantId) {
+        gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
+      } else if (BestDtbInfo->DtSoftSkuId > CurDtbInfo->DtSoftSkuId) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else {
         FindBestMatch = FALSE;
@@ -1655,6 +1695,7 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
   UINT32 cur_dt_hw_platform;
   UINT32 cur_dt_hw_subtype;
   UINT32 cur_dt_msm_id;
+  UINT32 CurDtSkuId;
   dt_node *dt_node_tmp = NULL;
 
   /* Platform-id
@@ -1664,6 +1705,7 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
   cur_dt_msm_id = (cur_dt_entry->platform_id & 0x0000ffff);
   cur_dt_hw_platform = (cur_dt_entry->variant_id & 0x000000ff);
   cur_dt_hw_subtype = (cur_dt_entry->board_hw_subtype & 0xff);
+  CurDtSkuId   = cur_dt_entry->SkuId;
 
   /* Bits 10:8 contain ddr information */
   cur_dt_hlos_ddr = (cur_dt_entry->board_hw_subtype & 0x700);
@@ -1678,6 +1720,7 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
       (cur_dt_hw_platform == BoardPlatformType ()) &&
       (cur_dt_hw_subtype == BoardPlatformSubType ()) &&
       (cur_dt_hlos_ddr == (BoardPlatformHlosSubType() & 0x700)) &&
+      (CurDtSkuId == (BoardSoftSkuId ())) &&
       (cur_dt_entry->soc_rev <= BoardPlatformChipVersion ()) &&
       ((cur_dt_entry->variant_id & 0x00ffff00) <=
        (BoardTargetId () & 0x00ffff00)) &&

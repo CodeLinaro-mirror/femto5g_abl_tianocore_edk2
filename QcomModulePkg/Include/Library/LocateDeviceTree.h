@@ -175,6 +175,7 @@ typedef enum {
   PMIC_MATCH_EXACT_MODEL_IDXE,
   PMIC_MATCH_DEFAULT_MODEL_IDXF,
   PMIC_MATCH_EXACT_MODEL_IDXF,
+  SOFTSKU_EXACT_MATCH,
   HLOS_SUBTYPE_EXACT_MATCH,
   SUBTYPE_DEFAULT_MATCH,
   SUBTYPE_EXACT_MATCH,
@@ -197,7 +198,8 @@ typedef enum {
    BIT (PMIC_MATCH_EXACT_MODEL_IDX9) | BIT (PMIC_MATCH_EXACT_MODEL_IDXA) | \
    BIT (PMIC_MATCH_EXACT_MODEL_IDXB) | BIT (PMIC_MATCH_EXACT_MODEL_IDXC) | \
    BIT (PMIC_MATCH_EXACT_MODEL_IDXD) | BIT (PMIC_MATCH_EXACT_MODEL_IDXE) | \
-   BIT (PMIC_MATCH_EXACT_MODEL_IDXF) | BIT (PACKAGE_EXACT_MATCH))
+   BIT (PMIC_MATCH_EXACT_MODEL_IDXF) | BIT (PACKAGE_EXACT_MATCH) | \
+   BIT (SOFTSKU_EXACT_MATCH))
 
 typedef enum {
   PMIC_IDX0,
@@ -224,6 +226,7 @@ typedef struct DtInfo {
   UINT32 DtVariantMinor;
   UINT32 DtPlatformSubtype;
   UINT32 DtOEMVariantId;
+  UINT32 DtSoftSkuId;
   UINT32 DtPmicModel[MAX_PMIC_IDX];
   UINT32 DtPmicRev[MAX_PMIC_IDX];
   UINT64 DtMatchVal;
@@ -250,6 +253,7 @@ struct dt_entry {
   UINT64 offset;
   UINT32 size;
   UINT32 Idx;
+  UINT32 SkuId;
 };
 
 /*Struct def for device tree entry*/
@@ -291,6 +295,10 @@ struct board_id {
 struct pmic_id {
   UINT32 pmic_version[4];
 };
+
+typedef struct softsku_id {
+  UINT32 SkuId;
+} softsku_id;
 
 struct oem_id {
   UINT32 oem_variant_id;
