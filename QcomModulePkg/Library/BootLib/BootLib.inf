@@ -176,6 +176,7 @@
 	gEfiKernelProtocolGuid
 	gEfiDisplayPowerStateProtocolGuid
 	gEfiSoftSkuProtocolGuid
+	gEfiPartitionInfoProtocolGuid
 
 [FixedPcd]
 	gArmTokenSpaceGuid.PcdSystemMemoryBase

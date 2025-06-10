@@ -149,6 +149,7 @@ VOID UpdatePartitionEntries (VOID)
   UINT32 Index = 0;
   EFI_STATUS Status;
   EFI_PARTITION_ENTRY *PartEntry;
+  EFI_PARTITION_INFO_PROTOCOL  *PartitionInfo;
 
   PartitionCount = 0;
   /*Nullify the PtnEntries array before using it*/
@@ -163,9 +164,20 @@ VOID UpdatePartitionEntries (VOID)
                                &gEfiPartitionRecordGuid, (VOID **)&PartEntry);
       PartitionCount++;
       if (EFI_ERROR (Status)) {
-        DEBUG ((EFI_D_VERBOSE, "Selected Lun : %d, handle: %d does not have "
-                               "partition record, ignore\n",
-                i, j));
+        Status =
+            gBS->HandleProtocol (Ptable[i].HandleInfoList[j].Handle,
+                                 &gEfiPartitionInfoProtocolGuid,
+                                 (VOID **)&PartitionInfo);
+        if (EFI_ERROR (Status)) {
+          DEBUG ((EFI_D_VERBOSE, "Selected Lun : %d, handle: %d does not have "
+                                 "partition record, ignore\n",
+                  i, j));
+        } else {
+            gBS->CopyMem ((&PtnEntries[Index]), &PartitionInfo->Info.Gpt,
+                           sizeof (PartitionInfo->Info.Gpt));
+            DEBUG ((EFI_D_VERBOSE, "UpdatePartitionEntries: partition: %s \n\r",
+                                   PartitionInfo->Info.Gpt.PartitionName));
+        }
         PtnEntries[Index].lun = i;
         continue;
       }
