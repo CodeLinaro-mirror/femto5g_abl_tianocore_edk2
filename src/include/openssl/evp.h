@@ -18,6 +18,7 @@
 #include <openssl/base.h>   // IWYU pragma: export
 
 #include <openssl/evp_errors.h>  // IWYU pragma: export
+#include <openssl/thread.h>
 
 // OpenSSL included digest and cipher functions in this header so we include
 // them for users that still expect that.

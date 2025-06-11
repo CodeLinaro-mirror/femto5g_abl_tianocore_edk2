@@ -22,6 +22,7 @@
 #include <openssl/evp.h>
 #include <openssl/mem.h>
 #include <openssl/obj.h>
+#include <openssl/thread.h>
 #include <openssl/x509.h>
 
 #include "../internal.h"
@@ -1533,7 +1534,12 @@ int X509_STORE_CTX_init(X509_STORE_CTX *ctx, X509_STORE *store, X509 *x509,
   return 1;
 
 err:
-  X509_STORE_CTX_cleanup(ctx);
+  CRYPTO_free_ex_data(&g_ex_data_class, ctx, &ctx->ex_data);
+  if (ctx->param != NULL) {
+    X509_VERIFY_PARAM_free(ctx->param);
+  }
+
+  OPENSSL_memset(ctx, 0, sizeof(X509_STORE_CTX));
   return 0;
 }
 
@@ -1550,7 +1556,7 @@ void X509_STORE_CTX_trusted_stack(X509_STORE_CTX *ctx, STACK_OF(X509) *sk) {
 }
 
 void X509_STORE_CTX_cleanup(X509_STORE_CTX *ctx) {
-  CRYPTO_free_ex_data(&g_ex_data_class, &ctx->ex_data);
+  CRYPTO_free_ex_data(&g_ex_data_class, ctx, &(ctx->ex_data));
   X509_VERIFY_PARAM_free(ctx->param);
   sk_X509_pop_free(ctx->chain, X509_free);
   OPENSSL_memset(ctx, 0, sizeof(X509_STORE_CTX));
