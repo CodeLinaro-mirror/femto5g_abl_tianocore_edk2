@@ -13,6 +13,9 @@
   GCC:*_*_*_CC_FLAGS = -O2 -DZ_SOLO -Wno-deprecated-non-prototype
   GCC:*_*_*_CC_FLAGS = $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT)
 
+[BuildOptions.ARM]
+  GCC:*_*_*_CC_FLAGS = -DZ_SOLO -Wno-deprecated-non-prototype
+
 [Sources]
   zutil.c
   adler32.c

@@ -49,7 +49,7 @@ found at
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -2985,8 +2985,6 @@ STATIC VOID GetBufferSize (UINT64 *MaxBufferSize, UINT64 *MinBufferSize)
   }
 
   if (DdrSize <= DDR_512MB) {
-    /* 35MB */
-    *MaxBufferSize = 36700160;
     /* 16MB */
     *MinBufferSize = 16777216;
   }
@@ -3193,6 +3191,7 @@ CmdContinue (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
   BootInfo Info = {0};
 
   Info.MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
+  Info.BootReason = FASTBOOT_MODE;
   Status = LoadImageAndAuth (&Info, FALSE, FALSE);
   if (Status != EFI_SUCCESS) {
     AsciiSPrint (Resp, sizeof (Resp), "Failed to load image from partition: %r",
@@ -3413,6 +3412,7 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   Info.Images[0].Name = "boot";
   Info.NumLoadedImages = 1;
   Info.MultiSlotBoot = PartitionHasMultiSlot (L"boot");
+  Info.BootReason = FASTBOOT_MODE;
 
   if (Info.MultiSlotBoot) {
     Status = ClearUnbootable ();
