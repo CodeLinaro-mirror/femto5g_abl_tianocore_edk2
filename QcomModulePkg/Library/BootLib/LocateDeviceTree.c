@@ -553,8 +553,6 @@ DeviceTreeAppended (VOID *kernel,
     Status = BaseMem (&BaseMemory);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Unable to find Base memory for DDR %r\n", Status));
-      FreePool (dt_entry_queue);
-      dt_entry_queue = NULL;
       goto out;
     }
 
