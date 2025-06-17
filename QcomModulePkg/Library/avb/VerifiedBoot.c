@@ -29,7 +29,7 @@
 /*
  * Changes from Qualcomm Innovation Center, Inc. are provided
  * under the following license:
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -2251,6 +2251,12 @@ get_ptn_name:
 
   if (AVBVersion != AVB_LE) {
     DisplayVerifiedBootScreen (Info);
+    DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
+    Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Error sending milestone call to TZ\n"));
+      return Status;
+    }
   }
   return Status;
 }
