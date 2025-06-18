@@ -1049,7 +1049,7 @@ PatchGpt (INT32 Lun, UINT8 *Gpt,
       (PrimaryGptHeader + BlkSz + TotalPart * PARTITION_ENTRY_SIZE);
   }
 
-  if (!Lun) {
+  if (!Lun || Lun == NO_LUN) {
     LastPartOffset =
       (TotalPart - 1) * PARTITION_ENTRY_SIZE + PARTITION_ENTRY_LAST_LBA;
   } else {
