@@ -36,13 +36,41 @@ extern "C" {
 #include "avb_crypto.h"
 #include "avb_sysdeps.h"
 
+/* The following defines must be set to something appropriate
+ *
+ *   AVB_SHA256_CONTEXT_SIZE - the size of AvbSHA256Ctx, excluding the buffer
+ *   AVB_SHA512_CONTEXT_SIZE - the size of AvbSHA512Ctx, exclusing the buffer
+ *
+ * For example, if AvbSHA512Ctx is implemented using BoringSSL this would be
+ * defined as sizeof(SHA256_CTX).
+ *
+ * We expect the implementation to provide a header file with the name
+ * avb_crypto_ops_impl.h to do all this.
+ */
+// #include "avb_crypto_ops_impl.h"
+
+// defined by QC
 /* Block size in bytes of a SHA-256 digest. */
 #define AVB_SHA256_BLOCK_SIZE 64
-
-
+// defined by QC
 /* Block size in bytes of a SHA-512 digest. */
 #define AVB_SHA512_BLOCK_SIZE 128
 
+/* Data structure used for SHA-256. */
+// typedef struct {
+//   uint8_t reserved[AVB_SHA256_CONTEXT_SIZE];
+//   uint8_t buf[AVB_SHA256_DIGEST_SIZE]; /* Used for storing the final digest.
+//   */
+// } AvbSHA256Ctx;
+
+/* Data structure used for SHA-512. */
+// typedef struct {
+//   uint8_t reserved[AVB_SHA512_CONTEXT_SIZE];
+//   uint8_t buf[AVB_SHA512_DIGEST_SIZE]; /* Used for storing the final digest.
+//   */
+// } AvbSHA512Ctx;
+
+// defined by QC
 /* Data structure used for SHA-256. */
 typedef struct {
   uint32_t h[8];
@@ -63,22 +91,30 @@ typedef struct {
 } AvbSHA512Ctx;
 
 /* Initializes the SHA-256 context. */
-void avb_sha256_init(AvbSHA256Ctx* ctx);
+void
+avb_sha256_init (AvbSHA256Ctx *ctx);
 
 /* Updates the SHA-256 context with |len| bytes from |data|. */
-void avb_sha256_update(AvbSHA256Ctx* ctx, const uint8_t* data, uint32_t len);
+//void avb_sha256_update(AvbSHA256Ctx* ctx, const uint8_t* data, size_t len);
+void
+avb_sha256_update (AvbSHA256Ctx *ctx, const uint8_t *data, uint32_t len);
 
 /* Returns the SHA-256 digest. */
-uint8_t* avb_sha256_final(AvbSHA256Ctx* ctx) AVB_ATTR_WARN_UNUSED_RESULT;
+uint8_t *
+avb_sha256_final (AvbSHA256Ctx *ctx) AVB_ATTR_WARN_UNUSED_RESULT;
 
 /* Initializes the SHA-512 context. */
-void avb_sha512_init(AvbSHA512Ctx* ctx);
+void
+avb_sha512_init (AvbSHA512Ctx *ctx);
 
 /* Updates the SHA-512 context with |len| bytes from |data|. */
-void avb_sha512_update(AvbSHA512Ctx* ctx, const uint8_t* data, uint32_t len);
+//void avb_sha512_update(AvbSHA512Ctx* ctx, const uint8_t* data, size_t len);
+void
+avb_sha512_update (AvbSHA512Ctx *ctx, const uint8_t *data, uint32_t len);
 
 /* Returns the SHA-512 digest. */
-uint8_t* avb_sha512_final(AvbSHA512Ctx* ctx) AVB_ATTR_WARN_UNUSED_RESULT;
+uint8_t *
+avb_sha512_final (AvbSHA512Ctx *ctx) AVB_ATTR_WARN_UNUSED_RESULT;
 
 #ifdef __cplusplus
 }

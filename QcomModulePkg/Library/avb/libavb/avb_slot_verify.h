@@ -159,6 +159,9 @@ typedef struct {
   size_t data_size;
   bool preloaded;
   AvbSlotVerifyResult verify_result;
+  uint8_t *digest;
+  size_t digest_size;
+  AvbDigestType digest_type;
 } AvbPartitionData;
 
 /* AvbVBMetaData contains a vbmeta struct loaded from a partition when
@@ -248,10 +251,15 @@ typedef struct {
  *
  *   androidboot.vbmeta.device_state: set to "locked" or "unlocked"
  *   depending on the result of the result of AvbOps's
- *   read_is_unlocked() function.
+ *   read_is_device_unlocked() function.
  *
  *   androidboot.vbmeta.{hash_alg, size, digest}: Will be set to
  *   the digest of all images in |vbmeta_images|.
+ *
+ *   androidboot.vbmeta.public_key_digest: Will be set to the SHA-256
+ *   digest of the public key used to verify the vbmeta partition (or
+ *   boot partition if there is no vbmeta partition). If the flag
+ *   AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION is used, this is not set.
  *
  *   androidboot.vbmeta.device: This is set to the value
  *   PARTUUID=$(ANDROID_VBMETA_PARTUUID) before substitution so it
