@@ -1954,12 +1954,14 @@ BootLinux (BootInfo *Info)
 
   /* Sends Milestone Call to Keymaster */
   UINT32  AVBVersion = GetAVBVersion ();
-  if (AVBVersion != AVB_LE) {
-    DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
-    Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
-    if (Status != EFI_SUCCESS) {
+  if (AVBVersion != NO_AVB) {
+    if (AVBVersion != AVB_LE) {
+      DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
+      Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
+      if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "Error sending milestone call to TZ\n"));
         return Status;
+      }
     }
   }
 
