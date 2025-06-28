@@ -22,6 +22,8 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/UpdateCmdLine.h>
+#include <Library/LocateDeviceTree.h>
+#include <Library/Board.h>
 
 #include <Protocol/EFIGblOsConfigurationProtocol.h>
 
@@ -160,46 +162,79 @@ EfiGblSelectDeviceTreesMinimalBoot (
     IN OUT EFI_GBL_VERIFIED_DEVICE_TREE *DeviceTrees,
     IN UINTN NumDeviceTrees)
 {
+  BoardInit ();
   DEBUG ((EFI_D_INFO,
           "EFI_GBL_OS_CONFIGURATION_PROTOCOL: "
           "EfiGblSelectDeviceTreesMinimalBoot called. Amount to select: %u\n",
           NumDeviceTrees));
 
-  UINTN SelectedBaseDeviceTreeIndex = 3;
-  UINTN SelectedOverlayIndex = 28;
+  UINTN SelectedBaseDeviceTreeIndex = 0;
+  UINTN SelectedOverlayIndex = 0;
 
   UINTN CurrentBaseDeviceTreeIndex = 0;
   UINTN CurrentOverlayIndex = 0;
+  UINTN DtbMatchVal = 0;
+  UINTN DtboMatchVal = 0;
+
   for (UINTN i = 0; i < NumDeviceTrees; i++) {
     BOOLEAN IsBaseDeviceTree = DeviceTrees[i].Metadata.Type == DEVICE_TREE;
     BOOLEAN IsOverlay = DeviceTrees[i].Metadata.Type == OVERLAY;
 
-    if (IsBaseDeviceTree &&
-        CurrentBaseDeviceTreeIndex == SelectedBaseDeviceTreeIndex) {
-      DEBUG ((EFI_D_INFO,
-              "EFI_GBL_OS_CONFIGURATION_PROTOCOL: "
-              "Base device tree at index %u (%u in the provided array) got "
-              "selected\n",
-              CurrentBaseDeviceTreeIndex, i));
+    DtInfo CurDtbInfo = {0};
+    DtInfo BestDtbInfo = {0};
+    CurDtbInfo.Dtb = (void*) DeviceTrees[i].DeviceTree;
 
-      DeviceTrees[i].Selected = TRUE;
+    if (IsBaseDeviceTree) {
+        if (ReadDtbFindMatch (&CurDtbInfo, &BestDtbInfo, SOC_MATCH)) {
+            CurrentBaseDeviceTreeIndex = i;
+        }
+
+        if (CurDtbInfo.DtMatchVal) {
+            if (CurDtbInfo.DtMatchVal & BIT (SOC_MATCH)) {
+                if ((CurDtbInfo.DtMatchVal & ALL_BITS_SET) == (ALL_BITS_SET)) {
+                    DEBUG ((EFI_D_INFO, "Exact DTB match"
+                            " found. DTBO search is not "
+                            "required\n"));
+                DeviceTrees[i].Selected = TRUE;
+                SelectedBaseDeviceTreeIndex = CurrentBaseDeviceTreeIndex;
+                DEBUG ((EFI_D_INFO,
+                        "EFI_GBL_OS_CONFIGURATION_PROTOCOL: "
+                        "Base device tree at index %u"
+                        "(%u in the provided array) got "
+                        "selected\n",
+                        SelectedBaseDeviceTreeIndex, i));
+                }
+            }
+            if (CurDtbInfo.DtMatchVal > DtbMatchVal) {
+                DtbMatchVal = CurDtbInfo.DtMatchVal;
+                SelectedBaseDeviceTreeIndex = CurrentBaseDeviceTreeIndex;
+            }
+        }
+        CurrentBaseDeviceTreeIndex++;
     }
-    if (IsOverlay && CurrentOverlayIndex == SelectedOverlayIndex) {
-      DEBUG ((EFI_D_INFO,
-              "EFI_GBL_OS_CONFIGURATION_PROTOCOL: "
-              "Overlays at index %u (%u in the provided array) got "
-              "selected\n",
-              CurrentOverlayIndex, i));
-
-      DeviceTrees[i].Selected = TRUE;
-    }
-
     if (IsOverlay) {
-      CurrentOverlayIndex++;
-    } else if (IsBaseDeviceTree) {
-      CurrentBaseDeviceTreeIndex++;
+        if (ReadDtbFindMatch (&CurDtbInfo, &BestDtbInfo, VARIANT_MATCH)) {
+            CurrentOverlayIndex = i;
+        }
+        if (CurDtbInfo.DtMatchVal >  DtboMatchVal) {
+            DtboMatchVal = CurDtbInfo.DtMatchVal;
+            SelectedOverlayIndex = CurrentOverlayIndex;
+        }
+        CurrentOverlayIndex++;
     }
   }
+
+  DEBUG ((EFI_D_INFO,
+          "EFI_GBL_OS_CONFIGURATION_PROTOCOL: "
+          "Overlays at index %u got selected\n",
+          SelectedOverlayIndex));
+  DeviceTrees[SelectedOverlayIndex].Selected = TRUE;
+
+  DEBUG ((EFI_D_INFO,
+          "EFI_GBL_OS_CONFIGURATION_PROTOCOL: "
+          "Base device tree at index %u got selected\n",
+          SelectedBaseDeviceTreeIndex));
+  DeviceTrees[SelectedBaseDeviceTreeIndex].Selected = TRUE;
 
   DEBUG (
       (EFI_D_INFO,

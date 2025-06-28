@@ -859,6 +859,16 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
       SetVmDisable ();
     }
   }
+  // Loads qtvm_dtbo partition
+  DtboImgInvalid = LoadAndValidateQtvmDtboImg (Info, BootParamlistPtr);
+  if (DtboImgInvalid) {
+    if (!GetBoardQtVmDtbos (Info, BootParamlistPtr->QtvmDtboImgBuffer)) {
+      DEBUG ((EFI_D_ERROR, "Error: No VM dtbos found for this board\n"));
+    }
+  } else {
+      DEBUG ((EFI_D_ERROR, "Error: Failed to read qtvm_dtbo partition\n\n\n"));
+  }
+
   return EFI_SUCCESS;
 }
 
@@ -1940,6 +1950,17 @@ BootLinux (BootInfo *Info)
   if (Status != EFI_SUCCESS &&
           BoardPlatformType () != EFI_PLATFORMINFO_TYPE_RUMI) {
        return Status;
+  }
+
+  /* Sends Milestone Call to Keymaster */
+  UINT32  AVBVersion = GetAVBVersion ();
+  if (AVBVersion != AVB_LE) {
+    DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
+    Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Error sending milestone call to TZ\n"));
+        return Status;
+    }
   }
 
 #ifdef VERFIEID_BOOT_LE

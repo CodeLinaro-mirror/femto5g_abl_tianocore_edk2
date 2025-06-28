@@ -149,6 +149,7 @@ VOID UpdatePartitionEntries (VOID)
   UINT32 Index = 0;
   EFI_STATUS Status;
   EFI_PARTITION_ENTRY *PartEntry;
+  EFI_PARTITION_INFO_PROTOCOL  *PartitionInfo;
 
   PartitionCount = 0;
   /*Nullify the PtnEntries array before using it*/
@@ -163,9 +164,20 @@ VOID UpdatePartitionEntries (VOID)
                                &gEfiPartitionRecordGuid, (VOID **)&PartEntry);
       PartitionCount++;
       if (EFI_ERROR (Status)) {
-        DEBUG ((EFI_D_VERBOSE, "Selected Lun : %d, handle: %d does not have "
-                               "partition record, ignore\n",
-                i, j));
+        Status =
+            gBS->HandleProtocol (Ptable[i].HandleInfoList[j].Handle,
+                                 &gEfiPartitionInfoProtocolGuid,
+                                 (VOID **)&PartitionInfo);
+        if (EFI_ERROR (Status)) {
+          DEBUG ((EFI_D_VERBOSE, "Selected Lun : %d, handle: %d does not have "
+                                 "partition record, ignore\n",
+                  i, j));
+        } else {
+            gBS->CopyMem ((&PtnEntries[Index]), &PartitionInfo->Info.Gpt,
+                           sizeof (PartitionInfo->Info.Gpt));
+            DEBUG ((EFI_D_VERBOSE, "UpdatePartitionEntries: partition: %s \n\r",
+                                   PartitionInfo->Info.Gpt.PartitionName));
+        }
         PtnEntries[Index].lun = i;
         continue;
       }
@@ -1049,7 +1061,7 @@ PatchGpt (INT32 Lun, UINT8 *Gpt,
       (PrimaryGptHeader + BlkSz + TotalPart * PARTITION_ENTRY_SIZE);
   }
 
-  if (!Lun) {
+  if (!Lun || Lun == NO_LUN) {
     LastPartOffset =
       (TotalPart - 1) * PARTITION_ENTRY_SIZE + PARTITION_ENTRY_LAST_LBA;
   } else {
@@ -2083,6 +2095,91 @@ LoadAndValidateDtboImg (BootInfo *Info,
               fdt32_to_cpu (DtboTableHdr->DtEntryOffset),
               fdt32_to_cpu (DtboTableHdr->DtEntryCount),
               fdt32_to_cpu (DtboTableHdr->DtEntrySize), DtboImgSize));
+      return FALSE;
+  }
+
+  return TRUE;
+}
+
+/*Function to load qtvm_dtbo
+ *return: TRUE or FALSE.
+ */
+BOOLEAN
+LoadAndValidateQtvmDtboImg (BootInfo *Info, BootParamlist *BootParamlistPtr)
+{
+  UINT32 QtvmDtboPartitionSize = 0;
+  UINT32 TotalSize = 0;
+  EFI_STATUS Status = EFI_SUCCESS;
+  struct DtboTableHdr *DtboTableHdr = NULL;
+
+  /* Load qtvm dtbo partition */
+  Status = GetQtvmDtboImg (Info, &BootParamlistPtr->QtvmDtboImgBuffer,
+                          &QtvmDtboPartitionSize);
+
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "BootLinux: failed to get QTVM dtbo image\n"));
+    return FALSE;
+  }
+
+  if (!BootParamlistPtr->QtvmDtboImgBuffer) {
+    DEBUG ((EFI_D_ERROR, "DtboImgBuffer is NULL"));
+    return FALSE;
+  }
+
+  DtboTableHdr = BootParamlistPtr->QtvmDtboImgBuffer;
+  if (fdt32_to_cpu (DtboTableHdr->Magic) != DTBO_TABLE_MAGIC) {
+    DEBUG ((EFI_D_ERROR, "Dtbo hdr magic mismatch %x, with %x\n",
+            DtboTableHdr->Magic, DTBO_TABLE_MAGIC));
+    return FALSE;
+  }
+
+  TotalSize = fdt32_to_cpu (DtboTableHdr->TotalSize);
+
+  /*Check for TotalSize of Dtbo image*/
+  if ((TotalSize > QtvmDtboPartitionSize) ||
+      (TotalSize == 0)) {
+    DEBUG ((EFI_D_ERROR, "Dtbo Table TotalSize got corrupted\n"));
+    return FALSE;
+  }
+
+  /*Check for HeaderSize of Dtbo image*/
+  if (fdt32_to_cpu (DtboTableHdr->HeaderSize) !=
+      sizeof (struct DtboTableHdr)) {
+    DEBUG ((EFI_D_ERROR, "Dtbo Table HeaderSize got corrupted\n"));
+    return FALSE;
+  }
+
+  /*Check for DtEntrySize of Dtbo image*/
+  if (fdt32_to_cpu (DtboTableHdr->DtEntrySize) !=
+      sizeof (struct DtboTableEntry)) {
+    DEBUG ((EFI_D_ERROR, "Dtbo Table DtEntrySize got corrupted\n"));
+    return FALSE;
+  }
+
+  /*Check for DtEntryOffset of Dtbo image*/
+  if (fdt32_to_cpu (DtboTableHdr->DtEntryOffset) > TotalSize) {
+    DEBUG ((EFI_D_ERROR, "Dtbo Table DtEntryOffset got corrupted\n"));
+    return FALSE;
+  }
+
+  if ((UINT64)fdt32_to_cpu (DtboTableHdr->DtEntryCount) *
+          fdt32_to_cpu (DtboTableHdr->DtEntrySize) > TotalSize) {
+      DEBUG ((EFI_D_ERROR,
+              "DTB header is corrupted, DtEntryCount %x, DtEntrySize %x,"
+              " TotalSize %x\n", fdt32_to_cpu (DtboTableHdr->DtEntryCount),
+              fdt32_to_cpu (DtboTableHdr->DtEntrySize), TotalSize));
+      return FALSE;
+  }
+
+  if (fdt32_to_cpu (DtboTableHdr->DtEntryOffset) +
+          (UINT64)fdt32_to_cpu (DtboTableHdr->DtEntryCount) *
+          fdt32_to_cpu (DtboTableHdr->DtEntrySize) > TotalSize) {
+      DEBUG ((EFI_D_ERROR,
+              "DTB header is corrupted, DtEntryOffset %x, DtEntryCount %x,"
+              "DtEntrySize %x, TotalSize %x\n",
+              fdt32_to_cpu (DtboTableHdr->DtEntryOffset),
+              fdt32_to_cpu (DtboTableHdr->DtEntryCount),
+              fdt32_to_cpu (DtboTableHdr->DtEntrySize), TotalSize));
       return FALSE;
   }
 

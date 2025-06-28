@@ -47,9 +47,10 @@ found at
 */
 
 /*
- * Changes from Qualcomm Innovation Center, Inc. are provided under the
+ * Changes from Qualcomm Technologies, Inc. are provided under the
  * following license:
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include <Library/BaseLib.h>
@@ -390,13 +391,16 @@ PartitionGetInfo (IN CHAR16 *PartitionName,
                   OUT EFI_HANDLE **Handle)
 {
   EFI_STATUS Status;
-  EFI_PARTITION_ENTRY *PartEntry;
+  EFI_PARTITION_ENTRY *PartEntry = NULL;
+  EFI_PARTITION_INFO_PROTOCOL  *PartitionInfo = NULL;
+  CHAR16* PartNamePtr = NULL;
   UINT16 i;
   UINT32 j;
   /* By default the LunStart and LunEnd would point to '0' and max value */
   UINT32 LunStart = 0;
-  UINT32 LunEnd = GetMaxLuns ();
+  UINT32 LunEnd = 0;
 
+  LunEnd = GetMaxLuns ();
   /* If Lun is set in the Handle flash command then find the block io for that
    * lun */
   if (LunSet) {
@@ -408,10 +412,20 @@ PartitionGetInfo (IN CHAR16 *PartitionName,
       Status =
           gBS->HandleProtocol (Ptable[i].HandleInfoList[j].Handle,
                                &gEfiPartitionRecordGuid, (VOID **)&PartEntry);
+
+      PartNamePtr = PartEntry->PartitionName;
       if (EFI_ERROR (Status)) {
-        continue;
+        PartNamePtr = NULL;
+        Status = gBS->HandleProtocol (Ptable[i].HandleInfoList[j].Handle,
+                                      &gEfiPartitionInfoProtocolGuid,
+                                      (VOID **)&PartitionInfo);
+        PartNamePtr = PartitionInfo->Info.Gpt.PartitionName;
+        if (EFI_ERROR (Status)) {
+          PartNamePtr = NULL;
+          continue;
+        }
       }
-      if (!(StrCmp (PartitionName, PartEntry->PartitionName))) {
+      if (!(StrCmp (PartitionName, PartNamePtr))) {
         *BlockIo = Ptable[i].HandleInfoList[j].BlkIo;
         *Handle = Ptable[i].HandleInfoList[j].Handle;
         return Status;

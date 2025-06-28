@@ -143,11 +143,11 @@ PopulateBccParams (AvbSlotVerifyData *SlotData, BOOLEAN BootIntoRecovery,
 
     // Set the DICE mode
     if (BootIntoRecovery) {
-         bcc_params->Mode = kDiceModeNormal;
+         bcc_params->Mode = kDiceModeMaintenance;
     } else if (IsUnlocked ()) {
          bcc_params->Mode = kDiceModeDebug;
     } else {
-         bcc_params->Mode = kDiceModeMaintenance;
+         bcc_params->Mode = kDiceModeNormal;
     }
 
     Status = KeyMasterGetFRSAndUDS (bcc_params);
