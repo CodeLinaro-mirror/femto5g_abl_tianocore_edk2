@@ -25,9 +25,9 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -86,6 +86,7 @@ typedef UINT32 Crc;
 typedef UINT64 SectorT;
 
 #define AES256_KEY_SIZE         32
+#define AUTHTAG                 1
 #define NUM_OF_AES256_KEYS      2
 #define PAYLOAD_KEY_SIZE (NUM_OF_AES256_KEYS * AES256_KEY_SIZE)
 #define RAND_INDEX_SIZE         8
