@@ -123,6 +123,8 @@ test_support_sources = [
     "src/ssl/test/settings_writer.h",
     "src/ssl/test/test_config.h",
     "src/ssl/test/test_state.h",
+    "src/third_party/fiat/bedrock_unverified_bareminimum.c.inc",
+    "src/third_party/fiat/bedrock_unverified_platform.c.inc",
     "src/third_party/fiat/curve25519_32.h",
     "src/third_party/fiat/curve25519_64.h",
     "src/third_party/fiat/curve25519_64_adx.h",
@@ -130,6 +132,10 @@ test_support_sources = [
     "src/third_party/fiat/p256_32.h",
     "src/third_party/fiat/p256_64.h",
     "src/third_party/fiat/p256_64_msvc.h",
+    "src/third_party/fiat/p256_field.c.inc",
+    "src/third_party/fiat/p256_field_32.br.c.inc",
+    "src/third_party/fiat/p256_field_64.br.c.inc",
+    "src/third_party/fiat/p256_point.br.c.inc",
 ]
 
 crypto_test_sources = [
@@ -208,6 +214,8 @@ crypto_test_sources = [
     "src/crypto/x509/x509_test.cc",
     "src/crypto/x509/x509_time_test.cc",
     "src/crypto/xwing/xwing_test.cc",
+    "src/third_party/fiat/bedrock_platform_test.cc",
+    "src/third_party/fiat/bedrock_polyfill_platform.c.inc",
 ]
 
 ssl_test_sources = [

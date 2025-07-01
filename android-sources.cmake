@@ -578,6 +578,8 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/x509/x509_test.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x509_time_test.cc
   ${BORINGSSL_ROOT}src/crypto/xwing/xwing_test.cc
+  ${BORINGSSL_ROOT}src/third_party/fiat/bedrock_platform_test.cc
+  ${BORINGSSL_ROOT}src/third_party/fiat/bedrock_polyfill_platform.c.inc
 )
 set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/blake2/blake2b256_tests.txt

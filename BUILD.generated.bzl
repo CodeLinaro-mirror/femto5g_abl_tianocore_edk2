@@ -291,6 +291,8 @@ crypto_internal_headers = [
     "src/crypto/spake2plus/internal.h",
     "src/crypto/trust_token/internal.h",
     "src/crypto/x509/internal.h",
+    "src/third_party/fiat/bedrock_unverified_bareminimum.c.inc",
+    "src/third_party/fiat/bedrock_unverified_platform.c.inc",
     "src/third_party/fiat/curve25519_32.h",
     "src/third_party/fiat/curve25519_64.h",
     "src/third_party/fiat/curve25519_64_adx.h",
@@ -298,6 +300,10 @@ crypto_internal_headers = [
     "src/third_party/fiat/p256_32.h",
     "src/third_party/fiat/p256_64.h",
     "src/third_party/fiat/p256_64_msvc.h",
+    "src/third_party/fiat/p256_field.c.inc",
+    "src/third_party/fiat/p256_field_32.br.c.inc",
+    "src/third_party/fiat/p256_field_64.br.c.inc",
+    "src/third_party/fiat/p256_point.br.c.inc",
 ]
 
 crypto_sources = [
