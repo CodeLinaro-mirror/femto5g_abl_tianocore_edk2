@@ -100,8 +100,8 @@ typedef struct FreeRanges {
 }FreeRanges;
 
 #if HIBERNATION_SUPPORT_AES
-#define NUM_CORES 2
-#define NUM_SILVER_CORES 1
+#define NUM_CORES 4
+#define NUM_SILVER_CORES 2
 #define NUM_PAGES_PER_GOLD_CORE 0
 #define NUM_PAGES_PER_SILVER_CORE 0
 
