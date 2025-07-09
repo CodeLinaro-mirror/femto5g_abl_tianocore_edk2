@@ -398,11 +398,6 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
           goto get_key_press;
       }
       else {
-          DEBUG ((EFI_D_INFO, "Installing GBL protocols\n"));
-          InstallDtFixupProtocol ();
-          InstallGblOsConfigurationProtocol ();
-          InstallGblAvbProtocol ();
-
           UINTN ExitDataSize = 0;
           DEBUG ((EFI_D_INFO, "Starting GBL app\n"));
           Status = gBS->StartImage (ImgHandle, &ExitDataSize, NULL);
