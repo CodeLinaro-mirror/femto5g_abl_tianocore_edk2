@@ -98,7 +98,6 @@
 #define DTBO_CUSTOM_MAX 4
 #define PLATFORM_FOUNDRY_SHIFT 16
 #define PLATFORM_PACKAGE_SHIFT 24
-#define PLATFORM_SOFTSKU_SHIFT 26
 #define DTBO_MAX_SIZE_ALLOWED (128 * 1024 * 1024)
 #define SOC_MASK (0xffff)
 #define VARIANT_MASK (0x000000ff)
@@ -110,7 +109,6 @@
 #define PLATFORM_SUBTYPE_SHIFT_ID (0x18)
 #define FOUNDRY_ID_MASK (0x00ff0000)
 #define PACKAGE_ID_MASK (0x03000000)
-#define SOFTSKU_ID_MASK (0x3C000000)
 #define PLATFORM_SUBTYPE_MASK (0x000000ff)
 #define OEM_ID_MASK (0xff000000)
 #define OEM_ID_SHIFT 24
@@ -145,8 +143,6 @@ typedef enum {
   VERSION_EXACT_MATCH,
   FOUNDRYID_DEFAULT_MATCH,
   FOUNDRYID_EXACT_MATCH,
-  SOFTSKUID_DEFAULT_MATCH,
-  SOFTSKUID_EXACT_MATCH,
   PMIC_MATCH_DEFAULT_MODEL_IDX0,
   PMIC_MATCH_EXACT_MODEL_IDX0,
   PMIC_MATCH_DEFAULT_MODEL_IDX1,
@@ -179,6 +175,7 @@ typedef enum {
   PMIC_MATCH_EXACT_MODEL_IDXE,
   PMIC_MATCH_DEFAULT_MODEL_IDXF,
   PMIC_MATCH_EXACT_MODEL_IDXF,
+  SOFTSKU_EXACT_MATCH,
   HLOS_SUBTYPE_EXACT_MATCH,
   SUBTYPE_DEFAULT_MATCH,
   SUBTYPE_EXACT_MATCH,
@@ -202,7 +199,7 @@ typedef enum {
    BIT (PMIC_MATCH_EXACT_MODEL_IDXB) | BIT (PMIC_MATCH_EXACT_MODEL_IDXC) | \
    BIT (PMIC_MATCH_EXACT_MODEL_IDXD) | BIT (PMIC_MATCH_EXACT_MODEL_IDXE) | \
    BIT (PMIC_MATCH_EXACT_MODEL_IDXF) | BIT (PACKAGE_EXACT_MATCH) | \
-   BIT (SOFTSKUID_EXACT_MATCH))
+   BIT (SOFTSKU_EXACT_MATCH))
 
 typedef enum {
   PMIC_IDX0,
@@ -224,12 +221,12 @@ typedef struct DtInfo {
   UINT32 DtSocRev;
   UINT32 DtFoundryId;
   UINT32 DtPackageId;
-  UINT32 DtSoftSkuId;
   UINT32 DtVariantId;
   UINT32 DtVariantMajor;
   UINT32 DtVariantMinor;
   UINT32 DtPlatformSubtype;
   UINT32 DtOEMVariantId;
+  UINT32 DtSoftSkuId;
   UINT32 DtPmicModel[MAX_PMIC_IDX];
   UINT32 DtPmicRev[MAX_PMIC_IDX];
   UINT64 DtMatchVal;
@@ -256,6 +253,7 @@ struct dt_entry {
   UINT64 offset;
   UINT32 size;
   UINT32 Idx;
+  UINT32 SkuId;
 };
 
 /*Struct def for device tree entry*/
@@ -298,6 +296,10 @@ struct pmic_id {
   UINT32 pmic_version[4];
 };
 
+typedef struct softsku_id {
+  UINT32 SkuId;
+} softsku_id;
+
 struct oem_id {
   UINT32 oem_variant_id;
 };
@@ -315,7 +317,6 @@ struct dt_mem_node_info {
 
 enum dt_entry_info {
   DTB_FOUNDRY = 0,
-  DTB_SOFTSKU,
   DTB_DDR,
   DTB_SOC,
   DTB_MAJOR_MINOR,
