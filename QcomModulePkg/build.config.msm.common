@@ -58,6 +58,9 @@ fi
 if [ -n "${WEAR_OS}" ]; then
   MAKE_FLAGS+=("WEAR_OS=${WEAR_OS}")
 fi
+if [ -n "${IOT_LOW_DDR_TARGET}" ]; then
+  MAKE_FLAGS+=("IOT_LOW_DDR_TARGET=${IOT_LOW_DDR_TARGET}")
+fi
 if [ -n "${USER_BUILD_VARIANT}" ]; then
   MAKE_FLAGS+=("USER_BUILD_VARIANT=${USER_BUILD_VARIANT}")
 fi
