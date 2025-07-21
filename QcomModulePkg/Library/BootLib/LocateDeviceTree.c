@@ -719,29 +719,6 @@ EFI_STATUS GetPlatformMatchDtb (DtInfo * CurDtbInfo,
       CurDtbInfo->DtMatchVal = BIT (NONE_MATCH);
       return EFI_NOT_FOUND;
     }
-    /*Compare SoftSKu Id of the dtb vs Board*/
-    CurDtbInfo->DtSoftSkuId =
-        fdt32_to_cpu (((struct plat_id *)PlatProp)->platform_id) &
-        SOFTSKU_ID_MASK;
-    DEBUG ((EFI_D_VERBOSE, "BoardSoftSku = %x, DtSoftSku = %x\n",
-            (BoardSoftSkuId () << PLATFORM_SOFTSKU_SHIFT),
-            CurDtbInfo->DtSoftSkuId));
-    if ((BoardSoftSkuId () << PLATFORM_SOFTSKU_SHIFT) > 0) {
-      if (CurDtbInfo->DtSoftSkuId ==
-          (BoardSoftSkuId () << PLATFORM_SOFTSKU_SHIFT)) {
-        CurDtbInfo->DtMatchVal |= BIT (SOFTSKUID_EXACT_MATCH);
-      } else if (BoardSoftSkuId () > 1 &&
-                 (CurDtbInfo->DtSoftSkuId >> PLATFORM_SOFTSKU_SHIFT) == 1) {
-        CurDtbInfo->DtMatchVal |= BIT (SOFTSKUID_DEFAULT_MATCH);
-      } else {
-        DEBUG ((EFI_D_VERBOSE, "soc SoftSku does not match\n"));
-       /* If it's neither exact nor default match don't select dtb */
-       CurDtbInfo->DtMatchVal = BIT (NONE_MATCH);
-       return EFI_NOT_FOUND;
-      }
-    } else if (CurDtbInfo->DtSoftSkuId == 0) {
-      CurDtbInfo->DtMatchVal |= BIT (SOFTSKUID_EXACT_MATCH);
-    }
     /* Compare Package Id of dtb vs Board */
     CurDtbInfo->DtPackageId =
         fdt32_to_cpu (((struct plat_id *)PlatProp)->platform_id) &
@@ -860,6 +837,34 @@ EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
   return EFI_SUCCESS;
 }
 
+STATIC EFI_STATUS GetSoftSkuMatchDtb (DtInfo *CurDtbInfo,
+                          CONST CHAR8 *SoftSkuProp, INT32 LenSoftSkuId)
+{
+  if (CurDtbInfo == NULL) {
+    DEBUG ((EFI_D_VERBOSE, "Input parameters null\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if ((SoftSkuProp) &&
+      (LenSoftSkuId >= 0)) {
+    CurDtbInfo->DtSoftSkuId =
+           fdt32_to_cpu (((struct softsku_id *)SoftSkuProp)->SkuId);
+  } else {
+    CurDtbInfo->DtSoftSkuId = 0;
+  }
+
+  DEBUG ((EFI_D_VERBOSE, "BoardSoftSkuId = %x, DtSoftSkuId = %x\n",
+                   BoardSoftSkuId (), CurDtbInfo->DtSoftSkuId));
+
+  if (CurDtbInfo->DtSoftSkuId == BoardSoftSkuId ()) {
+    CurDtbInfo->DtMatchVal |= BIT (SOFTSKU_EXACT_MATCH);
+  } else {
+    DEBUG ((EFI_D_VERBOSE, "qcom,softsku-id does not match\n"));
+  }
+
+  return EFI_SUCCESS;
+}
+
 /* Dt selection table for quick reference
   | SNO | Dt Property   | CDT Property    | Exact | Best | Default |
   |-----+---------------+-----------------+-------+------+---------+
@@ -867,7 +872,6 @@ EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
   |     |               | PlatformId      | Y     | N    | N       |
   |     |               | SocRev          | N     | Y    | N       |
   |     |               | FoundryId       | Y     | N    | 0       |
-  |     |               | SoftSKUId       | Y     | N    | 0       |
   |     | qcom,board-id |                 |       |      |         |
   |     |               | VariantId       | Y     | N    | N       |
   |     |               | VariantMajor    | N     | Y    | N       |
@@ -890,7 +894,9 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   CONST CHAR8 *PmicProp = NULL;
   CONST CHAR8 *PmicPropSz = NULL;
   CONST CHAR8 *OemVarProp = NULL;
+  CONST CHAR8 *SoftSkuProp = NULL;
   INT32 LenBoardId;
+  INT32 LenSoftSkuId;
   INT32 LenPlatId;
   INT32 LenPmicId;
   INT32 LenPmicIdSz;
@@ -970,6 +976,14 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   Status = GetBoardMatchDtb (CurDtbInfo, BoardProp, LenBoardId);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_VERBOSE, "Board dt prop search failed.\n"));
+    goto cleanup;
+  }
+
+  SoftSkuProp = (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "qcom,softsku-id",
+                                        &LenSoftSkuId);
+  Status = GetSoftSkuMatchDtb (CurDtbInfo, SoftSkuProp, LenSoftSkuId);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_VERBOSE, "SoftSkuId dt prop search failed.\n"));
     goto cleanup;
   }
 
@@ -1063,6 +1077,8 @@ cleanup:
                           CurDtbInfo->DtPlatformSubtype) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else if (BestDtbInfo->DtOEMVariantId < CurDtbInfo->DtOEMVariantId) {
+        gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
+      } else if (BestDtbInfo->DtSoftSkuId > CurDtbInfo->DtSoftSkuId) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else {
         FindBestMatch = FALSE;
@@ -1681,17 +1697,16 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
   dt_node *dt_node_tmp = NULL;
 
   /* Platform-id
-   * bit no | 31 30 | 29 26 | 25 24 | 23 16 | 15 0 |
+   * bit no | 31 26 | 25 24 | 23 16 | 15 0 |
    */
-  // | reserved | softsku-id | package-id | foundry-id | msm-id |
-
+  // | reserved | package-id | foundry-id | msm-id |
   cur_dt_msm_id = (cur_dt_entry->platform_id & 0x0000ffff);
   cur_dt_hw_platform = (cur_dt_entry->variant_id & 0x000000ff);
   cur_dt_hw_subtype = (cur_dt_entry->board_hw_subtype & 0xff);
+  CurDtSkuId   = cur_dt_entry->SkuId;
 
   /* Bits 10:8 contain ddr information */
   cur_dt_hlos_ddr = (cur_dt_entry->board_hw_subtype & 0x700);
-  CurDtSkuId = (cur_dt_entry->platform_id & 0x3c000000);
 
   /* 1. must match the msm_id, platform_hw_id, platform_subtype and DDR size
    *  soc, board major/minor, pmic major/minor must less than board info
@@ -1702,8 +1717,8 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
   if ((cur_dt_msm_id == (BoardPlatformRawChipId () & 0x0000ffff)) &&
       (cur_dt_hw_platform == BoardPlatformType ()) &&
       (cur_dt_hw_subtype == BoardPlatformSubType ()) &&
-      (CurDtSkuId == (BoardSoftSkuId ())) &&
       (cur_dt_hlos_ddr == (BoardPlatformHlosSubType() & 0x700)) &&
+      (CurDtSkuId == (BoardSoftSkuId ())) &&
       (cur_dt_entry->soc_rev <= BoardPlatformChipVersion ()) &&
       ((cur_dt_entry->variant_id & 0x00ffff00) <=
        (BoardTargetId () & 0x00ffff00)) &&
@@ -1770,10 +1785,6 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
       current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
       board_info = BoardPlatformFoundryId () << 16;
       break;
-    case DTB_SOFTSKU:
-      current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x3c000000);
-      board_info = BoardSoftSkuId () << 26;
-      break;
     case DTB_DDR:
       current_info = ((dt_node_tmp1->dt_entry_m->board_hw_subtype) & 0x700);
       board_info = (BoardPlatformHlosSubType () & 0x700);
@@ -1818,9 +1829,6 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
     switch (dtb_info) {
     case DTB_FOUNDRY:
       current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
-      break;
-    case DTB_SOFTSKU:
-      current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x3c000000);
       break;
     case DTB_DDR:
       current_info = ((dt_node_tmp1->dt_entry_m->board_hw_subtype) & 0x700);
@@ -2011,12 +2019,6 @@ platform_dt_match_best (struct dt_entry_node *dt_list)
   * check, if couldn't find the exact match from DTB, will exact match 0x0.
   */
   platform_dt_absolute_compat_match (dt_list, DTB_FOUNDRY);
-
-  /* check SoftSku id
-  * the SoftSku id must exact match board SoftSku id, this is compatibility
-  * check, if couldn't find the exact match from DTB, will exact match 0x0.
-  */
-  platform_dt_absolute_compat_match (dt_list, DTB_SOFTSKU);
 
   /* check DDR type
   * the DDR type must exact match board DDR tpe, this is compatibility
