@@ -19,7 +19,6 @@
 #include <stdlib.h>
 
 #include <openssl/base.h>
-#include <openssl/sha.h>
 
 #include "../internal.h"
 
@@ -130,7 +129,7 @@ union chacha20_poly1305_seal_data {
   } out;
 };
 
-#if (defined(OPENSSL_X86_64) || defined(OPENSSL_AARCH64)) && \
+#if (defined(OPENSSL_X86_64) || defined(OPENSSL_AARCH64)) &&  \
     !defined(OPENSSL_NO_ASM)
 
 static_assert(sizeof(union chacha20_poly1305_open_data) == 48,

@@ -20,7 +20,6 @@
 #include <openssl/ec_key.h>
 #include <openssl/ecdsa.h>
 #include <openssl/err.h>
-#include <openssl/nid.h>
 
 #include "internal.h"
 

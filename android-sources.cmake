@@ -645,10 +645,8 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/hmac/hmac_tests.txt
   ${BORINGSSL_ROOT}src/crypto/hpke/hpke_test_vectors.txt
   ${BORINGSSL_ROOT}src/crypto/kyber/kyber_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_keygen_44_tests.txt
   ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_keygen_65_tests.txt
   ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_keygen_87_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_siggen_44_tests.txt
   ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_siggen_65_tests.txt
   ${BORINGSSL_ROOT}src/crypto/mldsa/mldsa_nist_siggen_87_tests.txt
   ${BORINGSSL_ROOT}src/crypto/mlkem/mlkem1024_decap_tests.txt
@@ -685,14 +683,6 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/unicode_password.p12
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/windows.p12
   ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa511.pem
-  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa511pub.pem
-  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa512.pem
-  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa512pub.pem
-  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa8192.pem
-  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa8192pub.pem
-  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa8193.pem
-  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa8193pub.pem
   ${BORINGSSL_ROOT}src/crypto/siphash/siphash_tests.txt
   ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa_keygen.txt
   ${BORINGSSL_ROOT}src/crypto/slhdsa/slhdsa_prehash.txt
@@ -823,8 +813,6 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/hmac_sha512_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/kw_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/kwp_test.txt
-  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_44_standard_sign_test.txt
-  ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_44_standard_verify_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_65_standard_sign_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_65_standard_verify_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/mldsa_87_standard_sign_test.txt

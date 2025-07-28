@@ -32,7 +32,6 @@
 #include <openssl/md5.h>
 #include <openssl/rand.h>  // TODO(bbe): only for RAND_bytes call below, replace with BCM call
 #include <openssl/rsa.h>
-#include <openssl/sha.h>
 
 #include "../../test/abi_test.h"
 #include "../../test/test_util.h"
@@ -75,7 +74,7 @@ class FIPSIndicatorHelper {
     }
   }
 
-  FIPSIndicatorHelper(const FIPSIndicatorHelper &) = delete;
+  FIPSIndicatorHelper(const FIPSIndicatorHelper&) = delete;
   FIPSIndicatorHelper &operator=(const FIPSIndicatorHelper &) = delete;
 
  private:

@@ -23,7 +23,7 @@
 #include <openssl/hmac.h>
 #include <openssl/mem.h>
 #include <openssl/rand.h>
-#include <openssl/sha2.h>
+#include <openssl/sha.h>
 
 #include "../internal.h"
 #include "internal.h"

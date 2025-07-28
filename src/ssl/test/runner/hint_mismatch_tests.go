@@ -186,10 +186,7 @@ func addHintMismatchTests() {
 		// The shim and handshaker may use different certificates. In TLS 1.3,
 		// the signature input includes the certificate, so we do not need to
 		// explicitly check for a public key match. In TLS 1.2, it does not.
-		ecdsaP256Certificate2 := rootCA.Issue(X509Info{
-			PrivateKey: &channelIDKey,
-			DNSNames:   []string{"test"},
-		}).ToCredential()
+		ecdsaP256Certificate2 := generateSingleCertChain(nil, &channelIDKey)
 		testCases = append(testCases, testCase{
 			name:               protocol.String() + "-HintMismatch-Certificate-TLS13",
 			testType:           serverTest,

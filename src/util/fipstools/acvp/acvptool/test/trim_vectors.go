@@ -22,10 +22,8 @@ package main
 
 import (
 	"bytes"
-	"cmp"
 	"encoding/json"
 	"os"
-	"slices"
 )
 
 func main() {
@@ -43,26 +41,22 @@ func main() {
 			testGroup := testGroupInterface.(map[string]any)
 			tests := testGroup["tests"].([]any)
 
-			// Take only the smallest test.
-			type testAndSize struct {
-				test any
-				size int
-			}
-			var testsAndSizes []testAndSize
-
+			var keptTests []any
 			for _, test := range tests {
 				var b bytes.Buffer
 				encoder := json.NewEncoder(&b)
 				if err := encoder.Encode(test); err != nil {
 					panic(err)
 				}
-				testsAndSizes = append(testsAndSizes, testAndSize{test, b.Len()})
+				if b.Len() <= 4096 {
+					keptTests = append(keptTests, test)
+				}
+				// We only keep the first test that meets the size criteria.
+				if len(keptTests) >= 1 {
+					break
+				}
 			}
-
-			slices.SortFunc(testsAndSizes, func(a, b testAndSize) int {
-				return cmp.Compare(a.size, b.size)
-			})
-			testGroup["tests"] = []any{testsAndSizes[0].test}
+			testGroup["tests"] = keptTests
 		}
 	}
 
