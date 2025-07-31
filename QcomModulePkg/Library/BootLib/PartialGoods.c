@@ -469,6 +469,10 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {BIT (EFICHIPINFO_PART_CAMERA),
     {"cam_icp1", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
+    {"icp0", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
+    {"icp1", "status", "no"}},
+    {BIT (EFICHIPINFO_PART_CAMERA),
     {"cam_ofe", "status", "no"}},
     {BIT (EFICHIPINFO_PART_CAMERA),
     {"cam_ope_cdm", "status", "no"}},
@@ -948,9 +952,10 @@ UpdatePartialGoodsNode (VOID *fdt)
     DEBUG ((EFI_D_INFO, "No mm partial goods found.\n"));
   }
 
+  DEBUG ((EFI_D_INFO, "PartialGoods for Multimedia: 0x%x\n",
+              PartialGoodsMMValue));
+
   if (PartialGoodsMMValue) {
-    DEBUG ((EFI_D_INFO, "PartialGoods for Multimedia: 0x%x\n",
-            PartialGoodsMMValue));
 
     FindNodeAndUpdateProperty (fdt, ARRAY_SIZE (PartialGoodsMmType),
                                &PartialGoodsMmType[0], PartialGoodsMMValue);
