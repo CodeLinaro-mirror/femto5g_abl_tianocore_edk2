@@ -1141,7 +1141,6 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   UINT32 EntrySizes[PVMFW_CONFIG_MAX_BLOBS] = {0};
   PvmFwConfigHeader PvmFwCgfHdr = {0};
   size_t  BccArtifactsValidSize = 0;
-  size_t PvmfwCfgSize = 0;
   UINT8 Ret;
   EFI_STATUS Status = EFI_SUCCESS;
 #ifdef PVMFW_CONFIG_EXT
@@ -1216,14 +1215,12 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   gBS->CopyMem ((CHAR8 *)PvmFwCfgLoadAddr,
                          &PvmFwCgfHdr,
                          sizeof (PvmFwCgfHdr));
-  PvmfwCfgSize += sizeof (PvmFwCgfHdr);
 
   /* Write BCC blob to end of pVM firmware config header */
   gBS->CopyMem ((CHAR8 *)(PvmFwCfgLoadAddr +
                          PvmFwCgfHdr.Entries[0].Offset),
                          FinalEncodedBccArtifacts,
                          EntrySizes[0]);
-  PvmfwCfgSize += EntrySizes[0];
 
   /* Write DP blob to pVM firmware config */
   if (PvmFwCgfHdr.Entries[1].Offset &&
@@ -1233,19 +1230,17 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
                            PvmFwCgfHdr.Entries[1].Offset),
                            (CHAR8 *)(BootParamlistPtr->AvfDpDtboBaseAddr),
                            fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr));
-    PvmfwCfgSize += fdt_totalsize (BootParamlistPtr->AvfDpDtboBaseAddr);
   }
 
 #ifdef PVMFW_CONFIG_EXT
   if (PvmFwCgfHdr.Entries[3].Offset) {
     gBS->CopyMem ((CHAR8 *)(PvmFwCfgLoadAddr + PvmFwCgfHdr.Entries[3].Offset),
                             VmRefDtb, fdt_totalsize (VmRefDtb));
-    PvmfwCfgSize += fdt_totalsize (VmRefDtb);
   }
 #endif
 
   Status = RmRegisterPvmFwRegion (Info, BootParamlistPtr,
-                                  PvmFwCfgStart, PvmfwCfgSize);
+                                  PvmFwCfgStart, PvmFwCgfHdr.TotalSize);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR,
         "Failed to register pvmfw region with RM: %r\n", Status));
