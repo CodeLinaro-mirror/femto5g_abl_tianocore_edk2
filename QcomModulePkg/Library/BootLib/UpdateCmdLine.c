@@ -957,6 +957,18 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
            Src = Param->SystemdSlotEnv;
            AsciiStrCatS (Dst, MaxCmdLineLen, Src);
       }
+#ifdef ENABLE_PARTIAL_AB_WITHOUT_RECOVERYINFO
+      else if (IsLEVariant ()) {
+                /* Recoveryinfo needs LE slot suffix */
+                INT32 StrLen = 0;
+                UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
+                              Param->SlotSuffixAscii);
+                StrLen = AsciiStrLen (SystemdSlotEnv);
+                SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
+                Src = Param->SystemdSlotEnv;
+                AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+       }
+#endif
   }
 
   if (IsRecoveryInfo () &&
@@ -1856,6 +1868,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (BootReasonCmdLine);
   }
 #endif
+
+  if (IsIpcLoggingEnabled ()) {
+    CmdLineLen += AsciiStrLen(EnableIpcLoggingCmdLine);
+  }
 
   Param.Recovery = Recovery;
   Param.MultiSlotBoot = MultiSlotBoot;
