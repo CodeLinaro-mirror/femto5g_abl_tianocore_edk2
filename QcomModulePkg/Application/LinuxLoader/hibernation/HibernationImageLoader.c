@@ -102,8 +102,8 @@ typedef struct FreeRanges {
 }FreeRanges;
 
 #if HIBERNATION_SUPPORT_AES
-#define NUM_CORES 2
-#define NUM_SILVER_CORES 1
+#define NUM_CORES 4
+#define NUM_SILVER_CORES 2
 #define NUM_PAGES_PER_GOLD_CORE 0
 #define NUM_PAGES_PER_SILVER_CORE 0
 
@@ -364,7 +364,7 @@ static INT32 FindNextAvailableBlock (struct KernelPfnIterator *Iter)
                 UINT64 CurPfn, NextPfn;
                 Iter->CurIndex++;
                 if (Iter->CurIndex >= Iter->MaxIndex) {
-                        BUG ("index maxed out. Line %d\n", __LINE__);
+                        //BUG ("index maxed out. Line %d\n", __LINE__);
                 }
                 CurPfn = Iter->PfnArray[Iter->CurIndex];
                 NextPfn = Iter->PfnArray[Iter->CurIndex + 1];
@@ -2031,6 +2031,9 @@ static INT32 RestoreSnapshotImage (VOID)
         UINT32 SMPage = 0; UINT64 DstPfn_z;
 #endif
         InitReadMultiThreadEnv ();
+	Ret = EnableAllCores();
+	if (Ret < 0)
+		return Ret;
         StartMs = GetTimerCountms ();
         Ret = ReadSwapInfoStruct ();
         if (Ret < 0) {
@@ -2511,12 +2514,12 @@ VOID BootIntoHibernationImage (BootInfo *Info,
          */
         *SetRotAndBootStateAndVBH = TRUE;
 
-        Status = KeyMasterFbeSetSeed ();
+       /* Status = KeyMasterFbeSetSeed ();
         if (Status != EFI_SUCCESS) {
                 printf ("Failed to set seed for fbe : %r\n", Status);
                 goto err;
         }
-
+	*/
         Ret = RestoreSnapshotImage ();
         if (Ret) {
                 printf ("Failed restore_snapshot_image \n");
