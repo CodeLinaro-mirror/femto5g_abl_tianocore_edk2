@@ -271,38 +271,6 @@ static INT32 CheckFreeRanges (UINT64 TargetAddr)
         return 0;
 }
 
-static INT32 EnableAllCores()
-{
-	INT32 Iter = 0;
-	UINT32 NumCpus;
-	UINT32 Status;
-
-	DEBUG ((EFI_D_INFO, "Getting count of Max CPUs\n"));
-	NumCpus = KernIntf->MpCpu->MpcoreGetMaxCpuCount();
-	DEBUG ((EFI_D_INFO, "Available Cores for hibernation: %d\n",NumCpus));
-
-	while (Iter < NumCpus) {
-		DEBUG ((EFI_D_INFO, "Getting Status of core: %d\n",Iter));
-		Status = KernIntf->MpCpu->MpcoreIsCpuActive(Iter);
-		DEBUG ((EFI_D_INFO, "Core: %d, Status: %d\n",Iter, Status));
-		if(!Status) {
-			DEBUG ((EFI_D_INFO, "Enabling Core: %d\n",Iter));
-			KernIntf->MpCpu->MpcoreInitDeferredCores(1 << Iter);
-			KernIntf->Thread->ThreadSleep(10);
-		}
-		Iter++;
-	}
-
-	Iter = 0;
-	while (Iter < NumCpus) {
-		Status = KernIntf->MpCpu->MpcoreIsCpuActive(Iter);
-		DEBUG ((EFI_D_INFO, "Core: %d, Status: %d\n",Iter, Status));
-		Iter++;
-	}
-
-	return 0;
-}
-
 static INT32 MemCmp (CONST VOID *S1, CONST VOID *S2, INT32 MemSize)
 {
         CONST UINT8 *Us1 = S1;
@@ -2039,9 +2007,6 @@ static INT32 RestoreSnapshotImage (VOID)
         UINT32 SMPage = 0; UINT64 DstPfn_z;
 #endif
         InitReadMultiThreadEnv ();
-	Ret = EnableAllCores();
-	if (Ret < 0)
-		return Ret;
         StartMs = GetTimerCountms ();
         Ret = ReadSwapInfoStruct ();
         if (Ret < 0) {
