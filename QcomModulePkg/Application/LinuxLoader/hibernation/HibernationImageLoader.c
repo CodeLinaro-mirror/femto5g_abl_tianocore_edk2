@@ -25,9 +25,9 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -80,7 +80,6 @@
 #include <Protocol/EFIQseecom.h>
 #endif
 #include "KeymasterClient.h"
-#include <Library/aes/SmciLowPowerKeyMgr.h>
 
 #define IS_ZERO_PFN(pfn) ((pfn) & ((UINT64) 1 << 63))
 #define IS_COMPRESS(flag) ((flag) & ( 1 << 4 ))
@@ -100,10 +99,10 @@ typedef struct FreeRanges {
 }FreeRanges;
 
 #if HIBERNATION_SUPPORT_AES
-#define NUM_CORES 4
-#define NUM_SILVER_CORES 2
-#define NUM_PAGES_PER_GOLD_CORE 0
-#define NUM_PAGES_PER_SILVER_CORE 0
+#define NUM_CORES 8
+#define NUM_SILVER_CORES 4
+#define NUM_PAGES_PER_GOLD_CORE ((NrCopyPages / 54) * 9)
+#define NUM_PAGES_PER_SILVER_CORE ((NrCopyPages / 54) * 4)
 
 static struct DecryptParam *Dp;
 static VOID *Authslot;
@@ -308,20 +307,6 @@ static INT32 MemCmp (CONST VOID *S1, CONST VOID *S2, INT32 MemSize)
         CONST UINT8 *Us1 = S1;
         CONST UINT8 *Us2 = S2;
 
-/*	CHAR8 *Buf1 = (CHAR8 *)S1;
-	CHAR8 *Buf2 = (CHAR8 *)S2;
-
-	printf("\nBuffer S1: \n");
-	for (UINTN i = 0; i < MemSize; ++i) {
-		printf("%02X ", Buf1[i]);
-	}
-
-	printf("\nBuffer S2: \n");
-	for (UINTN i = 0; i < MemSize; ++i) {
-		printf("%02X ", Buf2[i]);
-	}
-	printf("\n");
-*/
         if (MemSize == 0 ) {
                 return 0;
         }
@@ -707,7 +692,6 @@ static INT32 InitBlockArr (UINT8 **BlkArr)
                 ((NrCopyPages + NrMetaPages + 1) / CMP_UNC_PAGES) :
                 ((NrCopyPages + NrMetaPages + 1) / CMP_UNC_PAGES + 1);
 
-	//printf("Audi: BlkSlot:%d, BlkIndex:%ld\n",BlkSlot,BlkIndex);
         BlkBytes = (BlkIndex + 1) * sizeof (UINT8);
         BlkPages = BlkBytes % PAGE_SIZE == 0 ?
                 BlkBytes / PAGE_SIZE : BlkBytes / PAGE_SIZE + 1;
@@ -719,7 +703,6 @@ static INT32 InitBlockArr (UINT8 **BlkArr)
         if (ReadImage (BlkSlot, *BlkArr, BlkPages)) {
                 return -1;
         }
-	//printf("Audi: Exiting InitBlockArr..\n");
         return 0;
 }
 
@@ -1105,10 +1088,7 @@ static INT32 DecryptPage (VOID *EncryptData, CHAR8 *Auth, VOID *TempOut,
         ioVecOut.iov[0].dwLen = PAGE_SIZE;
         ioVecOut.iov[0].pvBase = TempOut;
 
-	//CHAR8 *Buf1 = (CHAR8 *)EncryptData;
-	//CHAR8 *Buf2 = (CHAR8 *)TempOut;
-
-	Ctx[ThreadId].InstanceId = ThreadId;
+        Ctx[ThreadId].InstanceId = ThreadId;
         Ret = SW_Cipher_Init (SW_CIPHER_ALG_AES256, &Ctx[ThreadId]);
         if (Ret) {
                 return -1;
@@ -1142,26 +1122,11 @@ static INT32 DecryptPage (VOID *EncryptData, CHAR8 *Auth, VOID *TempOut,
                 Dp->Authsize, &Ctx[ThreadId])) {
                 return -1;
         }
-/*
-	printf("Audi: Key: \n");
-	for (UINTN i = 0; i < 32; i++) {
-		printf("%u ", UnwrappedKey[i]);
-	}
-	printf("Audi: Data_Before: \n");
-	for (UINTN i = 0; i < Dp->Authsize; ++i) {
-		printf("%02X ", Buf1[i]);
-	}
 
-	printf("Audi: Data_After: \n");
-	for (UINTN i = 0; i < Dp->Authsize; ++i) {
-		printf("%02X ", Buf2[i]);
-	}
-
-	printf("Audi: Authsize:%d",Dp->Authsize);
-*/
-	if (MemCmp (AuthCurrent, Auth, Dp->Authsize)) {
-		return -1;
-	}
+        if (MemCmp (AuthCurrent, Auth, Dp->Authsize)) {
+                printf ("Auth Comparsion failed 0x%llx\n", Auth);
+                return -1;
+        }
 
         gBS->CopyMem ((VOID *)(EncryptData), (VOID *)(TempOut), PAGE_SIZE);
         SW_Cipher_DeInit (&Ctx[ThreadId]);
@@ -1702,110 +1667,12 @@ static UINT64 CopyPageTables ()
 }
 
 #if HIBERNATION_SUPPORT_AES
-#if HIBERNATION_TZ_ENCRYPTION
-static int SetupSmci(void)
-{
-	EFI_STATUS Status = EFI_SUCCESS;
-	Object ClientEnvObj = Object_NULL;
-	QCOM_SCM_PROTOCOL *pQcomScmProtocol = NULL;
-	INT32 Ret = 0;
-
-	Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL,
-					(VOID **)&pQcomScmProtocol);
-	if (Status != EFI_SUCCESS || (pQcomScmProtocol == NULL)) {
-		DEBUG ((EFI_D_ERROR,
-			"KeyMasterStartApp: Locate SCM Protocol failed, Status: (0x%x)\n",
-			Status));
-		Status = ERROR_SECURITY_STATE;
-    	return Status;
-	}
-
-  Status = pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
-  if (Object_isERROR (Status) ||
-      Object_isNull (ClientEnvObj)) {
-    DEBUG ((EFI_D_ERROR,
-            "KeyMasterStartApp: Failed to get Client Env, Status: (0x%x)\n",
-            Status));
-    goto out;
-  }
-
-  Status = IClientEnvOpen (ClientEnvObj, CAppClient_UID, &AppClientObj);
-  if (Object_isERROR (Status) ||
-      Object_isNull (AppClientObj)) {
-    DEBUG ((EFI_D_ERROR,
-            "KeyMasterStartApp: Failed to get App Client, Status: (0x%x)\n",
-            Status));
-    goto out;
-  }
-	Ret =  get_client_env_object(&client_env);
-	if (ret) {
-		pr_err("Failed to get client env object, ret = %d\n", ret);
-		return ret;
-	}
-
-	ret = smci_clientenv_open(client_env, CLOWPOWERKEYMANAGER_UID,
-				  &key_mgr_object);
-	if (ret)
-		pr_err("Failed to get Key Manager object, ret = %d\n", ret);
-
-	return ret;
-}
-
-static void cleanup(void)
-{
-	SMCI_OBJECT_ASSIGN_NULL(key_mgr_object);
-	SMCI_OBJECT_ASSIGN_NULL(client_env);
-}
-
-int key_mgr_get_key(uint32_t event, void *key, size_t key_len,
-		    size_t *key_len_out)
-{
-	int ret = SetupSmci();
-
-	if (ret)
-		goto exit;
-
-	ret = ILowPowerKeyManager_getKey(key_mgr_object, event, key,
-					 key_len, key_len_out);
-exit:
-	cleanup();
-	return ret;
-}
-
-int key_mgr_prepare(uint32_t event, const ILOWPOWERKEYMANAGER_key_info *key_info)
-{
-	int ret = setup();
-
-	if (ret)
-		goto exit;
-
-	ret = ILowPowerKeyManager_prepare(key_mgr_object, event, key_info);
-exit:
-	cleanup();
-	return ret;
-}
-
-static INT32 InitTzAndGetKey ()
-{
-	
-	SetMem (UnwrappedKey, AES256_KEY_SIZE, AUTHTAG);
-	gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
-	return 0;
-}
-#else
 static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
 {
-	INT32 Status = 0;
+        INT32 Status;
         CmdReq Req = {0};
         CmdRsp Rsp = {0};
         UINT32 ReqLen, RspLen;
-
-	
-	if (!Status) {
-		SetMem (UnwrappedKey, AES256_KEY_SIZE, AUTHTAG);
-		gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
-		return 0;
-	}
 
         Status = gBS->LocateProtocol (&gQcomQseecomProtocolGuid, NULL,
                 (VOID **)&(TaHandle->QseeComProtocol));
@@ -1829,6 +1696,8 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
         if (RspLen & QSEECOM_ALIGN_MASK) {
                 RspLen = QSEECOM_ALIGN (RspLen);
         }
+
+        gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
 
         Req.Cmd = UNWRAP_KEY_CMD;
         Req.UnwrapkeyReq.WrappedKeySize = WRAPPED_KEY_SIZE;
@@ -1855,7 +1724,6 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
 
         return 0;
 }
-#endif
 
 static INT32 InitAesDecrypt (VOID)
 {
@@ -1878,7 +1746,6 @@ static INT32 InitAesDecrypt (VOID)
                         return -1;
                 }
                 AuthslotStart = *(INT32 *) (Authslot);
-		//printf ("Audi: =%u\n", AuthslotStart);
         } else {
                 NrSwapMapPages = (NrCopyPages + NrMetaPages)
                                         /
@@ -1888,11 +1755,10 @@ static INT32 InitAesDecrypt (VOID)
         }
 
         if (ReadImage (AuthslotStart - 1, Dp, 1)) {
-		return -1;
+                return -1;
         }
 
         AuthslotCount = Dp->AuthCount;
-	//printf ("Audi: =%d\n", AuthslotCount);
         Authtags = AllocatePages (AuthslotCount);
         if (!Authtags) {
                 return -1;
@@ -1910,16 +1776,10 @@ static INT32 InitAesDecrypt (VOID)
                         return -1;
                 }
         }
-#if HIBERNATION_TZ_ENCRYPTION
-	if (InitTzAndGetKey()) {
-		return -1;
-	}
-#else
         if (InitTaAndGetKey (&TaHandle)) {
                 return -1;
         }
-#endif
-        printf ("\nHiber: Line=%d\n", __LINE__);
+
         printf ("Hibernation: AES init done\n");
         return 0;
 }

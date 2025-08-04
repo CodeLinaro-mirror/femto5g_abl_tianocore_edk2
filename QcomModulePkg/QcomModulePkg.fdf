@@ -28,9 +28,9 @@
 #*/
 
 #/*
-# * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+# * Changes from Qualcomm Innovation Center are provided under the following license:
 # *
-# * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
 # *
 # *  Redistribution and use in source and binary forms, with or without
 # *  modification, are permitted (subject to the limitations in the
@@ -85,12 +85,10 @@
 
 [FD.QcomModule_EFI]
 BaseAddress   = 0x80200000|gEmbeddedTokenSpaceGuid.PcdEmbeddedFdBaseAddress  #The base address of the FLASH Device.
-Size          = 0x0003A000|gEmbeddedTokenSpaceGuid.PcdEmbeddedFdSize         #The size in bytes of the FLASH Device
-#Size          = 0x00039200|gEmbeddedTokenSpaceGuid.PcdEmbeddedFdSize         #The size in bytes of the FLASH Device
+Size          = 0x00039000|gEmbeddedTokenSpaceGuid.PcdEmbeddedFdSize         #The size in bytes of the FLASH Device
 ErasePolarity = 1
 BlockSize     = 0x200
-NumBlocks     = 0x1D0
-#NumBlocks     = 0x1C9
+NumBlocks     = 0x1C8
 
 ################################################################################
 #
@@ -109,7 +107,7 @@ NumBlocks     = 0x1D0
 ################################################################################
 
 # 512 bytes of configuration header & 8 bytes of image header
-0x00000000|0x0003A000
+0x00000000|0x00039000
 gEmbeddedTokenSpaceGuid.PcdFlashFvMainBase|gEmbeddedTokenSpaceGuid.PcdFlashFvMainSize
 FV = FVMAIN_COMPACT
 
