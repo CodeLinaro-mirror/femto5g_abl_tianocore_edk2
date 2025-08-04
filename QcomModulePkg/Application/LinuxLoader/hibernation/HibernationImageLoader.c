@@ -25,9 +25,9 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -78,8 +78,11 @@
 #include <Library/aes/aes_public.h>
 #include <Library/lz4/lib/lz4.h>
 #include <Protocol/EFIQseecom.h>
-#endif
 #include "KeymasterClient.h"
+#include "SmciInvokeUtils.h"
+#include "SmciLowPowerKeyMgr.h"
+#include <Protocol/EFIScm.h>
+#endif
 
 #define IS_ZERO_PFN(pfn) ((pfn) & ((UINT64) 1 << 63))
 #define IS_COMPRESS(flag) ((flag) & ( 1 << 4 ))
@@ -115,6 +118,11 @@ static UINT8 UnwrappedKey[32];
 #define QSEECOM_ALIGN_MASK      (QSEECOM_ALIGN_SIZE - 1)
 #define QSEECOM_ALIGN(x)        \
         ((x + QSEECOM_ALIGN_MASK) & (~QSEECOM_ALIGN_MASK))
+
+#if HIBERNATION_TZ_ENCRYPTION
+Object ClientEnvObj = Object_NULL;
+Object AppClientObj = Object_NULL;
+#endif
 #else
 #define NUM_CORES 1
 #define NUM_SILVER_CORES 0
@@ -270,11 +278,57 @@ static INT32 CheckFreeRanges (UINT64 TargetAddr)
         return 0;
 }
 
+static INT32 EnableAllCores()
+{
+	INT32 Iter = 0;
+	UINT32 NumCpus;
+	UINT32 Status;
+
+	//DEBUG ((EFI_D_INFO, "Getting count of Max CPUs\n"));
+	NumCpus = KernIntf->MpCpu->MpcoreGetMaxCpuCount();
+	//DEBUG ((EFI_D_INFO, "Available Cores for hibernation: %d\n",NumCpus));
+
+	while (Iter < NumCpus) {
+		//DEBUG ((EFI_D_INFO, "Getting Status of core: %d\n",Iter));
+		Status = KernIntf->MpCpu->MpcoreIsCpuActive(Iter);
+		//DEBUG ((EFI_D_INFO, "Core: %d, Status: %d\n",Iter, Status));
+		if(!Status) {
+			//DEBUG ((EFI_D_INFO, "Enabling Core: %d\n",Iter));
+			KernIntf->MpCpu->MpcoreInitDeferredCores(1 << Iter);
+			KernIntf->Thread->ThreadSleep(10);
+		}
+		Iter++;
+	}
+
+	Iter = 0;
+	while (Iter < NumCpus) {
+		Status = KernIntf->MpCpu->MpcoreIsCpuActive(Iter);
+		//DEBUG ((EFI_D_INFO, "Core: %d, Status: %d\n",Iter, Status));
+		Iter++;
+	}
+
+	return 0;
+}
+
 static INT32 MemCmp (CONST VOID *S1, CONST VOID *S2, INT32 MemSize)
 {
         CONST UINT8 *Us1 = S1;
         CONST UINT8 *Us2 = S2;
 
+/*	CHAR8 *Buf1 = (CHAR8 *)S1;
+	CHAR8 *Buf2 = (CHAR8 *)S2;
+
+	printf("\nBuffer S1: \n");
+	for (UINTN i = 0; i < MemSize; ++i) {
+		printf("%02X ", Buf1[i]);
+	}
+
+	printf("\nBuffer S2: \n");
+	for (UINTN i = 0; i < MemSize; ++i) {
+		printf("%02X ", Buf2[i]);
+	}
+	printf("\n");
+*/
         if (MemSize == 0 ) {
                 return 0;
         }
@@ -1056,7 +1110,10 @@ static INT32 DecryptPage (VOID *EncryptData, CHAR8 *Auth, VOID *TempOut,
         ioVecOut.iov[0].dwLen = PAGE_SIZE;
         ioVecOut.iov[0].pvBase = TempOut;
 
-        Ctx[ThreadId].InstanceId = ThreadId;
+	//CHAR8 *Buf1 = (CHAR8 *)EncryptData;
+	//CHAR8 *Buf2 = (CHAR8 *)TempOut;
+
+	Ctx[ThreadId].InstanceId = ThreadId;
         Ret = SW_Cipher_Init (SW_CIPHER_ALG_AES256, &Ctx[ThreadId]);
         if (Ret) {
                 return -1;
@@ -1091,11 +1148,26 @@ static INT32 DecryptPage (VOID *EncryptData, CHAR8 *Auth, VOID *TempOut,
                 return -1;
         }
 
-        if (MemCmp (AuthCurrent, Auth, Dp->Authsize)) {
-                printf ("Auth Comparsion failed 0x%llx\n", Auth);
-                return -1;
-        }
+/*
+	printf("Audi: Key: \n");
+	for (UINTN i = 0; i < 32; i++) {
+		printf("%u ", UnwrappedKey[i]);
+	}
+	printf("Audi: Data_Before: \n");
+	for (UINTN i = 0; i < Dp->Authsize; ++i) {
+		printf("%02X ", Buf1[i]);
+	}
 
+	printf("Audi: Data_After: \n");
+	for (UINTN i = 0; i < Dp->Authsize; ++i) {
+		printf("%02X ", Buf2[i]);
+	}
+
+	printf("Audi: Authsize:%d",Dp->Authsize);
+*/
+	if (MemCmp (AuthCurrent, Auth, Dp->Authsize)) {
+		return -1;
+	}
         gBS->CopyMem ((VOID *)(EncryptData), (VOID *)(TempOut), PAGE_SIZE);
         SW_Cipher_DeInit (&Ctx[ThreadId]);
         return 0;
@@ -1635,12 +1707,96 @@ static UINT64 CopyPageTables ()
 }
 
 #if HIBERNATION_SUPPORT_AES
+#if HIBERNATION_TZ_ENCRYPTION
+static INT32 SetupSMCI(void)
+{
+	EFI_STATUS Status = EFI_SUCCESS;
+	QCOM_SCM_PROTOCOL *pQcomScmProtocol = NULL;
+	INT32 Ret = 0;
+
+	Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL,
+					(VOID **)&pQcomScmProtocol);
+	if (Status != EFI_SUCCESS || (pQcomScmProtocol == NULL)) {
+		DEBUG ((EFI_D_ERROR,
+			"HibernateKeyTzSMCI: Locate SCM Protocol failed, Status: (0x%x)\n",
+			Status));
+		Status = ERROR_SECURITY_STATE;
+    		return Status;
+	}
+
+	Status = pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
+	if (Object_isERROR (Status) || Object_isNull (ClientEnvObj)) {
+		DEBUG ((EFI_D_ERROR,
+			"HibernateKeyTzSMCI: Failed to get Client Env, Status: (0x%x)\n",
+			Status));
+	}
+
+	Status = IClientEnvOpen (ClientEnvObj, CLOWPOWERKEYMANAGER_UID, &AppClientObj);
+	if (Object_isERROR (Status) || Object_isNull (AppClientObj)) {
+		DEBUG ((EFI_D_ERROR,
+			"HibernateKeyTzSMCI: Failed to get App Client, Status: (0x%x)\n",
+			Status));
+	}
+
+	return Ret;
+}
+
+static VOID SMCICleanup(void)
+{
+	Object_ASSIGN_NULL(AppClientObj);
+	Object_ASSIGN_NULL(ClientEnvObj);
+}
+
+INT32 KeyMgrGetKey(uint32_t Event, VOID *Key, size_t KeyLen,
+		    size_t *KeyLenOut)
+{
+	INT32 Ret = SetupSMCI();
+
+	if (Ret)
+		goto exit;
+
+	Ret = ILowPowerKeyManagerGetKey (AppClientObj, Event, Key,
+			KeyLen, KeyLenOut);
+exit:
+	SMCICleanup();
+	return Ret;
+}
+
+static INT32 InitTzAndGetKey ()
+{
+	INT32 Ret;
+	size_t KeyLenOut;
+	//CHAR8 *Buf1 = (CHAR8 *)UnwrappedKey;
+	Ret = KeyMgrGetKey(ILOWPOWERKEYMANAGER_HIBERNATE_WITH_ENCRYPTION,
+			UnwrappedKey,
+			AES256_KEY_SIZE,
+			&KeyLenOut);
+
+	/*
+        printf("\nAudi Key: %d\n", Ret);
+        for (UINTN i = 0; i < AES256_KEY_SIZE; ++i) {
+                printf("%u \n", Buf1[i]);
+        }
+	*/
+	//SetMem (UnwrappedKey, AES256_KEY_SIZE, AUTHTAG);
+	gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
+	Ret = 0;
+	return Ret;
+}
+
+#else
 static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
 {
-        INT32 Status;
+	INT32 Status = 0;
         CmdReq Req = {0};
         CmdRsp Rsp = {0};
         UINT32 ReqLen, RspLen;
+
+	if (!Status) {
+		SetMem (UnwrappedKey, AES256_KEY_SIZE, AUTHTAG);
+		gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
+		return 0;
+	}
 
         Status = gBS->LocateProtocol (&gQcomQseecomProtocolGuid, NULL,
                 (VOID **)&(TaHandle->QseeComProtocol));
@@ -1664,8 +1820,6 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
         if (RspLen & QSEECOM_ALIGN_MASK) {
                 RspLen = QSEECOM_ALIGN (RspLen);
         }
-
-        gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
 
         Req.Cmd = UNWRAP_KEY_CMD;
         Req.UnwrapkeyReq.WrappedKeySize = WRAPPED_KEY_SIZE;
@@ -1693,10 +1847,13 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
         return 0;
 }
 
+#endif
 static INT32 InitAesDecrypt (VOID)
 {
         INT32 AuthslotCount;
+#if !HIBERNATION_TZ_ENCRYPTION
         Secs2dTaHandle TaHandle = {0};
+#endif
         UINT32 NrSwapMapPages, i;
         Authslot = AllocatePages (1);
 
@@ -1723,7 +1880,7 @@ static INT32 InitAesDecrypt (VOID)
         }
 
         if (ReadImage (AuthslotStart - 1, Dp, 1)) {
-                return -1;
+		return -1;
         }
 
         AuthslotCount = Dp->AuthCount;
@@ -1744,10 +1901,17 @@ static INT32 InitAesDecrypt (VOID)
                         return -1;
                 }
         }
+#if HIBERNATION_TZ_ENCRYPTION
+	if (InitTzAndGetKey()) {
+		return -1;
+	}
+#else
         if (InitTaAndGetKey (&TaHandle)) {
                 return -1;
         }
 
+#endif
+        //printf ("\nHiber: Line=%d\n", __LINE__);
         printf ("Hibernation: AES init done\n");
         return 0;
 }
