@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -201,15 +201,11 @@ EFI_STATUS
 
   @param[in]      This          Pointer to the RmVmProtocol instance.
   @param[in]      Auth          Auth Mechanism: 2 = Android pVm.
-  @param[in]      Flags         1 << 1 when QTVM also uses pVMFW.
   @param[in]      MemHandle     Handle to a memory parcel,
                                 which must have previously been donated to RM.
   @param[in]      FwOffset      Firmware image's offset into the
                                 specified memory parcel.
   @param[in]      FwSize        Size in bytes of the firmware image.
-  @param[in]      CfgOffset     Firmware image's config's offset into the
-                                specified memory parcel.
-  @param[in]      CfgSize       Firmware's config size in bytes.
 
 
   @return
@@ -220,12 +216,9 @@ EFI_STATUS
 (EFIAPI *EFI_RM_FW_SET_VM_FIRMWARE)(
    IN RmVmProtocol       *This,
    IN  UINT16                 Auth,
-   IN  UINT16                 Flags,
    IN  UINT32                 MemHandle,
    IN  UINT64                 FwOffset,
-   IN  UINT64                 FwSize,
-   IN  UINT64                 CfgOffset,
-   IN  UINT64                 CfgSize
+   IN  UINT64                 FwSize
    );
 
 
