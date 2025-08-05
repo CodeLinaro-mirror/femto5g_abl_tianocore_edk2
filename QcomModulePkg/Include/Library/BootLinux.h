@@ -141,7 +141,6 @@ typedef enum {
         IMG_VENDOR_BOOT,
         IMG_INIT_BOOT,
         IMG_PVMFW,
-        IMG_QTVM_DTBO,
         IMG_MAX
 } img_type;
 

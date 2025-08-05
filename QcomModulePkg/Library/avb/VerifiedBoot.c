@@ -54,7 +54,7 @@ extern UINT64 FlashlessBootImageAddr;
 
 STATIC BOOLEAN KeymasterEnabled = TRUE;
 
-#define MAX_NUM_REQ_PARTITION    9
+#define MAX_NUM_REQ_PARTITION    8
 #define MAX_PROPERTY_SIZE        10
 
 static CHAR8 *avb_verify_partition_name[] = {
@@ -64,8 +64,7 @@ static CHAR8 *avb_verify_partition_name[] = {
      "recovery",
      "vendor_boot",
      "init_boot",
-     "pvmfw",
-     "qtvm_dtbo"
+     "pvmfw"
 };
 
 STATIC struct verified_boot_verity_mode VbVm[] = {
@@ -1802,106 +1801,6 @@ out:
   }
   DEBUG ((EFI_D_INFO, "VB2: boot state: %a(%d)\n",
         VbSn[Info->BootState].name, Info->BootState));
-  return Status;
-}
-
-EFI_STATUS
-AuthQtvmDtboImg (BootInfo *Info)
-{
-  EFI_STATUS Status = EFI_SUCCESS;
-  BOOLEAN AllowVerificationError = IsUnlocked ();
-  UINTN NumRequestedPartition = 0;
-  CHAR8 PnameAscii[MAX_GPT_NAME_SIZE] = {0};
-  CHAR8 *RequestedPartitionAll[MAX_NUM_REQ_PARTITION + 1] = {NULL};
-  CHAR8 **RequestedPartition = NULL;
-  CHAR8 *SlotSuffix = NULL;
-  AvbSlotVerifyResult Result;
-  AvbOps *Ops = NULL;
-  AvbOpsUserData *UserData = NULL;
-  AvbSlotVerifyData *SlotData = NULL;
-  AvbHashtreeErrorMode VerityFlags =
-      AVB_HASHTREE_ERROR_MODE_MANAGED_RESTART_AND_EIO;
-  AvbSlotVerifyFlags VerifyFlags = AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION |
-      AllowVerificationError ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
-                             : AVB_SLOT_VERIFY_FLAGS_NONE;
-
-  UserData = avb_calloc (sizeof (AvbOpsUserData));
-  if (UserData == NULL) {
-    DEBUG ((EFI_D_ERROR, "ERROR: Failed to allocate AvbOpsUserData\n"));
-    Status = EFI_OUT_OF_RESOURCES;
-    goto out;
-  }
-
-  Ops = AvbOpsNew (UserData);
-  if (Ops == NULL) {
-    DEBUG ((EFI_D_ERROR, "ERROR: Failed to allocate AvbOps\n"));
-    Status = EFI_OUT_OF_RESOURCES;
-    goto out;
-  }
-
-  RequestedPartition = RequestedPartitionAll;
-
-  UserData->IsMultiSlot = Info->MultiSlotBoot;
-
-  if (Info->MultiSlotBoot) {
-    UnicodeStrToAsciiStr (Info->Pname, PnameAscii);
-    if ((MAX_SLOT_SUFFIX_SZ + 1) > AsciiStrLen (PnameAscii)) {
-      DEBUG ((EFI_D_ERROR, "ERROR: Can not determine slot suffix\n"));
-      Status = EFI_INVALID_PARAMETER;
-      goto out;
-    }
-    SlotSuffix = &PnameAscii[AsciiStrLen (PnameAscii) - MAX_SLOT_SUFFIX_SZ + 1];
-  } else {
-    SlotSuffix = "\0";
-  }
-
-  AddRequestedPartition (RequestedPartitionAll, IMG_QTVM_DTBO);
-  NumRequestedPartition += 1;
-
-  Result = avb_slot_verify (Ops, (CONST CHAR8 *CONST *)RequestedPartition,
-                            SlotSuffix, VerifyFlags, VerityFlags, &SlotData);
-
-  DEBUG ((EFI_D_INFO, "AvbSlotVerify returned %a\n",
-                      avb_slot_verify_result_to_string (Result)));
-
-  if (AllowVerificationError && ResultShouldContinue (Result)) {
-    DEBUG ((EFI_D_VERBOSE, "State: Unlocked, AvbSlotVerify returned "
-                         "%a, continue boot\n",
-            avb_slot_verify_result_to_string (Result)));
-  } else if (Result != AVB_SLOT_VERIFY_RESULT_OK) {
-    DEBUG ((EFI_D_ERROR, "ERROR: Device State %a,AvbSlotVerify returned %a\n",
-           AllowVerificationError ? "Unlocked" : "Locked",
-           avb_slot_verify_result_to_string (Result)));
-    Status = EFI_LOAD_ERROR;
-    Info->BootState = RED;
-    goto out;
-  }
-
-  if (SlotData == NULL) {
-    Status = EFI_LOAD_ERROR;
-    Info->BootState = RED;
-    goto out;
-  }
-
-  for (UINTN ReqIndex = 0; ReqIndex < NumRequestedPartition; ReqIndex++) {
-    DEBUG ((EFI_D_INFO, "Requested Partition: %a\n",
-            RequestedPartition[ReqIndex]));
-  }
-
-out:
-  if (Status != EFI_SUCCESS) {
-    if (SlotData != NULL) {
-      avb_slot_verify_data_free (SlotData);
-    }
-    if (Ops != NULL) {
-      AvbOpsFree (Ops);
-    }
-  }
-
-  if (UserData) {
-    avb_free (UserData);
-  }
-
   return Status;
 }
 
