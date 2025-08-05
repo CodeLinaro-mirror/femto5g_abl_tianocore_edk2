@@ -30,9 +30,9 @@
  */
 
 /*
- * Changes from Qualcomm Innovation Center, Inc. are provided under the
+ * Changes from Qualcomm Technologies, Inc. are provided under the
  * following license:
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -983,7 +983,8 @@ RmRegisterPvmFwRegion (BootInfo *Info, BootParamlist *BootParamlistPtr,
   UINT64 Flag = 1; // FW_SET_VM_FIRMWARE_FLAG_CONFIG_RANGE
 
   PvmFwLoadAddr = BootParamlistPtr->PvmFwLoadAddr;
-  PvmFwSize = BootParamlistPtr->PvmFwSize;
+  PvmFwSize = LOCAL_ROUND_TO_PAGE (PvmFwCfgStart - PvmFwLoadAddr + PvmfwCfgSize,
+                                   ALIGNMENT_MASK_4KB);
 
   if (PvmFwCfgStart <= PvmFwLoadAddr) {
     DEBUG ((EFI_D_ERROR, "PvmFwLoadAddr 0x%lx > PvmFwCfgStart 0x%lx",
