@@ -51,40 +51,15 @@
  */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following
- * license:
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted (subject to the limitations in the disclaimer
- * below) provided that the following conditions are met:
- *  * Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided ?with the distribution.
- *  * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *     contributors may be used to endorse or promote products derived from this
- *     software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED
- * BY THIS LICENSE.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
- * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. 
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "Board.h"
 #include "BootLinux.h"
 #include "LinuxLoaderLib.h"
+#include "AllowedVbmetaSysPublicKeys.h"
 #include "OEMPublicKey.h"
 #include "PartitionTableUpdate.h"
 #include "avb_sysdeps.h"
@@ -399,6 +374,7 @@ AvbValidateVbmetaPublicKey(AvbOps *Ops, const uint8_t *PublicKeyData,
 
 	UserData = (AvbOpsUserData *)Ops->user_data;
 	UserData->IsUserKey = FALSE;
+	*OutIsTrusted = false;
 
 	if (PublicKeyLength == UserKeyLength &&
 	    CompareMem(PublicKeyData, UserKeyBuffer, PublicKeyLength) == 0) {
@@ -408,9 +384,32 @@ AvbValidateVbmetaPublicKey(AvbOps *Ops, const uint8_t *PublicKeyData,
 	           CompareMem(PublicKeyData, OEMPublicKey, PublicKeyLength) == 0) {
 		*OutIsTrusted = true;
 	} else {
-		*OutIsTrusted = false;
-		SetMem(UserData->PublicKey, ARRAY_SIZE(UserData->PublicKey), 0);
-		UserData->PublicKeyLen = 0;
+#ifdef PVMFW_REVERIFY
+	    /*
+	     * Iterate through a list of allowed public keys required for pvmfw
+	     * reverification. This is for vbmeta_system and not the main vbmeta.
+	     * Even though this logic runs when verifying the main vbmeta,
+	     * it is okay as it is only when the device is unlocked.
+	     */
+	    if (IsUnlocked ()) {
+	        UINTN Index = 0;
+	        for (Index = 0; Index < AllowedVbmetaSysPubKeyCount; Index++) {
+	            if (PublicKeyLength == AllowedVbmetaSysPubKeysLen[Index] &&
+	                CompareMem (PublicKeyData, AllowedVbmetaSysPubKeys[Index],
+	                        PublicKeyLength) == 0) {
+		            *OutIsTrusted = true;
+	                if (Index > 0) {
+	                    UserData->IsGsiKey = TRUE;
+	                }
+	            }
+	        }
+	    }
+#endif
+	    if (*OutIsTrusted == false) {
+	        DEBUG ((EFI_D_INFO, "No public key matches\n"));
+	        SetMem (UserData->PublicKey, ARRAY_SIZE(UserData->PublicKey), 0);
+	        UserData->PublicKeyLen = 0;
+	    }
 	}
 
 	if (*OutIsTrusted == true) {

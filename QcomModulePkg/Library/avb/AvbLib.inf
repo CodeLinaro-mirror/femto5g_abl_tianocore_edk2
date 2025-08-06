@@ -28,10 +28,10 @@
 #*/
 
 #/*
-# * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-# * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+# * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+# * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # * SPDX-License-Identifier: BSD-3-Clause-Clear
-#*/
+# */
 
 [Defines]
 	INF_VERSION                    = 0x00010005
@@ -49,6 +49,7 @@
   GCC:*_*_*_CC_FLAGS = $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT)
   GCC:*_*_*_CC_FLAGS = $(PVMFW_BCC_ENABLED)
   GCC:*_*_*_CC_FLAGS = $(PVMFW_USE_DUMMY_BCC)
+  GCC:*_*_*_CC_FLAGS = $(PVMFW_REVERIFY)
 
 [Sources]
    libavb/avb_chain_partition_descriptor.c
