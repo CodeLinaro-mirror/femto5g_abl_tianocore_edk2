@@ -153,4 +153,8 @@ EFI_STATUS
 GetCertFingerPrint (UINT8 *FingerPrint,
                     UINTN FingerPrintLen,
                     UINTN *FingerPrintLenOut);
+
+EFI_STATUS
+AuthQtvmDtboImg (BootInfo *Info);
+
 #endif /* __VERIFIEDBOOT_H__ */
