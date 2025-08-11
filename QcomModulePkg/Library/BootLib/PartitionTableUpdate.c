@@ -2112,6 +2112,13 @@ LoadAndValidateQtvmDtboImg (BootInfo *Info, BootParamlist *BootParamlistPtr)
   EFI_STATUS Status = EFI_SUCCESS;
   struct DtboTableHdr *DtboTableHdr = NULL;
 
+  /* Validate qtvm dtbo partition signature*/
+  Status = AuthQtvmDtboImg (Info);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "AuthQtvmDtboImg failed, Status=0x%x\n", Status));
+    return FALSE;
+  }
+
   /* Load qtvm dtbo partition */
   Status = GetQtvmDtboImg (Info, &BootParamlistPtr->QtvmDtboImgBuffer,
                           &QtvmDtboPartitionSize);
