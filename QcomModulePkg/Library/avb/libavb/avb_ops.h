@@ -50,6 +50,12 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+/*
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 #if !defined(AVB_INSIDE_LIBAVB_H) && !defined(AVB_COMPILATION)
 #error "Never include this file directly, include libavb.h instead."
 #endif
@@ -367,6 +373,7 @@ typedef struct {
     BOOLEAN IsMultiSlot;
     UINTN   PublicKeyLen;
     CHAR8   PublicKey[MAX_USER_KEY_SIZE];
+    BOOLEAN IsGsiKey;
 } AvbOpsUserData;
 
 AvbOps *AvbOpsNew(VOID *UserData);
