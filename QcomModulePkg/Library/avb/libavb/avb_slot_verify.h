@@ -22,6 +22,12 @@
  * SOFTWARE.
  */
 
+/*
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 #if !defined(AVB_INSIDE_LIBAVB_H) && !defined(AVB_COMPILATION)
 #error "Never include this file directly, include libavb.h instead."
 #endif
@@ -403,6 +409,22 @@ AvbSlotVerifyResult avb_slot_verify(AvbOps* ops,
                                     AvbHashtreeErrorMode hashtree_error_mode,
                                     AvbSlotVerifyData** out_data);
 
+#ifdef PVMFW_REVERIFY
+/* Refer to avb_slot_verify for api documentation.
+ * This api is a copy of the libavb provided avb_slot_verify.
+ * The difference is this api uses vbmeta_system as the hardcoded vbmeta image.
+ * The original api was not modified to accomodate this as the goal was to not
+ * change existing libavb API in any meaningful way.
+ * The implementation also comments out unnecessary commandline append logic as
+ * it is not required for pvmfw reverification.
+ */
+AvbSlotVerifyResult avb_slot_pvmfw_reverify(AvbOps* ops,
+                                            const char* const* requested_partitions,
+                                            const char* ab_suffix,
+                                            AvbSlotVerifyFlags flags,
+                                            AvbHashtreeErrorMode hashtree_error_mode,
+                                            AvbSlotVerifyData** out_data);
+#endif // PVMFW_REVERIFY
 #ifdef __cplusplus
 }
 #endif
