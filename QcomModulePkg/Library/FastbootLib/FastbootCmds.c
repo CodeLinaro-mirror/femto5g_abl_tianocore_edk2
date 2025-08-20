@@ -1497,6 +1497,48 @@ HandleUbiVolFlash (
 
   return Status;
 }
+
+/* UBI Volume Erase */
+STATIC
+EFI_STATUS
+HandleUbiVolErase (
+  IN CHAR16  *VolumeName, IN UINT32 VolumeMaxSize)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 UbiPageSize;
+  UINT32 UbiBlockSize;
+  EFI_UBI_FLASHER_PROTOCOL *Ubi;
+  UBI_FLASHER_HANDLE UbiFlasherHandle;
+  CHAR8 VolumeNameAscii[MAX_GPT_NAME_SIZE] = {'\0'};
+
+  Status = gBS->LocateProtocol (&gEfiUbiFlasherProtocolGuid,
+                                NULL,
+                                (VOID **) &Ubi);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "UBI Volume erasing not supported\n"));
+    return Status;
+  }
+
+  UnicodeStrToAsciiStr (VolumeName, VolumeNameAscii);
+  Status = Ubi->UbiFlasherOpen (VolumeNameAscii,
+                                &UbiFlasherHandle,
+                                &UbiPageSize,
+                                &UbiBlockSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to open and erase UBI volume\n"));
+    return Status;
+  }
+
+  /* ubi volume erasing is taken care by UbiFlasherOpen itself */
+
+  Status = Ubi->UbiFlasherClose (UbiFlasherHandle);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to close UBI volume\n"));
+    return Status;
+  }
+
+  return Status;
+}
 #endif
 
 /* Raw Image flashing */
@@ -2478,6 +2520,15 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   }
   AsciiStrToUnicodeStr (arg, PartitionName);
 
+#ifdef NAND_UBI_VOLUME_FLASHING_ENABLED
+  CHAR16 OrigPartitionName[MAX_GPT_NAME_SIZE];
+
+  /* The MultiSlot logic may not be applicable for all volumes, thus we need
+   * to retain the original partition name for volume erasing.
+  */
+  StrnCpyS (OrigPartitionName, ARRAY_SIZE (PartitionName),
+                PartitionName, ARRAY_SIZE (PartitionName));
+#endif
 
   if ((GetAVBVersion () == AVB_LE) ||
       ((GetAVBVersion () != AVB_LE) &&
@@ -2547,7 +2598,15 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   // Build output string
   UnicodeSPrint (OutputString, sizeof (OutputString),
                  L"Erasing partition %s\r\n", PartitionName);
+
   Status = FastbootErasePartition (PartitionName);
+#ifdef NAND_UBI_VOLUME_FLASHING_ENABLED
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "[%s] Partition Not Found - trying volume\n",
+            PartitionName));
+    Status = HandleUbiVolErase (OrigPartitionName, MAX_GPT_NAME_SIZE);
+  }
+#endif
   if (EFI_ERROR (Status)) {
     FastbootFail ("Check device console.");
     DEBUG ((EFI_D_ERROR, "Couldn't erase image:  %r\n", Status));
