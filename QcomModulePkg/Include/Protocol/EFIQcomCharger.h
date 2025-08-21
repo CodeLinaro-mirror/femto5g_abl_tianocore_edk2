@@ -1,6 +1,7 @@
-/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
- */
+/*=============================================================================
+  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+  SPDX-License-Identifier: BSD-3-Clause-Clear
+=============================================================================*/
 
 #ifndef __EFIQCOMCHARGER_H__
 #define __EFIQCOMCHARGER_H__
@@ -8,7 +9,7 @@
 /*===========================================================================
 INCLUDE FILES
 ===========================================================================*/
-//#include "EFIULog.h"
+#include "EFIULog.h"
 /*===========================================================================
 MACRO DECLARATIONS
 ===========================================================================*/
@@ -116,8 +117,7 @@ typedef enum {
   /**< Battery is not detected. */
 
   EFI_QCOM_CHARGER_ERROR_VBATT_OUTSIDE_RANGE,
-  /**< Charging logic detected the voltage to be out of
-    the operational range. */
+  /**< Charging logic detected the voltage to be out of the operational range. */
 
   EFI_QCOM_CHARGER_ERROR_CHARGING_TIMEOUT,
   /**< Charging logic detected that the battery is not being charged within
@@ -229,14 +229,14 @@ typedef struct
 }EFI_QCOM_CHARGER_ACTION_INFO;
 
 
-//typedef struct
-//{
+typedef struct
+{
   /*Charger Log File Handled */
-  /*ULogHandle gChargerLogHandle;
+  ULogHandle gChargerLogHandle;
   BOOLEAN    bPrintChargerAppDbgMsg;
   BOOLEAN    bPrintChargerAppDbgMsgToFile;
   UINT32     fileLogLevelMask;
-}EFI_QCOM_CHARGER_LOG_INFO;*/
+}EFI_QCOM_CHARGER_LOG_INFO;
 
 
 typedef struct
@@ -270,7 +270,7 @@ typedef struct
 *                          process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_ENABLE_CHARGING) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_ENABLE_CHARGING)(
   IN BOOLEAN Enable
 );
 
@@ -289,7 +289,7 @@ EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_ENABLE_CHARGING) (
 *                          process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_MAX_USB_CURRENT) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_MAX_USB_CURRENT)(
   OUT UINT32 *pMaxCurrent
 );
 
@@ -308,7 +308,7 @@ EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_MAX_USB_CURRENT) (
 *                          process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_SET_MAX_USB_CURRENT) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_SET_MAX_USB_CURRENT)(
   IN UINT32 MaxCurrent
 );
 
@@ -332,7 +332,7 @@ EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_SET_MAX_USB_CURRENT) (
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_CHARGING_ACTION) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_CHARGING_ACTION)(
   OUT EFI_QCOM_CHARGER_ACTION_TYPE  *pChargingAction,
   OUT EFI_QCOM_CHARGER_ACTION_INFO  *pChargerActionInfo,
   IN  BOOLEAN                       vbattChecking
@@ -356,7 +356,7 @@ EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_CHARGING_ACTION) (
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_TAKE_ACTION) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_TAKE_ACTION)(
   IN EFI_QCOM_CHARGER_ACTION_TYPE ChargingAction,
   IN CONST EFI_QCOM_CHARGER_ACTION_INFO *pChargerActionInfo
 );
@@ -377,7 +377,7 @@ EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_TAKE_ACTION) (
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_DISPLAY_IMAGE) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_DISPLAY_IMAGE)(
   IN EFI_QCOM_CHARGER_DISP_IMAGE_TYPE ImageType,
   IN BOOLEAN ClearScreen
 );
@@ -396,7 +396,7 @@ Clean up Qcom charger dxe on charging exit or critical error
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_DEINIT) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_DEINIT)(
   IN EFI_QCOM_CHARGER_ACTION_TYPE ChargingAction
 );
 
@@ -417,7 +417,7 @@ EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_DEINIT) (
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_PRESENCE) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_PRESENCE)(
   OUT BOOLEAN *pBatteryPresence
 );
 
@@ -437,7 +437,7 @@ EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_PRESENCE) (
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_VOLTAGE) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_VOLTAGE)(
   OUT UINT32 *pBatteryVoltage
 );
 
@@ -455,10 +455,10 @@ EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_VOLTAGE) (
   EFI_NOT_READY         -- Physical device is busy or not ready to
                            process this request.
 */
-/*typedef
+typedef
 EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_LOG_INFO)(
   OUT EFI_QCOM_CHARGER_LOG_INFO *pFileLogInfo
-);*/
+);
 
 /* EFI_QCOM_CHARGER_GET_FILE_LOG_INFO */
 /** @ingroup efi_getFileLogInfo
@@ -475,7 +475,7 @@ EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_LOG_INFO)(
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_DUMP_PERIPHERAL) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_DUMP_PERIPHERAL)(
 );
 
 /* EFI_QCOM_CHARGER_IS_DCIN_VALID */
@@ -493,7 +493,7 @@ EFI_NOT_READY         -- Physical device is busy or not ready to
 process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_IS_DCIN_VALID) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_IS_DCIN_VALID)(
 OUT BOOLEAN* pIsValid
 );
 
@@ -540,7 +540,7 @@ EFI_NOT_READY         -- Physical device is busy or not ready to
 process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_CHARGER_CONFIG) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_CHARGER_CONFIG)(
 IN EFI_QCOM_CHARGER_CONFIG_KEY  ChargerCfgKey,
 OUT  UINT32 *KeyValue
 );
@@ -560,7 +560,7 @@ EFI_NOT_READY         -- Physical device is busy or not ready to
 process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_IS_CHARGING_SUPPORTED) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_IS_CHARGING_SUPPORTED)(
 OUT BOOLEAN* pIsChargingSupported
 );
 
@@ -580,7 +580,7 @@ OUT BOOLEAN* pIsChargingSupported
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_DISPLAY_IMAGE_TYPE) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_DISPLAY_IMAGE_TYPE)(
   OUT  EFI_QCOM_CHARGER_DISP_IMAGE_TYPE *pDispImage
 );
 
@@ -599,7 +599,7 @@ EFI_NOT_READY         -- Physical device is busy or not ready to
 process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_PON_REASON) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_PON_REASON)(
 OUT EFI_QCOM_CHARGER_PWRON_REASON_TYPE *pPwrOnReason
 );
 
@@ -627,7 +627,7 @@ EFI_NOT_READY         -- Physical device is busy or not ready to
 process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_CONTROL_GET_ACTION) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_CONTROL_GET_ACTION)(
 OUT EFI_CHARGER_CONTROL_ACTION_TYPE *pControlAction
 );
 
@@ -646,7 +646,7 @@ EFI_NOT_READY         -- Physical device is busy or not ready to
 process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_CONTROL_SET_ACTION) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_CONTROL_SET_ACTION)(
 IN EFI_CHARGER_CONTROL_ACTION_TYPE controlAction
 );
 
@@ -666,7 +666,7 @@ process this request.
 */
 
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_TYPE) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_TYPE)(
 OUT UINT32  *pBatteryType
 );
 
@@ -686,7 +686,7 @@ process this request.
 */
 
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_SOC) (
+EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BATTERY_SOC)(
 OUT UINT32 *pBatterySOC
 );
 
@@ -707,7 +707,7 @@ EFI_NOT_READY         -- Physical device is busy or not ready to
 process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BARREL_CHARGER_STATUS) (
+EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_BARREL_CHARGER_STATUS)(
   OUT BOOLEAN* pConnected,
   OUT UINT16*  pCharger_max_voltage_mv,
   OUT UINT16*  pCharger_max_current_ma
@@ -726,7 +726,7 @@ Closes chargerPD logging timer event, if enabled
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_LOGGING_TIMER_EXIT) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_LOGGING_TIMER_EXIT)(
   IN EFI_QCOM_CHARGER_ACTION_TYPE ChargingAction
 );
 
@@ -743,7 +743,7 @@ Closes chargerPD logging timer event, if enabled
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_IS_OFFMODE) (
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_IS_OFFMODE)(
   OUT BOOLEAN* lpm_offmode,
   OUT BOOLEAN* offmode
 );
@@ -761,8 +761,8 @@ Returns status
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_MAX_NEGO_PWR) (
-  UINT8* pConfig, 
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_MAX_NEGO_PWR)(
+  UINT8* pConfig,
   UINT8* pNegotiatedPwr
 );
 
@@ -779,8 +779,8 @@ Returns status
                            process this request.
 */
 typedef
-EFI_STATUS (EFIAPI *EFI_QCOM_CHARGER_GET_ACTIVE_CHARGER_INFO) (
-  UINT32* CurrentChargerPowerUW, 
+EFI_STATUS(EFIAPI *EFI_QCOM_CHARGER_GET_ACTIVE_CHARGER_INFO)(
+  UINT32* CurrentChargerPowerUW,
   UINT32* GoodChargerThresholdUW,
   UINT8* ChargerIndex,
   BOOLEAN* ActiveChargerPresent,
@@ -810,7 +810,7 @@ struct _EFI_QCOM_CHARGER_PROTOCOL
   EFI_QCOM_CHARGER_GET_BATTERY_PRESENCE  GetBatteryPresence;
   EFI_QCOM_CHARGER_GET_BATTERY_VOLTAGE   GetBatteryVoltage;
   EFI_QCOM_CHARGER_DEINIT                ChargerDeInit;
-  //EFI_QCOM_CHARGER_GET_LOG_INFO          GetLogInfo;
+  EFI_QCOM_CHARGER_GET_LOG_INFO          GetLogInfo;
   EFI_QCOM_CHARGER_DUMP_PERIPHERAL       DumpPeripheral;
   EFI_QCOM_CHARGER_IS_DCIN_VALID         IsDcInValid;
   EFI_QCOM_CHARGER_GET_CHARGER_CONFIG    GetChargerConfig;
@@ -824,8 +824,7 @@ struct _EFI_QCOM_CHARGER_PROTOCOL
   EFI_QCOM_CHARGER_GET_BARREL_CHARGER_STATUS GetBarrelChargerStatus;
   EFI_QCOM_CHARGER_LOGGING_TIMER_EXIT    ChargerPDLogTimerExit;
   EFI_QCOM_CHARGER_IS_OFFMODE            IsOffmode;
-  //added in QCOM_CHARGER_REVISION_13
-  EFI_QCOM_CHARGER_GET_MAX_NEGO_PWR      GetMaxNegotiatedPwr;
+  EFI_QCOM_CHARGER_GET_MAX_NEGO_PWR      GetMaxNegotiatedPwr;//added in QCOM_CHARGER_REVISION_13
   EFI_QCOM_CHARGER_GET_ACTIVE_CHARGER_INFO GetActiveChargerInfo;
 };
 

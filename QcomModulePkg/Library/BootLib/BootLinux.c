@@ -970,7 +970,8 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr)
 
 #ifdef PVMFW_BCC
 STATIC EFI_STATUS
-RmRegisterPvmFwRegion (BootInfo *Info, BootParamlist *BootParamlistPtr)
+RmRegisterPvmFwRegion (BootInfo *Info, BootParamlist *BootParamlistPtr,
+  UINT64 PvmFwCfgStart, size_t PvmfwCfgSize)
 {
   RmVmProtocol *RmVmProtocol = NULL;
   RmMemAcl *PvmFwAclDesc = NULL;
@@ -979,9 +980,16 @@ RmRegisterPvmFwRegion (BootInfo *Info, BootParamlist *BootParamlistPtr)
   UINT64 PvmFwLoadAddr;
   UINT32 PvmFwSize;
   EFI_STATUS  Status;
+  UINT64 Flag = 1; // FW_SET_VM_FIRMWARE_FLAG_CONFIG_RANGE
 
   PvmFwLoadAddr = BootParamlistPtr->PvmFwLoadAddr;
   PvmFwSize = BootParamlistPtr->PvmFwSize;
+
+  if (PvmFwCfgStart <= PvmFwLoadAddr) {
+    DEBUG ((EFI_D_ERROR, "PvmFwLoadAddr 0x%lx > PvmFwCfgStart 0x%lx",
+          PvmFwLoadAddr, PvmFwCfgStart));
+    return EFI_INVALID_PARAMETER;
+  }
 
   Status = gBS->LocateProtocol (&gEfiRmVmProtocolGuid,
                                 NULL,
@@ -1030,14 +1038,38 @@ RmRegisterPvmFwRegion (BootInfo *Info, BootParamlist *BootParamlistPtr)
 
   Status = RmVmProtocol->FwSetVmFirmware (RmVmProtocol,
                                     RM_VM_AUTH_ANDROID_PVM,
+                                    /* flag */
+                                    1 << Flag,
                                     PvmFwMemHandle,
+                                    /* Image offset */
                                     0,
-                                    PvmFwSize);
+                                    /* Image Size */
+                                    Info->PvmFwRawSize,
+                                    /* Cfg Offset */
+                                    PvmFwCfgStart - PvmFwLoadAddr,
+                                    /* Cfg size */
+                                    PvmfwCfgSize
+                                    );
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "SetVmFirmware failed Status: %r\n", Status));
     return Status;
   }
 
+  return EFI_SUCCESS;
+}
+
+STATIC EFI_STATUS
+SetFWMilestone (VOID) {
+  RmVmProtocol *RmVmProtocol = NULL;
+  EFI_STATUS  Status;
+
+  Status = gBS->LocateProtocol (&gEfiRmVmProtocolGuid,
+                                NULL,
+                                (VOID**)&RmVmProtocol);
+  if (Status != EFI_SUCCESS)  {
+    DEBUG ((EFI_D_ERROR, "RmVmProtocol not found: %r\n", Status));
+    return Status;
+  }
   Status = RmVmProtocol->SetFwMilestone (RmVmProtocol);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "SetFwMilestone failed Status: %r\n", Status));
@@ -1105,6 +1137,7 @@ STATIC EFI_STATUS
 AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   UINT8 *FinalEncodedBccArtifacts = NULL;
   UINT8 *PvmFwCfgLoadAddr = NULL;
+  UINT64 PvmFwCfgStart = 0;
   UINT32 EntrySizes[PVMFW_CONFIG_MAX_BLOBS] = {0};
   PvmFwConfigHeader PvmFwCgfHdr = {0};
   size_t  BccArtifactsValidSize = 0;
@@ -1164,8 +1197,9 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
 #endif
 
   CreatePvmFwConfig (&PvmFwCgfHdr, EntrySizes, PVMFW_CONFIG_MAX_BLOBS);
-  PvmFwCfgLoadAddr = (UINT8*)((((BootParamlistPtr->PvmFwLoadAddr +
-                     Info->PvmFwRawSize) / 4096) * 4096) + 4096);
+  PvmFwCfgStart = (((BootParamlistPtr->PvmFwLoadAddr +
+                     Info->PvmFwRawSize) / 4096) * 4096) + 4096;
+  PvmFwCfgLoadAddr = (UINT8*)(PvmFwCfgStart);
 
   DEBUG ((EFI_D_VERBOSE, "PvmFwCfgLoadAddr: 0x%lx\n",
                           PvmFwCfgLoadAddr));
@@ -1181,6 +1215,7 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   gBS->CopyMem ((CHAR8 *)PvmFwCfgLoadAddr,
                          &PvmFwCgfHdr,
                          sizeof (PvmFwCgfHdr));
+
   /* Write BCC blob to end of pVM firmware config header */
   gBS->CopyMem ((CHAR8 *)(PvmFwCfgLoadAddr +
                          PvmFwCgfHdr.Entries[0].Offset),
@@ -1203,6 +1238,13 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
                             VmRefDtb, fdt_totalsize (VmRefDtb));
   }
 #endif
+
+  Status = RmRegisterPvmFwRegion (Info, BootParamlistPtr,
+                                  PvmFwCfgStart, PvmFwCgfHdr.TotalSize);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR,
+        "Failed to register pvmfw region with RM: %r\n", Status));
+  }
 
 Free:
   if (FinalEncodedBccArtifacts) {
@@ -1368,15 +1410,14 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
     DEBUG ((EFI_D_VERBOSE, "Copied pvmfw into golden region\n"));
 
     Status = AppendPvmFwConfig (Info, BootParamlistPtr);
-    if (Status == EFI_SUCCESS) {
-      Status = RmRegisterPvmFwRegion (Info, BootParamlistPtr);
-      if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR,
-               "Failed to register pvmfw region with RM: %r\n", Status));
-      }
-    } else {
+    if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Failed to write pvmfw config: %r\n", Status));
     }
+  }
+  Status = SetFWMilestone ();
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Failed to set FWMilestone: %r\n", Status));
+    return Status;
   }
 #endif
 
@@ -1954,12 +1995,14 @@ BootLinux (BootInfo *Info)
 
   /* Sends Milestone Call to Keymaster */
   UINT32  AVBVersion = GetAVBVersion ();
-  if (AVBVersion != AVB_LE) {
-    DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
-    Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
-    if (Status != EFI_SUCCESS) {
+  if (AVBVersion != NO_AVB) {
+    if (AVBVersion != AVB_LE) {
+      DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
+      Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
+      if (Status != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "Error sending milestone call to TZ\n"));
         return Status;
+      }
     }
   }
 
