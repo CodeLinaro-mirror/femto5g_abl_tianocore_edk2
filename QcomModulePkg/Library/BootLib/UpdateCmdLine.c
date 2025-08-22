@@ -1869,6 +1869,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   }
 #endif
 
+  if (IsIpcLoggingEnabled ()) {
+    CmdLineLen += AsciiStrLen(EnableIpcLoggingCmdLine);
+  }
+
   Param.Recovery = Recovery;
   Param.MultiSlotBoot = MultiSlotBoot;
   Param.AlarmBoot = AlarmBoot;
