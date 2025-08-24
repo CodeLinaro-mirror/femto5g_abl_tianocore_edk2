@@ -369,6 +369,7 @@ TargetBatterySocOk (UINT32 *BatteryVoltage)
   }
 }
 
+#ifndef AUTO_VIRT_ABL
 STATIC VOID GetDisplayCmdline (VOID)
 {
   EFI_STATUS Status;
@@ -407,8 +408,38 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
   return Status;
 }
 
+STATIC VOID
+GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
+{
+  EFI_STATUS Status;
+  CHAR8 *Src;
 
-#ifdef AUTO_VIRT_ABL
+  Status = ReadAudioFrameWork (&Src, Length);
+  if (Status == EFI_SUCCESS) {
+     if (*Length) {
+        AsciiStrCpyS (FrameWork, *Length, Src);
+   }
+ }
+}
+#else // #ifdef AUTO_VIRT_ABL
+STATIC VOID GetDisplayCmdline (VOID)
+{
+  DisplayCmdLineLen = 0;
+  return;
+}
+
+STATIC VOID GetHwFenceCmdline (VOID)
+{
+  HwFenceCmdLineLen = 0;
+  return;
+}
+
+STATIC EFI_STATUS GetGpuCmdline (VOID)
+{
+  GpuCmdLineLen = 0;
+  return EFI_UNSUPPORTED;
+}
+
 STATIC VOID
 GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
 {
@@ -429,20 +460,6 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
   } else {
     DEBUG ((EFI_D_INFO, "Audio FrameWork not set in gvminfo.img\n"));
   }
-}
-#else
-STATIC VOID
-GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
-{
-  EFI_STATUS Status;
-  CHAR8 *Src;
-
-  Status = ReadAudioFrameWork (&Src, Length);
-  if (Status == EFI_SUCCESS) {
-     if (*Length) {
-        AsciiStrCpyS (FrameWork, *Length, Src);
-   }
- }
 }
 #endif
 
@@ -1455,6 +1472,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                        BootConfigListHead, ParamLen, 0);
   }
 
+#ifndef AUTO_VIRT_ABL
   if (NULL == BoardPlatformChipBaseBand ()) {
     DEBUG ((EFI_D_ERROR, "Invalid BaseBand String\n"));
     FreePool (BootDevBuf);
@@ -1473,6 +1491,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                   AsciiStrLen (BoardPlatformChipBaseBand ()));
   ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (BoardPlatformChipBaseBand ()),
                  CmdLineLen, BootConfigLen);
+#endif
 
   if (MdtpActive) {
     ParamLen = AsciiStrLen (MdtpActiveFlag);

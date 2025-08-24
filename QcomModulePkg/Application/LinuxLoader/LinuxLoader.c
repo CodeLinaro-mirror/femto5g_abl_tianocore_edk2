@@ -102,6 +102,7 @@ STATIC EFI_STATUS MdtpDisable (VOID)
   return Status;
 }
 
+#ifndef AUTO_VIRT_ABL
 STATIC UINT8
 GetRebootReason (UINT32 *ResetReason)
 {
@@ -120,6 +121,13 @@ GetRebootReason (UINT32 *ResetReason)
     RstReasonIf->ClearResetReason (RstReasonIf);
   return Status;
 }
+#else
+STATIC UINT8
+GetRebootReason (UINT32 *ResetReason)
+{
+  return EFI_SUCCESS;
+}
+#endif
 
 #ifndef AUTO_VIRT_ABL
 STATIC VOID
