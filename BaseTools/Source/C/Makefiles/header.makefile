@@ -84,10 +84,21 @@ BUILD_LFLAGS =
 
 BUILD_CXXFLAGS = -Wno-unused-result
 
+# Detect GCC major version
+GCC_VERSION := $(shell $(BUILD_CC) -dumpversion)
+GCC_MAJOR_VERSION := $(shell echo $(GCC_VERSION) | cut -d. -f1)
+
 ifeq ($(BUILD_CXX), clang++)
-BUILD_CPPFLAGS += -Wno-error=register
-BUILD_CXXFLAGS += -Wno-error=register
+  BUILD_CPPFLAGS += -Wno-error=register
+  BUILD_CXXFLAGS += -Wno-error=register
+else
+  # Only add these flags for GCC 8 or newer
+  ifeq ($(shell [ $(GCC_MAJOR_VERSION) -ge 8 ] && echo yes),yes)
+    BUILD_CFLAGS += -Wno-error=stringop-truncation
+    BUILD_CFLAGS += -Wno-error=vla-parameter
+  endif
 endif
+
 
 ifeq ($(HOST_ARCH), IA32)
 #
