@@ -76,10 +76,7 @@ cc_defaults {
 
 cc_defaults {
     name: "boringssl_flags_baremetal",
-    cflags: [
-        "-DBORINGSSL_NO_STATIC_INITIALIZER",
-        "-DANDROID_BAREMETAL",
-    ],
+    cflags: ["-DANDROID_BAREMETAL"],
     defaults: [
         "boringssl_flags_common",
         "cc_baremetal_defaults",
