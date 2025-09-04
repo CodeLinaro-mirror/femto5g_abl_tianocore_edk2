@@ -540,6 +540,7 @@ set(crypto_test_sources
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ec/p256-nistz_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ec/p256_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ecdsa/ecdsa_test.cc
+  ${BORINGSSL_ROOT}src/crypto/fipsmodule/entropy/jitter_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/hkdf/hkdf_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/keccak/keccak_test.cc
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/rand/ctrdrbg_test.cc
@@ -618,8 +619,13 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/cipher/test/xchacha20_poly1305_tests.txt
   ${BORINGSSL_ROOT}src/crypto/curve25519/ed25519_tests.txt
   ${BORINGSSL_ROOT}src/crypto/ecdh/ecdh_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/evp/evp_tests.txt
-  ${BORINGSSL_ROOT}src/crypto/evp/scrypt_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/evp/test/dh_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/evp/test/ec_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/evp/test/ed25519_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/evp/test/evp_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/evp/test/rsa_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/evp/test/scrypt_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/evp/test/x25519_tests.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/aes/aes_tests.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/bn/test/exp_tests.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/bn/test/gcd_tests.txt
@@ -641,6 +647,7 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ecdsa/ecdsa_sign_tests.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/ecdsa/ecdsa_verify_tests.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/keccak/keccak_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/fipsmodule/rand/ctrdrbg_df_vectors.txt
   ${BORINGSSL_ROOT}src/crypto/fipsmodule/rand/ctrdrbg_vectors.txt
   ${BORINGSSL_ROOT}src/crypto/hmac/hmac_tests.txt
   ${BORINGSSL_ROOT}src/crypto/hpke/hpke_test_vectors.txt
