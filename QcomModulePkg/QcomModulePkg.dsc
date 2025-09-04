@@ -159,6 +159,9 @@
   !if $(WEAR_OS)
       GCC:*_*_*_CC_FLAGS = -DWEAR_OS
   !endif
+  !if $(IOT_LOW_DDR_TARGET)
+      GCC:*_*_*_CC_FLAGS = -DIOT_LOW_DDR_TARGET
+  !endif
   !if $(ENABLE_LV_ATOMIC_AB) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LV_ATOMIC_AB
   !endif
