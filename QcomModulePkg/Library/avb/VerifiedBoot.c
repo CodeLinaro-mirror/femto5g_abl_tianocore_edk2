@@ -1971,8 +1971,8 @@ AuthQtvmDtboImg (BootInfo *Info)
   AvbHashtreeErrorMode VerityFlags =
       AVB_HASHTREE_ERROR_MODE_MANAGED_RESTART_AND_EIO;
   AvbSlotVerifyFlags VerifyFlags = AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION |
-      AllowVerificationError ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
-                             : AVB_SLOT_VERIFY_FLAGS_NONE;
+      (AllowVerificationError ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
+                             : AVB_SLOT_VERIFY_FLAGS_NONE);
 
   UserData = avb_calloc (sizeof (AvbOpsUserData));
   if (UserData == NULL) {
