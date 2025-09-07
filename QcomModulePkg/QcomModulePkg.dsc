@@ -28,9 +28,9 @@
 #*/
 
 #/*
-# * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+# * Changes from Qualcomm Technologies, Inc. are provided under the following license:
 # *
-# * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # * SPDX-License-Identifier: BSD-3-Clause-Clear
 #*/
 
@@ -132,9 +132,17 @@
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_AES
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT_AES
   !endif
+  !if $(HIBERNATION_TZ_ENCRYPTION)
+      GCC:*_*_*_CC_FLAGS = -DHIBERNATION_TZ_ENCRYPTION
+      GCC:*_*_*_PP_FLAGS = -DHIBERNATION_TZ_ENCRYPTION
+  !endif
   !if $(HIBERNATION_SWAP_PARTITION_NAME)
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
+  !endif
+  !if $(APPEND_RAM_PARTITIONS_TO_MEM_NODE)
+      GCC:*_*_*_CC_FLAGS = -DAPPEND_RAM_PARTITIONS_TO_MEM_NODE
+      GCC:*_*_*_PP_FLAGS = -DAPPEND_RAM_PARTITIONS_TO_MEM_NODE
   !endif
   !if $(DDR_SUPPORTS_SCT_CONFIG) == 1
       GCC:*_*_*_CC_FLAGS = -DDDR_SUPPORTS_SCT_CONFIG
@@ -182,6 +190,9 @@
   !endif
   !if $(VERIFIED_BOOT_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_ENABLED
+  !endif
+  !if $(USE_DUMMY_BCC)
+      GCC:*_*_*_CC_FLAGS = -DUSE_DUMMY_BCC
   !endif
   !if $(BASE_ADDRESS)
       GCC:*_*_*_CC_FLAGS = -DBASE_ADDRESS=$(BASE_ADDRESS)
