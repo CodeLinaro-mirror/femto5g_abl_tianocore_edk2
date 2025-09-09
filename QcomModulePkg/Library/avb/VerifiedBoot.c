@@ -42,7 +42,6 @@
 #include <Library/VerifiedBootMenu.h>
 #include <Library/LEOEMCertificate.h>
 #include "AvbPopulateBccParams.h"
-#include "AllowedVbmetaSysPublicKeys.h"
 
 STATIC CONST CHAR8 *VerityMode = " androidboot.veritymode=";
 STATIC CONST CHAR8 *VerifiedState = " androidboot.verifiedbootstate=";
@@ -1392,19 +1391,19 @@ STATIC EFI_STATUS ReverifyPvmfwImage (BootInfo *Info,
                                     (CONST CHAR8 *CONST *)RequestedPartition,
                                     SlotSuffix, VerifyFlags, VerityFlags,
                                     &SlotData);
-  /*
-   * Rollback index error from libavb can be ignored as it does not check
-   * the correct location. It will be checked later.
-   * Ideally, this can be handled in libavb, but will require modifying a lot
-   * of AOSP code.
-   */
-  if (Result != AVB_SLOT_VERIFY_RESULT_OK &&
-      Result != AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX) {
+
+  if (Result != AVB_SLOT_VERIFY_RESULT_OK) {
     DEBUG ((EFI_D_ERROR,
            "ERROR: Failed to reverify pvmfw, AvbSlotVerify returned %a\n",
             avb_slot_verify_result_to_string (Result)));
-    Status = EFI_LOAD_ERROR;
-    goto out;
+    if (Result == AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX &&
+        UserData->IsGsiKey) {
+      DEBUG ((EFI_D_INFO,
+             "Rollback Index error can be ignored for known GSI keys\n"));
+    } else {
+      Status = EFI_LOAD_ERROR;
+      goto out;
+    }
   } else {
     /*
      * For known GSI keys, it is okay not to enforce RBI checks.
@@ -1431,31 +1430,27 @@ STATIC EFI_STATUS ReverifyPvmfwImage (BootInfo *Info,
     AvbIOResult AvbStatus = AVB_IO_RESULT_OK;
     UINT64 CurrentValue;
     UINT64 StoredValue;
-    UINT32 Idx = BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION;
+    UINT32 Idx;
 
-    // Location 0 as reverify api fills it at the 0 location.
-    CurrentValue = SlotData->rollback_indexes[0];
-    if (CurrentValue != 0) {
-      AvbStatus = Ops->read_rollback_index (Ops, Idx, &StoredValue);
-      if (AvbStatus == AVB_IO_RESULT_OK) {
-        if (StoredValue < CurrentValue) {
-          AvbStatus = Ops->write_rollback_index (Ops, Idx, CurrentValue);
-        } else if (StoredValue > CurrentValue) {
-          DEBUG ((EFI_D_ERROR,
-             "ERROR: vbmeta_system rollback index lesser than stored\n"));
-          Status = EFI_LOAD_ERROR;
-          goto out;
+    for (Idx = 0; Idx < AVB_MAX_NUMBER_OF_ROLLBACK_INDEX_LOCATIONS; Idx++) {
+      CurrentValue = SlotData->rollback_indexes[Idx];
+      if (CurrentValue != 0) {
+        AvbStatus = Ops->read_rollback_index (Ops, Idx, &StoredValue);
+        if (AvbStatus == AVB_IO_RESULT_OK) {
+          if (StoredValue < CurrentValue) {
+            AvbStatus = Ops->write_rollback_index (Ops, Idx, CurrentValue);
+          }
         }
       }
-    }
 
-    if (AvbStatus == AVB_IO_RESULT_ERROR_OOM) {
-      Status = EFI_OUT_OF_RESOURCES;
-      goto out;
-    } else if (AvbStatus != AVB_IO_RESULT_OK) {
-      DEBUG ((EFI_D_ERROR, "Error getting rollback index for slot.\n"));
-      Status = EFI_DEVICE_ERROR;
-      goto out;
+      if (AvbStatus == AVB_IO_RESULT_ERROR_OOM) {
+        Status = EFI_OUT_OF_RESOURCES;
+        goto out;
+      } else if (AvbStatus != AVB_IO_RESULT_OK) {
+        DEBUG ((EFI_D_ERROR, "Error getting rollback index for slot.\n"));
+        Status = EFI_DEVICE_ERROR;
+        goto out;
+      }
     }
     DEBUG ((EFI_D_INFO, "VB2: UpdateRollbackIndex done. \n"));
   }
