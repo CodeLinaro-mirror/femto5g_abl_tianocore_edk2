@@ -11,6 +11,13 @@ DISABLE_PARALLEL_DOWNLOAD_FLASH=0
 REMOVE_CARVEOUT_REGION=1
 PVMFW_ENABLED=0       # TODO: Need to enable this
 WEAR_OS=1
+HIBERNATION_SUPPORT_AES=1
+HIBERNATION_PARTITION_NAME="swap"
+if [ "${IOT_LOW_DDR_TARGET}" != "0" ]; then
+    IOT_LOW_DDR_TARGET=1
+else
+    IOT_LOW_DDR_TARGET=0
+fi
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common

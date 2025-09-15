@@ -1564,9 +1564,8 @@ GetBoardQtVmDtbos (BootInfo *Info, VOID *DtboImgBuffer)
   VOID *BoardDtb = NULL;
   UINT32 DtboTableEntriesCount = 0;
   UINT32 FirstDtboTableEntryOffset = 0;
-  DtInfo CurDtbInfo = {0};
-  DtInfo BestDtbInfo = {0};
-  BOOLEAN FindBestDtb = FALSE;
+  UINT32 QtVmIds[MAX_QTVMS_SUPPORTED] = {TRUSTEDVM_ID, OEMVM_ID};
+  UINT32 VmCount = 0;
 
   if (!DtboImgBuffer) {
     DEBUG ((EFI_D_ERROR, "Dtbo Img buffer is NULL\n"));
@@ -1579,52 +1578,64 @@ GetBoardQtVmDtbos (BootInfo *Info, VOID *DtboImgBuffer)
     return FALSE;
   }
 
+  DtboTableEntriesCount = fdt32_to_cpu (DtboTableHdr->DtEntryCount);
   DtboTableEntry =
       (struct DtboTableEntry *)(DtboImgBuffer + FirstDtboTableEntryOffset);
+
   if (!DtboTableEntry) {
     DEBUG ((EFI_D_ERROR, "No proper DtTable\n"));
     return FALSE;
   }
 
-  DtboTableEntriesCount = fdt32_to_cpu (DtboTableHdr->DtEntryCount);
   DEBUG ((EFI_D_VERBOSE, "QTVM dtbo: Number of dtbos in image: %u\n",
           DtboTableEntriesCount));
-  for (DtboCount = 0; DtboCount < DtboTableEntriesCount; DtboCount++) {
-    if (CHECK_ADD64 ((UINT64)DtboImgBuffer,
-                     fdt32_to_cpu (DtboTableEntry->DtOffset))) {
-      DEBUG ((EFI_D_ERROR, "Integer overflow detected with Dtbo address\n"));
-      return FALSE;
-    }
-    BoardDtb = DtboImgBuffer + fdt32_to_cpu (DtboTableEntry->DtOffset);
-    if (fdt_check_header (BoardDtb) ||
-        fdt_check_header_ext (BoardDtb)) {
-      DEBUG ((EFI_D_ERROR, "No Valid Dtb\n"));
-      break;
-    }
 
-    CurDtbInfo.Dtb = BoardDtb;
-    FindBestDtb = ReadDtbFindMatch (&CurDtbInfo, &BestDtbInfo, VARIANT_MATCH);
-    DEBUG ((EFI_D_VERBOSE, "QTVM dtbo: Dtbo count = %u LocalBoardDtMatch = %x"
-                           "\n",
-            DtboCount, CurDtbInfo.DtMatchVal));
+  for (VmCount = 0; VmCount < MAX_QTVMS_SUPPORTED; VmCount++) {
+    DtInfo CurDtbInfo = {0};
+    DtInfo BestDtbInfo = {0};
+    BOOLEAN FindBestDtb = FALSE;
 
-    if (FindBestDtb) {
-      DEBUG ((EFI_D_VERBOSE, "Found a board Dtbo: Idx=%d, Id=%d\n",
-              DtboCount, fdt32_to_cpu (DtboTableEntry->Id)));
-      switch (fdt32_to_cpu (DtboTableEntry->Id)) {
-      case TRUSTEDVM_ID:
-        TuiVmDtboIdx = DtboCount;
-        break;
-      case OEMVM_ID:
-        OemVmDtboIdx = DtboCount;
-        break;
-      default:
-        DEBUG ((EFI_D_ERROR, "QTVM dtbo: Unsupported VM ID: %d\n",
-                fdt32_to_cpu (DtboTableEntry->Id)));
-        break;
+    for (DtboCount = 0; DtboCount < DtboTableEntriesCount; DtboCount++) {
+      UINT32 EntryId = fdt32_to_cpu (DtboTableEntry[DtboCount].Id);
+      if (EntryId != QtVmIds[VmCount]) {
+        continue;
+      }
+
+      UINT64 DtOffset = fdt32_to_cpu (DtboTableEntry[DtboCount].DtOffset);
+      if (CHECK_ADD64 ((UINT64)DtboImgBuffer, DtOffset)) {
+        DEBUG ((EFI_D_ERROR, "Integer overflow detected with Dtbo address\n"));
+        return FALSE;
+      }
+
+      BoardDtb = DtboImgBuffer + DtOffset;
+      if (fdt_check_header (BoardDtb) ||
+          fdt_check_header_ext (BoardDtb)) {
+        DEBUG ((EFI_D_ERROR, "No Valid Dtb\n"));
+        continue;
+      }
+
+      CurDtbInfo.Dtb = BoardDtb;
+      FindBestDtb = ReadDtbFindMatch (&CurDtbInfo, &BestDtbInfo, VARIANT_MATCH);
+      DEBUG ((EFI_D_VERBOSE, "QTVM dtbo: Dtbo count = %u LocalBoardDtMatch = %x"
+                             "\n",
+              DtboCount, CurDtbInfo.DtMatchVal));
+
+      if (FindBestDtb) {
+        DEBUG ((EFI_D_VERBOSE, "Found a board Dtbo: Idx=%d, Id=%d\n",
+                DtboCount, EntryId));
+        switch (EntryId) {
+        case TRUSTEDVM_ID:
+          TuiVmDtboIdx = DtboCount;
+          break;
+        case OEMVM_ID:
+          OemVmDtboIdx = DtboCount;
+          break;
+        default:
+          DEBUG ((EFI_D_ERROR, "QTVM dtbo: Unsupported VM ID: %d\n", EntryId));
+          break;
+        }
       }
     }
-    DtboTableEntry++;
   }
 
   /* If all VM dtbos are absent, return false.
