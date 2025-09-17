@@ -684,7 +684,7 @@ static AvbSlotVerifyResult load_and_verify_vbmeta(
    * 'vbmeta_<partition_name>').
    */
   look_for_vbmeta_footer = true;
-  if (avb_strncmp(partition_name, "vbmeta", avb_strlen("vbmeta")) == 0) {
+  if (avb_strncmp(partition_name, "vbmeta", avb_strlen("vbmeta")) == 0 || avb_strncmp(partition_name, "vm-vbmeta", avb_strlen("vm-vbmeta")) == 0) {
     look_for_vbmeta_footer = false;
   }
 
