@@ -737,59 +737,68 @@ GetPartitionHasSlot (CHAR16 *PartitionName,
 }
 
 STATIC EFI_STATUS
-WriteUbiRawChunk (SparseImgParam *SparseImgData, VOID *Image, UINT64 Size, BOOLEAN LastChunk)
+WriteUbiRawChunk (SparseImgParam *SparseImgData,
+                  VOID *Image,
+                  UINT64 Size, BOOLEAN LastChunk)
+
 {
   UbiFlasherInfo_t *Flasher = &SparseImgData->UbiFlasher;
-  BufferInfo_t     *BufferInfo = &SparseImgData->UbiInputBufferInfo;
-  UINT64            BufferSize = SparseImgData->UbiInputBufferInfo.Size;
-  UINT64            CopySize = 0;
-  UINT64            Remaining = 0;
-  EFI_STATUS        Status;
-  UbiHeader_t      *UbiHeader;
+  BufferInfo_t *BufferInfo = &SparseImgData->UbiInputBufferInfo;
+  UINT64 BufferSize = SparseImgData->UbiInputBufferInfo.Size;
+  UINT64 CopySize = 0;
+  UINT64 Remaining = 0;
+  EFI_STATUS Status;
+  UbiHeader_t *UbiHeader;
 
-  /*
-   * Determine how much to copy
-   * 1) The entire chunk 'Size' if it fits in the remaining space
-   * 2) Otherwise, fill the buffer, and compute the remainder
-   */
+  /* Determine how much to copy
+     1. chunk size if fits in buffer
+     2. if bigger, then till end of buffer
+  */
+  DEBUG ((EFI_D_VERBOSE, "CSz:%d BytesWritten:%d\n", Size,
+          BufferInfo->BytesWritten));
   if (BufferInfo->BytesWritten + Size <= BufferSize) {
     CopySize = Size;
   } else {
     CopySize = BufferSize - BufferInfo->BytesWritten;
     Remaining = BufferInfo->BytesWritten + Size - BufferSize;
-    /* DEBUG ((EFI_D_VERBOSE, " ChunkDataSz:%d Remaining %d\n", SparseImgData->ChunkDataSz, Remaining)); */
+    DEBUG ((EFI_D_VERBOSE, " ChunkDataSz:%d Remaining %d\n",
+            SparseImgData->ChunkDataSz, Remaining));
   }
 
-  /* Copy the first piece into the UBI staging buffer */
+  /* Copy Chunk */
   gBS->CopyMem (BufferInfo->Buffer + BufferInfo->BytesWritten, Image, CopySize);
   BufferInfo->BytesWritten += CopySize;
 
-  /* Validate UBI header at the start of the overall input buffer (original behavior) */
+  /* Validate Ubi header */
   UbiHeader = SparseImgData->UbiInputBufferInfo.Buffer;
   if (AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
     DEBUG ((EFI_D_ERROR, "Corrupt UBI magic!\n"));
     return EFI_VOLUME_CORRUPTED;
   }
 
-  /*
-   * Case 0: If this is the last chunk, we may need to flush a partial frame
-   * by making BufferSize reflect actual pending data.
-   */
+  /* Three  possibilites :
+     Case 0. We are writing last chunk
+     Case 1. Buffer is not full. So, process next chunk
+     Case 2. Buffer is full & nothing left in current chunk,
+     So write to storage and process next chunk
+     Case 3. Buffer is full & more to be written.
+     So, write to storage and copy excess into the buffer.
+     Then process next chunk.
+  */
+
+  /* Case 0 :  Last chunk */
   if (LastChunk) {
     BufferSize = (BufferInfo->BytesWritten);
   }
 
-  /*
-   * Case 1: If the buffer isn't full yet, nothing to write now.
-   * We'll accumulate more data on the next call.
-   */
-  if (BufferInfo->BytesWritten != BufferSize) {
+  /* Case 1 : Nothing to do if the buffer is not filled */
+  if (BufferInfo->BytesWritten != BufferSize)  {
     return EFI_SUCCESS;
   }
 
-  /* Buffer is full (or LastChunk forced a flush): write one frame */
   Flasher->UbiFrameNo += 1;
-  Status = Flasher->Ubi->UbiFlasherWrite (Flasher->UbiFlasherHandle,
+
+  Status = Flasher->Ubi->UbiFlasherWrite (Flasher->UbiFlasherHandle ,
                                           Flasher->UbiFrameNo,
                                           BufferInfo->Buffer,
                                           BufferSize);
@@ -798,75 +807,32 @@ WriteUbiRawChunk (SparseImgParam *SparseImgData, VOID *Image, UINT64 Size, BOOLE
   if (EFI_ERROR (Status)) {
     return Status;
   }
+
   BufferInfo->BytesWritten = 0;
 
-  /* Case 2: No excess data from this chunk */
+  /* Case 2 : No excess data */
   if (!Remaining) {
     return EFI_SUCCESS;
   }
 
-  /*
-   * Case 3: Excess data remains from this RAW chunk.
-   * Stream it safely in buffer-sized pieces, writing a frame whenever full.
-   */
-  Image = (CHAR8 *)Image + CopySize;
-
-  /* Optional: log if the next bytes in the source don't start with UBI magic.
-   * This can happen after the first frame; do not fail here.
-   */
-  UbiHeader = (UbiHeader_t *)Image;
+  /* Case 3: Excess data */
+  Image = (CHAR8 *) Image + CopySize;
+  UbiHeader = Image;
   if (AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
     DEBUG ((EFI_D_ERROR, "R: Corrupt UBI magic!\n"));
   }
 
- 
-  while (Remaining > 0) {
-    UINT64 Space  = BufferInfo->Size - BufferInfo->BytesWritten;
-    UINT64 ToCopy = (Remaining < Space) ? Remaining : Space;
+  gBS->CopyMem (BufferInfo->Buffer, Image, Remaining);
+  BufferInfo->BytesWritten = Remaining;
 
-    /* Copy only what fits into the staging buffer */
-    gBS->CopyMem (BufferInfo->Buffer + BufferInfo->BytesWritten, Image, ToCopy);
-    BufferInfo->BytesWritten += ToCopy;
-    Image     = (CHAR8 *)Image + ToCopy;
-    Remaining -= ToCopy;
-
-    /* If the buffer is now full, emit a frame */
-    if (BufferInfo->BytesWritten == BufferInfo->Size) {
-      Flasher->UbiFrameNo += 1;
-      Status = Flasher->Ubi->UbiFlasherWrite (Flasher->UbiFlasherHandle,
-                                              Flasher->UbiFrameNo,
-                                              BufferInfo->Buffer,
-                                              BufferInfo->Size);
-      DEBUG ((EFI_D_VERBOSE, "flashwriter(stream): buffer:%p frame:%d ret %d\n",
-              BufferInfo->Buffer, Flasher->UbiFrameNo, Status));
-      if (EFI_ERROR (Status)) {
-        return Status;
-      }
-      BufferInfo->BytesWritten = 0;
-    }
-  }
-
-  /*
-   * If this was the last chunk overall and we still have a partial frame pending,
-   * flush it now so the UBI flasher receives the final tail.
-   */
-  if (LastChunk && BufferInfo->BytesWritten > 0) {
-    Flasher->UbiFrameNo += 1;
-    Status = Flasher->Ubi->UbiFlasherWrite (Flasher->UbiFlasherHandle,
-                                            Flasher->UbiFrameNo,
-                                            BufferInfo->Buffer,
-                                            BufferInfo->BytesWritten);
-    DEBUG ((EFI_D_VERBOSE, "flashwriter(final-tail): buffer:%p frame:%d ret %d\n",
-            BufferInfo->Buffer, Flasher->UbiFrameNo, Status));
-    if (EFI_ERROR (Status)) {
-      return Status;
-    }
-    BufferInfo->BytesWritten = 0;
+  /* TODO for buffer chunk  */
+  while (Remaining > BufferSize) {
+    DEBUG ((EFI_D_ERROR, "Need bigger buffer than %d only have %d!\n"
+            "Currently not supported\n", Remaining, BufferSize));
   }
 
   return EFI_SUCCESS;
 }
-
 
 STATIC EFI_STATUS
 HandleChunkTypeRaw (sparse_header_t *sparse_header,
