@@ -58,7 +58,11 @@
  * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the
+ * following license:
  *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 #if HIBERNATION_SUPPORT_NO_AES
 
@@ -102,10 +106,15 @@ typedef struct FreeRanges {
 }FreeRanges;
 
 #if HIBERNATION_SUPPORT_AES
+#if HIBERNATION_TZ_ENCRYPTION
 #define NUM_CORES 4
 #define NUM_SILVER_CORES 2
-#define NUM_PAGES_PER_GOLD_CORE 0
-#define NUM_PAGES_PER_SILVER_CORE 0
+#else
+#define NUM_CORES 8
+#define NUM_SILVER_CORES 4
+#endif
+#define NUM_PAGES_PER_GOLD_CORE ((NrCopyPages / 54) * 9)
+#define NUM_PAGES_PER_SILVER_CORE ((NrCopyPages / 54) * 4)
 
 static struct DecryptParam *Dp;
 static VOID *Authslot;
@@ -278,36 +287,37 @@ static INT32 CheckFreeRanges (UINT64 TargetAddr)
         return 0;
 }
 
-static INT32 EnableAllCores()
+static INT32 EnableAllCores ()
 {
-	INT32 Iter = 0;
-	UINT32 NumCpus;
-	UINT32 Status;
+        INT32 Iter = 0;
+        UINT32 NumCpus;
+        UINT32 Status;
 
-	//DEBUG ((EFI_D_INFO, "Getting count of Max CPUs\n"));
-	NumCpus = KernIntf->MpCpu->MpcoreGetMaxCpuCount();
-	//DEBUG ((EFI_D_INFO, "Available Cores for hibernation: %d\n",NumCpus));
+        DEBUG ((EFI_D_VERBOSE, "Getting count of Max CPUs\n"));
+        NumCpus = KernIntf->MpCpu->MpcoreGetMaxCpuCount ();
+        DEBUG ((EFI_D_VERBOSE, "Available Cores for hibernation: %d\n",
+                NumCpus));
 
-	while (Iter < NumCpus) {
-		//DEBUG ((EFI_D_INFO, "Getting Status of core: %d\n",Iter));
-		Status = KernIntf->MpCpu->MpcoreIsCpuActive(Iter);
-		//DEBUG ((EFI_D_INFO, "Core: %d, Status: %d\n",Iter, Status));
-		if(!Status) {
-			//DEBUG ((EFI_D_INFO, "Enabling Core: %d\n",Iter));
-			KernIntf->MpCpu->MpcoreInitDeferredCores(1 << Iter);
-			KernIntf->Thread->ThreadSleep(10);
-		}
-		Iter++;
-	}
+        while (Iter < NumCpus) {
+                DEBUG ((EFI_D_VERBOSE, "Getting Status of core: %d\n", Iter));
+                Status = KernIntf->MpCpu->MpcoreIsCpuActive (Iter);
+                DEBUG ((EFI_D_VERBOSE, "Core: %d, Status: %d\n", Iter, Status));
+                if (!Status) {
+                        DEBUG ((EFI_D_VERBOSE, "Enabling Core: %d\n", Iter));
+                        KernIntf->MpCpu->MpcoreInitDeferredCores (1 << Iter);
+                        KernIntf->Thread->ThreadSleep (10);
+                }
+                Iter++;
+        }
 
-	Iter = 0;
-	while (Iter < NumCpus) {
-		Status = KernIntf->MpCpu->MpcoreIsCpuActive(Iter);
-		//DEBUG ((EFI_D_INFO, "Core: %d, Status: %d\n",Iter, Status));
-		Iter++;
-	}
+        Iter = 0;
+        while (Iter < NumCpus) {
+                Status = KernIntf->MpCpu->MpcoreIsCpuActive (Iter);
+                DEBUG ((EFI_D_VERBOSE, "Core: %d, Status: %d\n", Iter, Status));
+                Iter++;
+        }
 
-	return 0;
+        return 0;
 }
 
 static INT32 MemCmp (CONST VOID *S1, CONST VOID *S2, INT32 MemSize)
@@ -1708,82 +1718,79 @@ static UINT64 CopyPageTables ()
 
 #if HIBERNATION_SUPPORT_AES
 #if HIBERNATION_TZ_ENCRYPTION
-static INT32 SetupSMCI(void)
+static INT32 SetupSMCI (VOID)
 {
-	EFI_STATUS Status = EFI_SUCCESS;
-	QCOM_SCM_PROTOCOL *pQcomScmProtocol = NULL;
-	INT32 Ret = 0;
+        EFI_STATUS Status = EFI_SUCCESS;
+        QCOM_SCM_PROTOCOL *pQcomScmProtocol = NULL;
+        INT32 Ret = 0;
 
-	Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL,
-					(VOID **)&pQcomScmProtocol);
-	if (Status != EFI_SUCCESS || (pQcomScmProtocol == NULL)) {
-		DEBUG ((EFI_D_ERROR,
-			"HibernateKeyTzSMCI: Locate SCM Protocol failed, Status: (0x%x)\n",
-			Status));
-		Status = ERROR_SECURITY_STATE;
-    		return Status;
-	}
+        Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL,
+                                        (VOID **)&pQcomScmProtocol);
+        if (Status != EFI_SUCCESS ||
+            (pQcomScmProtocol == NULL)) {
+                DEBUG ((EFI_D_ERROR,
+                        "Locate SCM Protocol failed, Status: (0x%x)\n",
+                        Status));
+                Status = ERROR_SECURITY_STATE;
+                    return Status;
+        }
 
-	Status = pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
-	if (Object_isERROR (Status) || Object_isNull (ClientEnvObj)) {
-		DEBUG ((EFI_D_ERROR,
-			"HibernateKeyTzSMCI: Failed to get Client Env, Status: (0x%x)\n",
-			Status));
-	}
+        Status = pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol,
+                                                    &ClientEnvObj);
+        if (Object_isERROR (Status) ||
+            Object_isNull (ClientEnvObj)) {
+                DEBUG ((EFI_D_ERROR,
+                        "Failed to get Client Env, Status: (0x%x)\n",
+                        Status));
+        }
 
-	Status = IClientEnvOpen (ClientEnvObj, CLOWPOWERKEYMANAGER_UID, &AppClientObj);
-	if (Object_isERROR (Status) || Object_isNull (AppClientObj)) {
-		DEBUG ((EFI_D_ERROR,
-			"HibernateKeyTzSMCI: Failed to get App Client, Status: (0x%x)\n",
-			Status));
-	}
+        Status = IClientEnvOpen (ClientEnvObj, CLOWPOWERKEYMANAGER_UID,
+                                 &AppClientObj);
+        if (Object_isERROR (Status) ||
+            Object_isNull (AppClientObj)) {
+                DEBUG ((EFI_D_ERROR,
+                        "Failed to get App Client, Status: (0x%x)\n",
+                        Status));
+        }
 
-	return Ret;
+        return Ret;
 }
 
-static VOID SMCICleanup(void)
+static VOID SMCICleanup (VOID)
 {
-	Object_ASSIGN_NULL(AppClientObj);
-	Object_ASSIGN_NULL(ClientEnvObj);
+        Object_ASSIGN_NULL (AppClientObj);
+        Object_ASSIGN_NULL (ClientEnvObj);
 }
 
-INT32 KeyMgrGetKey(uint32_t Event, VOID *Key, size_t KeyLen,
-		    size_t *KeyLenOut)
+INT32 KeyMgrGetKey (UINT32 Event, VOID *Key, size_t KeyLen,
+                    size_t *KeyLenOut)
 {
-	INT32 Ret = SetupSMCI();
+        INT32 Ret = SetupSMCI ();
 
-	if (Ret)
-		goto exit;
+        if (Ret) {
+                goto exit;
+        }
 
-	Ret = ILowPowerKeyManagerGetKey (AppClientObj, Event, Key,
-			KeyLen, KeyLenOut);
+        Ret = ILowPowerKeyManagerGetKey (AppClientObj, Event, Key,
+                        KeyLen, KeyLenOut);
 exit:
-	SMCICleanup();
-	return Ret;
+        SMCICleanup ();
+        return Ret;
 }
 
 static INT32 InitTzAndGetKey ()
 {
-	INT32 Ret;
-	size_t KeyLenOut;
-	//CHAR8 *Buf1 = (CHAR8 *)UnwrappedKey;
-	Ret = KeyMgrGetKey(ILOWPOWERKEYMANAGER_HIBERNATE_WITH_ENCRYPTION,
-			UnwrappedKey,
-			AES256_KEY_SIZE,
-			&KeyLenOut);
+        INT32 Ret;
+        size_t KeyLenOut;
+        Ret = KeyMgrGetKey (ILOWPOWERKEYMANAGER_HIBERNATE_WITH_ENCRYPTION,
+                        UnwrappedKey,
+                        AES256_KEY_SIZE,
+                        &KeyLenOut);
 
-	/*
-        printf("\nAudi Key: %d\n", Ret);
-        for (UINTN i = 0; i < AES256_KEY_SIZE; ++i) {
-                printf("%u \n", Buf1[i]);
-        }
-	*/
-	//SetMem (UnwrappedKey, AES256_KEY_SIZE, AUTHTAG);
-	gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
-	Ret = 0;
-	return Ret;
+        gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
+        Ret = 0;
+        return Ret;
 }
-
 #else
 static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
 {
@@ -1846,7 +1853,6 @@ static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
 
         return 0;
 }
-
 #endif
 static INT32 InitAesDecrypt (VOID)
 {
@@ -1902,16 +1908,14 @@ static INT32 InitAesDecrypt (VOID)
                 }
         }
 #if HIBERNATION_TZ_ENCRYPTION
-	if (InitTzAndGetKey()) {
-		return -1;
-	}
+        if (InitTzAndGetKey ()) {
+                return -1;
+        }
 #else
         if (InitTaAndGetKey (&TaHandle)) {
                 return -1;
         }
-
 #endif
-        //printf ("\nHiber: Line=%d\n", __LINE__);
         printf ("Hibernation: AES init done\n");
         return 0;
 }
@@ -2031,9 +2035,11 @@ static INT32 RestoreSnapshotImage (VOID)
         UINT32 SMPage = 0; UINT64 DstPfn_z;
 #endif
         InitReadMultiThreadEnv ();
-	Ret = EnableAllCores();
-	if (Ret < 0)
-		return Ret;
+        Ret = EnableAllCores ();
+        if (Ret < 0) {
+            DEBUG ((EFI_D_ERROR, "EnableAllCores failed\n"));
+            return Ret;
+        }
         StartMs = GetTimerCountms ();
         Ret = ReadSwapInfoStruct ();
         if (Ret < 0) {
@@ -2513,13 +2519,13 @@ VOID BootIntoHibernationImage (BootInfo *Info,
          * stage.
          */
         *SetRotAndBootStateAndVBH = TRUE;
-
-       /* Status = KeyMasterFbeSetSeed ();
+#if !HIBERNATION_TZ_ENCRYPTION
+        Status = KeyMasterFbeSetSeed ();
         if (Status != EFI_SUCCESS) {
                 printf ("Failed to set seed for fbe : %r\n", Status);
                 goto err;
         }
-	*/
+#endif
         Ret = RestoreSnapshotImage ();
         if (Ret) {
                 printf ("Failed restore_snapshot_image \n");
