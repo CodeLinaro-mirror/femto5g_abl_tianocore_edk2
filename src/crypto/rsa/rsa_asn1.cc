@@ -210,23 +210,59 @@ int RSA_private_key_to_bytes(uint8_t **out_bytes, size_t *out_len,
 }
 
 RSA *d2i_RSAPublicKey(RSA **out, const uint8_t **inp, long len) {
-  return bssl::D2IFromCBS(out, inp, len, RSA_parse_public_key);
+  if (len < 0) {
+    return NULL;
+  }
+  CBS cbs;
+  CBS_init(&cbs, *inp, (size_t)len);
+  RSA *ret = RSA_parse_public_key(&cbs);
+  if (ret == NULL) {
+    return NULL;
+  }
+  if (out != NULL) {
+    RSA_free(*out);
+    *out = ret;
+  }
+  *inp = CBS_data(&cbs);
+  return ret;
 }
 
 int i2d_RSAPublicKey(const RSA *in, uint8_t **outp) {
-  return bssl::I2DFromCBB(
-      /*initial_capacity=*/256, outp,
-      [&](CBB *cbb) -> bool { return RSA_marshal_public_key(cbb, in); });
+  CBB cbb;
+  if (!CBB_init(&cbb, 0) ||
+      !RSA_marshal_public_key(&cbb, in)) {
+    CBB_cleanup(&cbb);
+    return -1;
+  }
+  return CBB_finish_i2d(&cbb, outp);
 }
 
 RSA *d2i_RSAPrivateKey(RSA **out, const uint8_t **inp, long len) {
-  return bssl::D2IFromCBS(out, inp, len, RSA_parse_private_key);
+  if (len < 0) {
+    return NULL;
+  }
+  CBS cbs;
+  CBS_init(&cbs, *inp, (size_t)len);
+  RSA *ret = RSA_parse_private_key(&cbs);
+  if (ret == NULL) {
+    return NULL;
+  }
+  if (out != NULL) {
+    RSA_free(*out);
+    *out = ret;
+  }
+  *inp = CBS_data(&cbs);
+  return ret;
 }
 
 int i2d_RSAPrivateKey(const RSA *in, uint8_t **outp) {
-  return bssl::I2DFromCBB(
-      /*initial_capacity=*/512, outp,
-      [&](CBB *cbb) -> bool { return RSA_marshal_private_key(cbb, in); });
+  CBB cbb;
+  if (!CBB_init(&cbb, 0) ||
+      !RSA_marshal_private_key(&cbb, in)) {
+    CBB_cleanup(&cbb);
+    return -1;
+  }
+  return CBB_finish_i2d(&cbb, outp);
 }
 
 RSA *RSAPublicKey_dup(const RSA *rsa) {
@@ -274,8 +310,6 @@ static const uint8_t kPSSParamsSHA512[] = {
 
 const EVP_MD *rsa_pss_params_get_md(rsa_pss_params_t params) {
   switch (params) {
-    case rsa_pss_none:
-      return nullptr;
     case rsa_pss_sha256:
       return EVP_sha256();
     case rsa_pss_sha384:
@@ -289,9 +323,6 @@ const EVP_MD *rsa_pss_params_get_md(rsa_pss_params_t params) {
 int rsa_marshal_pss_params(CBB *cbb, rsa_pss_params_t params) {
   bssl::Span<const uint8_t> bytes;
   switch (params) {
-    case rsa_pss_none:
-      OPENSSL_PUT_ERROR(RSA, ERR_R_INTERNAL_ERROR);
-      return 0;
     case rsa_pss_sha256:
       bytes = kPSSParamsSHA256;
       break;

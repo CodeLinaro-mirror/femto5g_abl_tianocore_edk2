@@ -86,8 +86,6 @@ UniquePtr<T> MakeUnique(Args &&...args) {
 template <typename T>
 class Array {
  public:
-  using value_type = std::remove_cv_t<T>;
-
   // Array's default constructor creates an empty array.
   Array() {}
   Array(const Array &) = delete;

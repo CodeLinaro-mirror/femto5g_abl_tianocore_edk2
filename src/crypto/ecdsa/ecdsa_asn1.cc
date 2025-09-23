@@ -324,11 +324,28 @@ size_t ECDSA_SIG_max_len(size_t order_len) {
 }
 
 ECDSA_SIG *d2i_ECDSA_SIG(ECDSA_SIG **out, const uint8_t **inp, long len) {
-  return bssl::D2IFromCBS(out, inp, len, ECDSA_SIG_parse);
+  if (len < 0) {
+    return NULL;
+  }
+  CBS cbs;
+  CBS_init(&cbs, *inp, (size_t)len);
+  ECDSA_SIG *ret = ECDSA_SIG_parse(&cbs);
+  if (ret == NULL) {
+    return NULL;
+  }
+  if (out != NULL) {
+    ECDSA_SIG_free(*out);
+    *out = ret;
+  }
+  *inp = CBS_data(&cbs);
+  return ret;
 }
 
 int i2d_ECDSA_SIG(const ECDSA_SIG *sig, uint8_t **outp) {
-  return bssl::I2DFromCBB(
-      /*initial_capacity=*/64, outp,
-      [&](CBB *cbb) -> bool { return ECDSA_SIG_marshal(cbb, sig); });
+  CBB cbb;
+  if (!CBB_init(&cbb, 0) || !ECDSA_SIG_marshal(&cbb, sig)) {
+    CBB_cleanup(&cbb);
+    return -1;
+  }
+  return CBB_finish_i2d(&cbb, outp);
 }

@@ -95,11 +95,29 @@ int DH_marshal_parameters(CBB *cbb, const DH *dh) {
 }
 
 DH *d2i_DHparams(DH **out, const uint8_t **inp, long len) {
-  return bssl::D2IFromCBS(out, inp, len, DH_parse_parameters);
+  if (len < 0) {
+    return NULL;
+  }
+  CBS cbs;
+  CBS_init(&cbs, *inp, (size_t)len);
+  DH *ret = DH_parse_parameters(&cbs);
+  if (ret == NULL) {
+    return NULL;
+  }
+  if (out != NULL) {
+    DH_free(*out);
+    *out = ret;
+  }
+  *inp = CBS_data(&cbs);
+  return ret;
 }
 
 int i2d_DHparams(const DH *in, uint8_t **outp) {
-  return bssl::I2DFromCBB(
-      /*initial_capacity=*/256, outp,
-      [&](CBB *cbb) -> bool { return DH_marshal_parameters(cbb, in); });
+  CBB cbb;
+  if (!CBB_init(&cbb, 0) ||
+      !DH_marshal_parameters(&cbb, in)) {
+    CBB_cleanup(&cbb);
+    return -1;
+  }
+  return CBB_finish_i2d(&cbb, outp);
 }

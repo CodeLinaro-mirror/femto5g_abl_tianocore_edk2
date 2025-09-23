@@ -19,9 +19,6 @@
 #include "internal.h"
 
 
-// TODO(crbug.com/42290417): While we need |ASN1_ITEM|s, the exposed new, free,
-// i2d, and d2i functions should call the underlying implementations directly.
-
 #define IMPLEMENT_ASN1_STRING_FUNCTIONS(sname)                         \
   IMPLEMENT_ASN1_TYPE(sname)                                           \
   IMPLEMENT_ASN1_ENCODE_FUNCTIONS_const_fname(sname, sname, sname)     \
@@ -49,6 +46,7 @@ IMPLEMENT_ASN1_FUNCTIONS_const(ASN1_NULL)
 IMPLEMENT_ASN1_TYPE(ASN1_OBJECT)
 
 IMPLEMENT_ASN1_TYPE(ASN1_ANY)
+IMPLEMENT_ASN1_TYPE(ASN1_ANY_AS_STRING)
 
 // Just swallow an ASN1_SEQUENCE in an ASN1_STRING
 IMPLEMENT_ASN1_TYPE(ASN1_SEQUENCE)

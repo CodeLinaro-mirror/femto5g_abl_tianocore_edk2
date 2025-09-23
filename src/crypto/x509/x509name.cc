@@ -130,7 +130,7 @@ X509_NAME_ENTRY *X509_NAME_delete_entry(X509_NAME *name, int loc) {
   STACK_OF(X509_NAME_ENTRY) *sk = name->entries;
   X509_NAME_ENTRY *ret = sk_X509_NAME_ENTRY_delete(sk, loc);
   size_t n = sk_X509_NAME_ENTRY_num(sk);
-  x509_name_invalidate_cache(name);
+  name->modified = 1;
   if ((size_t)loc == n) {
     return ret;
   }
@@ -196,17 +196,14 @@ int X509_NAME_add_entry_by_txt(X509_NAME *name, const char *field, int type,
 // guy we are about to stomp on.
 int X509_NAME_add_entry(X509_NAME *name, const X509_NAME_ENTRY *entry, int loc,
                         int set) {
-  if (name == nullptr) {
+  X509_NAME_ENTRY *new_name = NULL;
+  int i, inc;
+  STACK_OF(X509_NAME_ENTRY) *sk;
+
+  if (name == NULL) {
     return 0;
   }
-  if (name->entries == nullptr) {
-    name->entries = sk_X509_NAME_ENTRY_new_null();
-    if (name->entries == nullptr) {
-      return 0;
-    }
-  }
-
-  STACK_OF(X509_NAME_ENTRY) *sk = name->entries;
+  sk = name->entries;
   int n = (int)sk_X509_NAME_ENTRY_num(sk);
   if (loc > n) {
     loc = n;
@@ -214,8 +211,8 @@ int X509_NAME_add_entry(X509_NAME *name, const X509_NAME_ENTRY *entry, int loc,
     loc = n;
   }
 
-  bool inc = set == 0;
-  x509_name_invalidate_cache(name);
+  inc = (set == 0);
+  name->modified = 1;
 
   if (set == -1) {
     if (loc == 0) {
@@ -225,6 +222,7 @@ int X509_NAME_add_entry(X509_NAME *name, const X509_NAME_ENTRY *entry, int loc,
       set = sk_X509_NAME_ENTRY_value(sk, loc - 1)->set;
     }
   } else {  // if (set >= 0)
+
     if (loc >= n) {
       if (loc != 0) {
         set = sk_X509_NAME_ENTRY_value(sk, loc - 1)->set + 1;
@@ -236,22 +234,25 @@ int X509_NAME_add_entry(X509_NAME *name, const X509_NAME_ENTRY *entry, int loc,
     }
   }
 
-  bssl::UniquePtr<X509_NAME_ENTRY> new_entry(X509_NAME_ENTRY_dup(entry));
-  if (new_entry == nullptr) {
-    return 0;
+  if ((new_name = X509_NAME_ENTRY_dup(entry)) == NULL) {
+    goto err;
   }
-  new_entry->set = set;
-  if (!sk_X509_NAME_ENTRY_insert(sk, new_entry.get(), loc)) {
-    return 0;
+  new_name->set = set;
+  if (!sk_X509_NAME_ENTRY_insert(sk, new_name, loc)) {
+    goto err;
   }
-  new_entry.release(); // |sk| took ownership.
   if (inc) {
     n = (int)sk_X509_NAME_ENTRY_num(sk);
-    for (int i = loc + 1; i < n; i++) {
+    for (i = loc + 1; i < n; i++) {
       sk_X509_NAME_ENTRY_value(sk, i)->set += 1;
     }
   }
   return 1;
+err:
+  if (new_name != NULL) {
+    X509_NAME_ENTRY_free(new_name);
+  }
+  return 0;
 }
 
 X509_NAME_ENTRY *X509_NAME_ENTRY_create_by_txt(X509_NAME_ENTRY **ne,
@@ -332,18 +333,19 @@ int X509_NAME_ENTRY_set_data(X509_NAME_ENTRY *ne, int type,
     return 0;
   }
   if ((type > 0) && (type & MBSTRING_FLAG)) {
-    ASN1_STRING *dst = &ne->value;
-    return ASN1_STRING_set_by_NID(&dst, bytes, len, type,
-                                  OBJ_obj2nid(ne->object)) != nullptr;
+    return ASN1_STRING_set_by_NID(&ne->value, bytes, len, type,
+                                  OBJ_obj2nid(ne->object))
+               ? 1
+               : 0;
   }
   if (len < 0) {
     len = strlen((const char *)bytes);
   }
-  if (!ASN1_STRING_set(&ne->value, bytes, len)) {
+  if (!ASN1_STRING_set(ne->value, bytes, len)) {
     return 0;
   }
   if (type != V_ASN1_UNDEF) {
-    ne->value.type = type;
+    ne->value->type = type;
   }
   return 1;
 }
@@ -359,6 +361,5 @@ ASN1_STRING *X509_NAME_ENTRY_get_data(const X509_NAME_ENTRY *ne) {
   if (ne == NULL) {
     return NULL;
   }
-  // This function is not const-correct for OpenSSL compatibility.
-  return const_cast<ASN1_STRING*>(&ne->value);
+  return ne->value;
 }

@@ -259,6 +259,7 @@ set(crypto_sources
   ${BORINGSSL_ROOT}src/crypto/x509/x_req.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x_sig.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x_spki.cc
+  ${BORINGSSL_ROOT}src/crypto/x509/x_val.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x_x509.cc
   ${BORINGSSL_ROOT}src/crypto/x509/x_x509a.cc
   ${BORINGSSL_ROOT}src/crypto/xwing/xwing.cc
@@ -494,7 +495,6 @@ set(tool_sources
 )
 set(test_support_sources
   ${BORINGSSL_ROOT}src/crypto/test/abi_test.cc
-  ${BORINGSSL_ROOT}src/crypto/test/der_trailing_data.cc
   ${BORINGSSL_ROOT}src/crypto/test/file_test.cc
   ${BORINGSSL_ROOT}src/crypto/test/file_test_gtest.cc
   ${BORINGSSL_ROOT}src/crypto/test/file_util.cc
@@ -781,7 +781,6 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/x509/test/pss_sha256_wrong_trailer.pem
   ${BORINGSSL_ROOT}src/crypto/x509/test/pss_sha384.pem
   ${BORINGSSL_ROOT}src/crypto/x509/test/pss_sha512.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/rsa_pss_sha256_key.pk8
   ${BORINGSSL_ROOT}src/crypto/x509/test/some_names1.pem
   ${BORINGSSL_ROOT}src/crypto/x509/test/some_names2.pem
   ${BORINGSSL_ROOT}src/crypto/x509/test/some_names3.pem
@@ -792,16 +791,6 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/x509/test/trailing_data_leaf_name_constraints.pem
   ${BORINGSSL_ROOT}src/crypto/x509/test/trailing_data_leaf_subject_alt_name.pem
   ${BORINGSSL_ROOT}src/crypto/x509/test/trailing_data_leaf_subject_key_identifier.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_critical_ber.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_critical_false_not_omitted.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_empty_extension_not_omitted.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_key.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_null_sigalg_param.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_uid_both.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_uid_issuer.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_uid_subject.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_v1_not_omitted.pem
-  ${BORINGSSL_ROOT}src/crypto/x509/test/unusual_tbs_wrong_attribute_order.pem
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/aes_cbc_pkcs5_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/aes_cmac_test.txt
   ${BORINGSSL_ROOT}src/third_party/wycheproof_testvectors/aes_eax_test.txt
