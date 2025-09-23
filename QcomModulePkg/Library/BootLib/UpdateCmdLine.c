@@ -31,9 +31,9 @@
  *
  **/
 /*
-  * Changes from Qualcomm Innovation Center are provided under the following
+  * Changes from Qualcomm Technologies, Inc are provided under the following
   * license:
-  * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) Qualcomm Technologies, Inc.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -43,7 +43,7 @@
   *  * Redistributions in binary form must reproduce the above copyright notice,
   *    this list of conditions and the following disclaimer in the documentation
   *    and/or other materials provided ?with the distribution.
-  *  * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+  *  * Neither the name of Qualcomm Technologies, Inc. nor the names of its
   *     contributors may be used to endorse or promote products derived from this
   *     software without specific prior written permission.
   *
@@ -140,6 +140,7 @@ STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 QosAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 WaitSwitchRdyBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
@@ -1063,6 +1064,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyQosCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyWaitSwitchRdyCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1820,7 +1823,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                  PhyAddrBufCmdLineCmdLine,
                                  IFaceAddrBufCmdLine,
                                  SpeedAddrBufCmdLine,
-                                 QosAddrBufCmdLine);
+                                 QosAddrBufCmdLine,
+                                 WaitSwitchRdyBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
@@ -1828,6 +1832,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (QosAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (WaitSwitchRdyBufCmdLine);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1868,6 +1873,10 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (BootReasonCmdLine);
   }
 #endif
+
+  if (IsIpcLoggingEnabled ()) {
+    CmdLineLen += AsciiStrLen(EnableIpcLoggingCmdLine);
+  }
 
   Param.Recovery = Recovery;
   Param.MultiSlotBoot = MultiSlotBoot;
@@ -1915,6 +1924,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
     Param.EarlyQosCmdLine = QosAddrBufCmdLine;
+    Param.EarlyWaitSwitchRdyCmdLine = WaitSwitchRdyBufCmdLine;
   }
 
   if (EarlyUsbInitEnabled ()) {
