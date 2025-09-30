@@ -27,9 +27,9 @@
 */
 
 /*
- * Changes from Qualcomm Innovation Center, Inc. are provided under the
- * following license:
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following
+ * license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -305,16 +305,27 @@ UpdateDispOpModeInfo (VOID *fdt)
       }
     }
     /* Get offset of the clock controller reservation nodes */
+    if (NodeName == NULL) {
+      Status = EFI_NOT_FOUND;
+      DEBUG ((EFI_D_ERROR, "ERROR: Could not get the NodeName\n"));
+      goto error;
+    }
+
     IsClkCtrl = (AsciiStrStr (NodeName, "clock-controller") != NULL);
     if (IsClkCtrl) {
       /* Get offset of the dispcc node based on Compatible string */
-      Compatible = (char *)(uintptr_t)fdt_getprop (fdt,
-                    SubNodeOffset, "compatible", &Len);
+      Compatible = (char *)(uintptr_t)fdt_getprop (fdt, SubNodeOffset,
+                   "compatible", &Len);
+      if (Compatible == NULL) {
+        Status = EFI_NOT_FOUND;
+        DEBUG ((EFI_D_ERROR, "ERROR: Compatible string NULL\n"));
+        goto error;
+      }
       IsCompatible = (AsciiStrStr (Compatible, "dispcc") != NULL);
       if (IsCompatible) {
         /* Update the status property value in place */
-        Status = fdt_setprop_string (fdt, SubNodeOffset,
-          "status", "disabled");
+        Status = fdt_setprop_string (fdt, SubNodeOffset,  "status",
+                                    "disabled");
         if (Status < 0) {
           DEBUG ((EFI_D_ERROR, "ERROR: Could not update dispcc info\n"));
           goto error;
