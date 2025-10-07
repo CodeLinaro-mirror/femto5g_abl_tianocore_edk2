@@ -92,11 +92,13 @@
 [LibraryClasses.ARM]
   ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
   NULL|ArmPkg/Library/CompilerIntrinsicsLib/CompilerIntrinsicsLib.inf
+  CompilerIntrinsicsLib|ArmPkg/Library/CompilerIntrinsicsLib/CompilerIntrinsicsLib.inf
 
 [LibraryClasses.AARCH64]
   ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
   NULL|ArmPkg/Library/CompilerIntrinsicsLib/CompilerIntrinsicsLib.inf
   OpenDice|QcomModulePkg/Library/OpenDice/open-dice.inf
+  CompilerIntrinsicsLib|ArmPkg/Library/CompilerIntrinsicsLib/CompilerIntrinsicsLib.inf
 
 [LibraryClasses.common.UEFI_APPLICATION]
   ReportStatusCodeLib|MdeModulePkg/Library/DxeReportStatusCodeLib/DxeReportStatusCodeLib.inf
@@ -139,6 +141,10 @@
   !if $(HIBERNATION_SWAP_PARTITION_NAME)
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
+  !endif
+  !if $(APPEND_RAM_PARTITIONS_TO_MEM_NODE)
+      GCC:*_*_*_CC_FLAGS = -DAPPEND_RAM_PARTITIONS_TO_MEM_NODE
+      GCC:*_*_*_PP_FLAGS = -DAPPEND_RAM_PARTITIONS_TO_MEM_NODE
   !endif
   !if $(DDR_SUPPORTS_SCT_CONFIG) == 1
       GCC:*_*_*_CC_FLAGS = -DDDR_SUPPORTS_SCT_CONFIG
