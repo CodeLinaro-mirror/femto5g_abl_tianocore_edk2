@@ -596,6 +596,7 @@ cc_library_static {
     vendor_available: true,
     srcs: [
         "src/util/fipstools/acvp/modulewrapper/modulewrapper.cc",
+        "src/util/fipstools/acvp/modulewrapper/proto.cc",
     ],
     target: {
         android: {

@@ -497,7 +497,6 @@ boringssl_crypto_sources := \
   crypto/x509/x_req.cc \
   crypto/x509/x_sig.cc \
   crypto/x509/x_spki.cc \
-  crypto/x509/x_val.cc \
   crypto/x509/x_x509.cc \
   crypto/x509/x_x509a.cc \
   crypto/xwing/xwing.cc \
@@ -513,7 +512,6 @@ boringssl_crypto_headers := \
   include/openssl/asn1t.h \
   include/openssl/base.h \
   include/openssl/base64.h \
-  include/openssl/bcm_public.h \
   include/openssl/bio.h \
   include/openssl/blake2.h \
   include/openssl/blowfish.h \
@@ -983,6 +981,7 @@ boringssl_crypto_test_data := \
   crypto/x509/test/pss_sha256_wrong_trailer.pem \
   crypto/x509/test/pss_sha384.pem \
   crypto/x509/test/pss_sha512.pem \
+  crypto/x509/test/rsa_pss_sha256_key.pk8 \
   crypto/x509/test/some_names1.pem \
   crypto/x509/test/some_names2.pem \
   crypto/x509/test/some_names3.pem \
@@ -993,6 +992,16 @@ boringssl_crypto_test_data := \
   crypto/x509/test/trailing_data_leaf_name_constraints.pem \
   crypto/x509/test/trailing_data_leaf_subject_alt_name.pem \
   crypto/x509/test/trailing_data_leaf_subject_key_identifier.pem \
+  crypto/x509/test/unusual_tbs_critical_ber.pem \
+  crypto/x509/test/unusual_tbs_critical_false_not_omitted.pem \
+  crypto/x509/test/unusual_tbs_empty_extension_not_omitted.pem \
+  crypto/x509/test/unusual_tbs_key.pem \
+  crypto/x509/test/unusual_tbs_null_sigalg_param.pem \
+  crypto/x509/test/unusual_tbs_uid_both.pem \
+  crypto/x509/test/unusual_tbs_uid_issuer.pem \
+  crypto/x509/test/unusual_tbs_uid_subject.pem \
+  crypto/x509/test/unusual_tbs_v1_not_omitted.pem \
+  crypto/x509/test/unusual_tbs_wrong_attribute_order.pem \
   third_party/wycheproof_testvectors/aes_cbc_pkcs5_test.txt \
   third_party/wycheproof_testvectors/aes_cmac_test.txt \
   third_party/wycheproof_testvectors/aes_eax_test.txt \
@@ -1114,6 +1123,14 @@ boringssl_decrepit_test_sources := \
   decrepit/ripemd/ripemd_test.cc \
   decrepit/xts/xts_test.cc
 
+boringssl_entropy_modulewrapper_sources := \
+  util/fipstools/acvp/entropy_modulewrapper/main.cc \
+  util/fipstools/acvp/entropy_modulewrapper/modulewrapper.cc \
+  util/fipstools/acvp/modulewrapper/proto.cc
+
+boringssl_entropy_modulewrapper_internal_headers := \
+  util/fipstools/acvp/modulewrapper/modulewrapper.h
+
 boringssl_fuzz_sources := \
   fuzz/arm_cpuinfo.cc \
   fuzz/bn_div.cc \
@@ -1152,7 +1169,8 @@ boringssl_fuzz_sources := \
 
 boringssl_modulewrapper_sources := \
   util/fipstools/acvp/modulewrapper/main.cc \
-  util/fipstools/acvp/modulewrapper/modulewrapper.cc
+  util/fipstools/acvp/modulewrapper/modulewrapper.cc \
+  util/fipstools/acvp/modulewrapper/proto.cc
 
 boringssl_modulewrapper_internal_headers := \
   util/fipstools/acvp/modulewrapper/modulewrapper.h
@@ -2806,6 +2824,7 @@ boringssl_ssl_test_sources := \
 
 boringssl_test_support_sources := \
   crypto/test/abi_test.cc \
+  crypto/test/der_trailing_data.cc \
   crypto/test/file_test.cc \
   crypto/test/file_test_gtest.cc \
   crypto/test/file_util.cc \
@@ -2815,6 +2834,7 @@ boringssl_test_support_sources := \
 
 boringssl_test_support_internal_headers := \
   crypto/test/abi_test.h \
+  crypto/test/der_trailing_data.h \
   crypto/test/file_test.h \
   crypto/test/file_util.h \
   crypto/test/gtest_main.h \
