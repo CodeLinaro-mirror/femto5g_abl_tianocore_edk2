@@ -53,11 +53,6 @@
 #include <Library/UpdateCmdLine.h>
 #include <Protocol/EFICardInfo.h>
 
-#include <Library/DtFixupProtocol.h>
-#include <Library/GblAvbProtocol.h>
-#include <Library/GblOsConfigurationProtocol.h>
-#include <Library/UefiBootServicesTableLib.h>
-
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
@@ -275,88 +270,6 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     FindPtnActiveSlot ();
   }
 
-  VOID *GblPartitionBuffer = NULL;
-  UINT32 GblPartitionSz = 0;
-  CHAR16 PtnName[MAX_GPT_NAME_SIZE] = {0};
-
-  /** Get size of partition **/
-  UINT32 BlkIOAttrib = 0;
-  PartiSelectFilter HandleFilter;
-  UINT32 MaxHandles = 1;
-  EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
-  HandleInfo HandleInfoList[1];
-
-  GUARD ( StrnCpyS (PtnName,
-              MAX_GPT_NAME_SIZE,
-              (CONST CHAR16 *)L"efisp",
-              (UINTN)StrLen (L"efisp")));
-
-  BlkIOAttrib |= BLK_IO_SEL_PARTITIONED_MBR;
-  BlkIOAttrib |= BLK_IO_SEL_PARTITIONED_GPT;
-  BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_NON_REMOVABLE;
-  BlkIOAttrib |= BLK_IO_SEL_MATCH_PARTITION_LABEL;
-
-  HandleFilter.RootDeviceType = NULL;
-  HandleFilter.PartitionLabel = NULL;
-  HandleFilter.VolumeName = NULL;
-  HandleFilter.PartitionLabel = PtnName;
-
-  Status =
-    GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
-  if (Status != EFI_SUCCESS || MaxHandles != 1) {
-      DEBUG ((EFI_D_ERROR,
-                "EFISP: GetBlkIOHandles failed loading GBL: %r\n",
-                Status));
-      goto get_key_press;
-  }
-
-  BlockIo = HandleInfoList[0].BlkIo;
-  GblPartitionSz = GetPartitionSize (BlockIo);
-  if (!GblPartitionSz)
-      goto get_key_press;
-
-  GblPartitionBuffer = AllocateZeroPool (GblPartitionSz);
-  if (GblPartitionBuffer == NULL) {
-      DEBUG ((EFI_D_ERROR, "EFISP: GBL partition buffer allocation failure\n"));
-      goto get_key_press;
-  }
-
-  Status = LoadImageFromPartition (GblPartitionBuffer,
-                                   &GblPartitionSz,
-                                   PtnName);
-  if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "EFISP: GBL partition buffer loading failed\n"));
-      goto get_key_press;
-  }
-
-  UINT8 *ByteBuffer = (UINT8 *) GblPartitionBuffer;
-  INT32 CheckStatus = 0;
-  for (size_t Index = 0; Index < sizeof (ByteBuffer); Index++) {
-      if (ByteBuffer[Index] != 0) {
-          CheckStatus = 1;
-          break;
-      }
-  }
-
-  if (CheckStatus) {
-      DEBUG ((EFI_D_INFO, "Loading GBL app\n"));
-      CHAR8 Response[MAX_RSP_SIZE];
-      EFI_HANDLE ImgHandle = NULL;
-      EFI_STATUS Res = gBS->LoadImage (0, gImageHandle, NULL,
-                                       (VOID *)GblPartitionBuffer,
-                                       GblPartitionSz, &ImgHandle);
-      if (Res != EFI_SUCCESS) {
-          AsciiSPrint (Response, sizeof (Response), "LoadImage failed %d", Res);
-          goto get_key_press;
-      }
-      else {
-          UINTN ExitDataSize = 0;
-          DEBUG ((EFI_D_INFO, "Starting GBL app\n"));
-          Status = gBS->StartImage (ImgHandle, &ExitDataSize, NULL);
-      }
-  }
-
-get_key_press:
   Status = GetKeyPress (&KeyPressed);
   if (Status == EFI_SUCCESS) {
     if (KeyPressed == SCAN_DOWN)
