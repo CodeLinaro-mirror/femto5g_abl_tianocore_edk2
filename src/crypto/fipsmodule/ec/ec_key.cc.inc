@@ -213,6 +213,11 @@ int EC_KEY_set_public_key(EC_KEY *key, const EC_POINT *pub_key) {
     return 0;
   }
 
+  if (pub_key != NULL && EC_POINT_is_at_infinity(pub_key->group, pub_key)) {
+    OPENSSL_PUT_ERROR(EC, EC_R_POINT_AT_INFINITY);
+    return 0;
+  }
+
   if (pub_key != NULL && EC_GROUP_cmp(key->group, pub_key->group, NULL) != 0) {
     OPENSSL_PUT_ERROR(EC, EC_R_GROUP_MISMATCH);
     return 0;
@@ -286,7 +291,7 @@ int EC_KEY_check_fips(const EC_KEY *key) {
   }
 
   if (key->priv_key) {
-    uint8_t digest[BCM_SHA256_DIGEST_LENGTH] = {0};
+    uint8_t digest[SHA256_DIGEST_LENGTH] = {0};
     uint8_t sig[ECDSA_MAX_FIXED_LEN];
     size_t sig_len;
     if (!ecdsa_sign_fixed(digest, sizeof(digest), sig, &sig_len, sizeof(sig),

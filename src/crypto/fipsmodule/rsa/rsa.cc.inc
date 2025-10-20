@@ -18,6 +18,8 @@
 #include <limits.h>
 #include <string.h>
 
+#include <iterator>
+
 #include <openssl/bn.h>
 #include <openssl/digest.h>
 #include <openssl/engine.h>
@@ -276,12 +278,6 @@ void RSA_get0_factors(const RSA *rsa, const BIGNUM **out_p,
   }
 }
 
-const RSA_PSS_PARAMS *RSA_get0_pss_params(const RSA *rsa) {
-  // We do not support the id-RSASSA-PSS key encoding. If we add support later,
-  // the |maskHash| field should be filled in for OpenSSL compatibility.
-  return NULL;
-}
-
 void RSA_get0_crt_params(const RSA *rsa, const BIGNUM **out_dmp1,
                          const BIGNUM **out_dmq1, const BIGNUM **out_iqmp) {
   if (out_dmp1 != NULL) {
@@ -425,35 +421,35 @@ static const struct pkcs1_sig_prefix kPKCS1SigPrefixes[] = {
     },
     {
         NID_sha1,
-        BCM_SHA_DIGEST_LENGTH,
+        SHA_DIGEST_LENGTH,
         15,
         {0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05,
          0x00, 0x04, 0x14},
     },
     {
         NID_sha224,
-        BCM_SHA224_DIGEST_LENGTH,
+        SHA224_DIGEST_LENGTH,
         19,
         {0x30, 0x2d, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
          0x04, 0x02, 0x04, 0x05, 0x00, 0x04, 0x1c},
     },
     {
         NID_sha256,
-        BCM_SHA256_DIGEST_LENGTH,
+        SHA256_DIGEST_LENGTH,
         19,
         {0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
          0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20},
     },
     {
         NID_sha384,
-        BCM_SHA384_DIGEST_LENGTH,
+        SHA384_DIGEST_LENGTH,
         19,
         {0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
          0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30},
     },
     {
         NID_sha512,
-        BCM_SHA512_DIGEST_LENGTH,
+        SHA512_DIGEST_LENGTH,
         19,
         {0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
          0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40},
@@ -875,8 +871,8 @@ static const BN_ULONG kSmallFactorsLimbs[] = {TOBN(0xc4309333, 0x3ef4e3e1),
                                               0x000017b1};
 
 DEFINE_LOCAL_DATA(BIGNUM, g_small_factors) {
-  out->d = (BN_ULONG *)kSmallFactorsLimbs;
-  out->width = OPENSSL_ARRAY_SIZE(kSmallFactorsLimbs);
+  out->d = const_cast<BN_ULONG *>(kSmallFactorsLimbs);
+  out->width = std::size(kSmallFactorsLimbs);
   out->dmax = out->width;
   out->neg = 0;
   out->flags = BN_FLG_STATIC_DATA;

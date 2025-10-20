@@ -17,6 +17,7 @@
 #include <assert.h>
 #include <string.h>
 
+#include <iterator>
 #include <utility>
 
 #include <openssl/bn.h>
@@ -24,8 +25,6 @@
 #include <openssl/curve25519.h>
 #include <openssl/ec.h>
 #include <openssl/err.h>
-#define OPENSSL_UNSTABLE_EXPERIMENTAL_KYBER
-#include <openssl/experimental/kyber.h>
 #include <openssl/hrss.h>
 #include <openssl/mem.h>
 #include <openssl/mlkem.h>
@@ -34,6 +33,7 @@
 #include <openssl/span.h>
 
 #include "../crypto/internal.h"
+#include "../crypto/kyber/internal.h"
 #include "internal.h"
 
 BSSL_NAMESPACE_BEGIN
@@ -443,12 +443,24 @@ constexpr NamedGroup kNamedGroups[] = {
     {NID_X25519Kyber768Draft00, SSL_GROUP_X25519_KYBER768_DRAFT00,
      "X25519Kyber768Draft00", ""},
     {NID_X25519MLKEM768, SSL_GROUP_X25519_MLKEM768, "X25519MLKEM768", ""},
-    {NID_MLKEM1024, SSL_GROUP_MLKEM1024, "MLKEM1024", ""},
+    {NID_ML_KEM_1024, SSL_GROUP_MLKEM1024, "MLKEM1024", ""},
 };
+
+static_assert(std::size(kNamedGroups) == kNumNamedGroups,
+              "kNamedGroups size mismatch");
 
 }  // namespace
 
 Span<const NamedGroup> NamedGroups() { return kNamedGroups; }
+
+Span<const uint16_t> DefaultSupportedGroupIds() {
+  static const uint16_t kDefaultSupportedGroupIds[] = {
+      SSL_GROUP_X25519,
+      SSL_GROUP_SECP256R1,
+      SSL_GROUP_SECP384R1,
+  };
+  return Span(kDefaultSupportedGroupIds);
+}
 
 UniquePtr<SSLKeyShare> SSLKeyShare::Create(uint16_t group_id) {
   switch (group_id) {

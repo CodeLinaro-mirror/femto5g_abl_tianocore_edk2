@@ -1,4 +1,4 @@
-// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+// Copyright 2025 The BoringSSL Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <stdio.h>
-
-#include <openssl/asn1t.h>
-#include <openssl/x509.h>
+#include <gtest/gtest.h>
 
 #include "internal.h"
 
 
-ASN1_SEQUENCE(X509_VAL) = {
-    ASN1_SIMPLE(X509_VAL, notBefore, ASN1_TIME),
-    ASN1_SIMPLE(X509_VAL, notAfter, ASN1_TIME),
-} ASN1_SEQUENCE_END(X509_VAL)
+#if defined(OPENSSL_LINUX) || defined(OPENSSL_MACOS)
 
-IMPLEMENT_ASN1_FUNCTIONS_const(X509_VAL)
+TEST(JitterEntropy, Basic) {
+  uint8_t seed[48];
+  ASSERT_TRUE(bssl::entropy::GetSeed(seed));
+}
+
+#endif  // LINUX || MACOS
