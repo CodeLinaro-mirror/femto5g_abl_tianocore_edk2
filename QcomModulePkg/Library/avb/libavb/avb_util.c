@@ -49,6 +49,13 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+
+/*
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 #include "avb_util.h"
 #include "avb_ops.h"
 #include <stdarg.h>
@@ -56,6 +63,8 @@
 #include <Protocol/EFIScm.h>
 #include <Protocol/scm_sip_interface.h>
 #include "PartitionTableUpdate.h"
+#include "CUpdateRollbackVersion.h"
+#include "IUpdateRollbackVersion.h"
 
 #define SECBOOT_FUSE 0
 #define SHK_FUSE 1
@@ -806,3 +815,85 @@ EFI_STATUS UpdateRollbackSyscall ()
   }
   return Status;
 }
+
+EFI_STATUS updateHLOSVersion (uint32_t RollbackValue)
+{
+  EFI_STATUS Status = EFI_FAILURE;
+  QCOM_SCM_PROTOCOL *pQcomScmProtocol = NULL;
+  Object ServiceClientObj = Object_NULL;
+  Object ClientEnvObj = Object_NULL;
+
+  Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL,
+                               (VOID **)&pQcomScmProtocol);
+  if (Status != EFI_SUCCESS || (pQcomScmProtocol == NULL)) {
+    DEBUG ((EFI_D_ERROR, "updateHLOSVersion: Locate SCM Status: (0x%x)\r\n",
+             Status));
+    Status = EFI_FAILURE;
+    return Status;
+  }
+
+  if (Object_isNull (ClientEnvObj)) {
+      Status =
+          pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
+      DEBUG ((EFI_D_ERROR, "updateHLOSVersion ScmGetClientEnv Status: (0x%x)\r\n", Status));
+      if (Object_isERROR (Status) || Object_isNull (ClientEnvObj)) {
+        DEBUG ((EFI_D_ERROR,
+                "updateHLOSVersion: Failed to get Client Env, Status: (0x%x)\n", Status));
+        Status = EFI_FAILURE;
+        goto out;
+      }
+  }
+
+  if (Object_isNull (ServiceClientObj)) {
+    Status = IClientEnvOpen (ClientEnvObj, CUpdateRollbackVersion_UID,
+                             &ServiceClientObj);
+    DEBUG ((EFI_D_ERROR, "updateHLOSVersion IClientEnvOpen Status: (0x%x)\r\n", Status));
+    if (Object_isERROR (Status) || Object_isNull (ServiceClientObj)) {
+      DEBUG (
+          (EFI_D_ERROR,
+           "updateHLOSVersion: Failed to get Service Client, Status: (0x%x) UID=%d\n",
+           Status, CUpdateRollbackVersion_UID));
+      Status = EFI_FAILURE;
+      goto out;
+    }
+  }
+
+  Status = IUpdateRollbackVersion_updateHLOSVersion (ServiceClientObj, RollbackValue);
+  if (Object_isERROR (Status)) {
+    if (Status == IUpdateRollbackVersion_ERROR_READ_HLOS_VERSION_FAILED) {
+      DEBUG ((EFI_D_ERROR,
+              "updateHLOSVersion: Reading of fuse failed, Status: (0x%x)\n",
+              Status));
+    } else if (Status == IUpdateRollbackVersion_ERROR_HLOS_VERSION_MISMATCH) {
+      DEBUG ((EFI_D_ERROR,
+              "updateHLOSVersion: Rollback value is less than the expected value, Status: (0x%x)\n",
+              Status));
+    } else if (Status == IUpdateRollbackVersion_ERROR_UPDATE_HLOS_VERSION_FAILED) {
+      DEBUG ((EFI_D_ERROR,
+              "updateHLOSVersion: Failed to update the HLOS version, Status: (0x%x)\n",
+              Status));
+    } else if (Status == IUpdateRollbackVersion_ERROR_HLOS_VERSION_NOT_ALLOWED) {
+      DEBUG ((EFI_D_ERROR,
+              "updateHLOSVersion: HLOS version update called multple times, Status: (0x%x)\n",
+              Status));
+    } else {
+      DEBUG ((EFI_D_ERROR,
+              "updateHLOSVersion: Error Not listed, Status: (0x%x)\n",
+              Status));
+    }
+    Status = EFI_FAILURE;
+  } else {
+      DEBUG ((EFI_D_ERROR,
+              "updateHLOSVersion: Update is successfull: (0x%x)\n",
+              Status));
+      Status = EFI_SUCCESS;
+  }
+
+  Object_ASSIGN_NULL (ServiceClientObj);
+
+out:
+  Object_ASSIGN_NULL (ClientEnvObj);
+
+  return Status;
+}
+
