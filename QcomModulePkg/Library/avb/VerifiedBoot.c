@@ -26,40 +26,10 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
- /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/*
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "VerifiedBoot.h"
@@ -1941,8 +1911,13 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
     UINTN OemCertFileLen = sizeof (LeOemCertificate);
     CERTIFICATE OemCert = {NULL};
     UINTN HashSize;
+#ifdef VERIFIED_BOOT_LE_ARB
+    UINTN RollbackSize = VBLE_ROLLBACK_SIZE;
+    UINT32 RollbackValue = 0;
+#endif
     UINT8 *ImgHash = NULL;
-    UINTN ImgSize;
+    UINTN ImgSize = 0;
+    UINTN ActualImgSize = 0;
     VB_HASH HashAlgorithm;
     UINT8 *SigAddr = NULL;
     UINT32 SigSize = 0;
@@ -2034,6 +2009,14 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
         HashSize = VB_SHA256_SIZE;
         ImgSize = Info->Images[0].ImageSize;
         ImgHash = AllocateZeroPool (HashSize);
+#ifdef VERIFIED_BOOT_LE_ARB
+        /* Includes rollback index size as part of image size */
+        if (!avb_safe_add(&ActualImgSize, ImgSize, RollbackSize)) {
+            DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Integer overflow in ActualImgSize calculation\n"));
+            Status = EFI_BAD_BUFFER_SIZE;
+            return Status;
+        }
+#endif
         if (ImgHash == NULL) {
             DEBUG ((EFI_D_ERROR, 
                    "kernel image hash buffer allocation failed!\n"));
@@ -2042,14 +2025,29 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
         }
         Status = LEGetImageHash (QcomAsn1X509Protocal, HashAlgorithm,
                     (UINT8 *)Info->Images[0].ImageBuffer,
-                    ImgSize, ImgHash, HashSize);
+                    ActualImgSize, ImgHash, HashSize);
         if (Status != EFI_SUCCESS) {
             DEBUG ((EFI_D_ERROR, 
                    "VB: Error during VBGetImageHash: %r\n", Status));
             return Status;
         }
-    
-        SigAddr = (UINT8 *)Info->Images[0].ImageBuffer + ImgSize;
+
+#ifdef VERIFIED_BOOT_LE_ARB
+    /* Rollback value is appended at the end of boot image of VBLE_ROLLBACK_SIZE bytes */
+    if (ImgSize < RollbackSize) {
+        DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Image too small for rollback data\n"));
+        Status = EFI_BAD_BUFFER_SIZE;
+        return Status;
+    }
+    CopyMem((VOID *)&RollbackValue,
+            (VOID *)(Info->Images[0].ImageBuffer + ImgSize), RollbackSize);
+    Status = updateHLOSVersion(RollbackValue);
+    if (SecureDevice && (Status != EFI_SUCCESS)) {
+        DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Halting boot as updateHLOSVersion failed" ));
+        return Status;
+    }
+#endif
+        SigAddr = (UINT8 *)Info->Images[0].ImageBuffer + ActualImgSize;
         SigSize = LE_BOOTIMG_SIG_SIZE;
         Status = LEVerifyHashWithSignature (QcomAsn1X509Protocal, ImgHash,
         HashAlgorithm, &OemCert, SigAddr, SigSize);
