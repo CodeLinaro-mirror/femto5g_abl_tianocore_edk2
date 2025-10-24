@@ -21,4 +21,7 @@ static const unsigned int AllowedVbmetaSysPubKeysLen[] =
 static const unsigned int AllowedVbmetaSysPubKeyCount =
     sizeof(AllowedVbmetaSysPubKeys) / sizeof(AllowedVbmetaSysPubKeys[0]);
 
+/* Keep this same as target.mk */
+#define BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION 2
+
 #endif // __ALLOWED_VBMETA_SYS_PUBLIC_KEYS_H__
