@@ -27,9 +27,10 @@
 */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Technologies, Inc are provided
+ * under the following license:
  *
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc.
  * SPDX-License-Identifier: BSD-3-Clause-Clear.
  */
 
@@ -44,6 +45,7 @@
 #define IFACE_LEN      8
 #define SPEED_LEN      6
 #define QOSCFG_LEN     3
+#define WAIT_SWITCH_RDY_LEN     1
 
 /**
  *  Reads partition and try to extract IP addresses
@@ -54,7 +56,8 @@
 EFI_STATUS
 GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
                               CHAR8 *phyaddrbuf, CHAR8 *ifacebuf,
-                              CHAR8 *speedbuf, CHAR8 *qosbuf);
+                              CHAR8 *speedbuf, CHAR8 *qosbuf,
+                              CHAR8 *wait_switch_rdy_buf);
 
 BOOLEAN
 EarlyEthEnabled ();
