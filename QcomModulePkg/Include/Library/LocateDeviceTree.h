@@ -122,6 +122,7 @@
                    | ((num & 0x000000FF) << OEMID_MASK1) )
 #define TRUSTEDVM_ID 45
 #define OEMVM_ID 49
+#define MAX_QTVMS_SUPPORTED 2
 
 typedef enum {
   NONE_MATCH,

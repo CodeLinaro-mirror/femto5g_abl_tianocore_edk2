@@ -57,8 +57,13 @@
 #define SERIAL_NUM_SIZE 64
 
 #define MEM_OFF_SIZE 16
+#ifdef IOT_LOW_DDR_TARGET
+/* set minimum size to 3 GB */
+#define MEM_OFF_MIN 0xC0000000
+#else
 /* set minimum size to 6 GB */
 #define MEM_OFF_MIN 0x180000000
+#endif
 #define MB_SIZE 0x100000
 
 typedef struct BootInfo BootInfo;

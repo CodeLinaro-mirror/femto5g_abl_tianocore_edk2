@@ -28,6 +28,9 @@ fi
 if [ -n "${PVMFW_CONFIG_EXT}" ]; then
   MAKE_FLAGS+=("PVMFW_CONFIG_EXT=-DPVMFW_CONFIG_EXT")
 fi
+if [ -n "${PVMFW_REVERIFY}" ]; then
+  MAKE_FLAGS+=("PVMFW_REVERIFY=-DPVMFW_REVERIFY")
+fi
 if [ -n "${EARLY_ETH_ENABLED}" ]; then
   MAKE_FLAGS+=("EARLY_ETH_ENABLED=${EARLY_ETH_ENABLED}")
 fi
@@ -54,6 +57,9 @@ if [ -n "${VERITY_LE}" ]; then
 fi
 if [ -n "${WEAR_OS}" ]; then
   MAKE_FLAGS+=("WEAR_OS=${WEAR_OS}")
+fi
+if [ -n "${IOT_LOW_DDR_TARGET}" ]; then
+  MAKE_FLAGS+=("IOT_LOW_DDR_TARGET=${IOT_LOW_DDR_TARGET}")
 fi
 if [ -n "${USER_BUILD_VARIANT}" ]; then
   MAKE_FLAGS+=("USER_BUILD_VARIANT=${USER_BUILD_VARIANT}")

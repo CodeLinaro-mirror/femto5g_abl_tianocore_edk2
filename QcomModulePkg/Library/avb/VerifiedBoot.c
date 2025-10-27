@@ -27,9 +27,8 @@
  */
 
 /*
- * Changes from Qualcomm Innovation Center, Inc. are provided
- * under the following license:
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. 
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -43,6 +42,7 @@
 #include <Library/VerifiedBootMenu.h>
 #include <Library/LEOEMCertificate.h>
 #include "AvbPopulateBccParams.h"
+#include "AllowedVbmetaSysPublicKeys.h"
 
 STATIC CONST CHAR8 *VerityMode = " androidboot.veritymode=";
 STATIC CONST CHAR8 *VerifiedState = " androidboot.verifiedbootstate=";
@@ -1346,6 +1346,142 @@ out:
   return FALSE;
 }
 
+#ifdef PVMFW_REVERIFY
+STATIC EFI_STATUS ReverifyPvmfwImage (BootInfo *Info,
+                                      CONST CHAR8 *SlotSuffix,
+                                      AvbHashtreeErrorMode VerityFlags)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  AvbSlotVerifyResult Result;
+  CHAR8 *RequestedPartitionAll[MAX_NUM_REQ_PARTITION + 1] = {NULL};
+  CHAR8 **RequestedPartition = NULL;
+  UINTN NumRequestedPartition = 0;
+  AvbOpsUserData *UserData = NULL;
+  AvbSlotVerifyData *SlotData = NULL;
+  /*
+   * As part of pvmfw reverification, AVB errors should not be allowed.
+   * However, it is better to enforce this here instead of libavb due to
+   * nuances in handling GSI, hence passing allow_verification_error flag
+   * to libavb.
+   */
+  AvbSlotVerifyFlags VerifyFlags =
+        AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR;
+  AvbOps *Ops = NULL;
+  BOOLEAN UpdateRollbackIndex = FALSE;
+
+  RequestedPartition = RequestedPartitionAll;
+  AddRequestedPartition (RequestedPartitionAll, IMG_PVMFW);
+  NumRequestedPartition = NumRequestedPartition + 1;
+
+  UserData = avb_calloc (sizeof (AvbOpsUserData));
+  if (UserData == NULL) {
+    DEBUG ((EFI_D_ERROR, "ERROR: Failed to allocate AvbOpsUserData\n"));
+    Status = EFI_OUT_OF_RESOURCES;
+    goto out;
+  }
+
+  Ops = AvbOpsNew (UserData);
+  if (Ops == NULL) {
+    DEBUG ((EFI_D_ERROR, "ERROR: Failed to allocate AvbOps\n"));
+    Status = EFI_OUT_OF_RESOURCES;
+    goto out;
+  }
+  UserData->IsMultiSlot = Info->MultiSlotBoot;
+
+  Result = avb_slot_pvmfw_reverify (Ops,
+                                    (CONST CHAR8 *CONST *)RequestedPartition,
+                                    SlotSuffix, VerifyFlags, VerityFlags,
+                                    &SlotData);
+  /*
+   * Rollback index error from libavb can be ignored as it does not check
+   * the correct location. It will be checked later.
+   * Ideally, this can be handled in libavb, but will require modifying a lot
+   * of AOSP code.
+   */
+  if (Result != AVB_SLOT_VERIFY_RESULT_OK &&
+      Result != AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX) {
+    DEBUG ((EFI_D_ERROR,
+           "ERROR: Failed to reverify pvmfw, AvbSlotVerify returned %a\n",
+            avb_slot_verify_result_to_string (Result)));
+    Status = EFI_LOAD_ERROR;
+    goto out;
+  } else {
+    /*
+     * For known GSI keys, it is okay not to enforce RBI checks.
+     * However, if GSI images are resigned using OEM keys, then
+     * this check is moot and proper RBI injection should be taken
+     * care of while resigning GSI images.
+     */
+    if (!UserData->IsGsiKey) {
+      UpdateRollbackIndex = TRUE;
+      DEBUG ((EFI_D_INFO,
+             "VB2: UpdateRollbackIndex flag set for pvmfw images\n"));
+    }
+
+    // Yellow keys (User keys) are not supported for pvmfw reverification.
+    if (UserData->IsUserKey) {
+      DEBUG ((EFI_D_ERROR,
+             "ERROR: User keys not supported for pvmfw reverification\n"));
+      Status = EFI_LOAD_ERROR;
+      goto out;
+    }
+  }
+
+  if (UpdateRollbackIndex == TRUE) {
+    AvbIOResult AvbStatus = AVB_IO_RESULT_OK;
+    UINT64 CurrentVbmetaSysRbiVal = 0;
+    UINT64 StoredVbmetaSysRbiVal = 0;
+
+    /*
+     * Use index location 0 in the slotdata array as reverify api fills
+     * vbmeta_system RBI at the 0 index of slotdata in libavb
+     * (treated like the vbmeta image) */
+    CurrentVbmetaSysRbiVal = SlotData->rollback_indexes[0];
+    if (CurrentVbmetaSysRbiVal != 0) {
+      AvbStatus = Ops->read_rollback_index (Ops,
+                            BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION,
+                            &StoredVbmetaSysRbiVal);
+      if (AvbStatus == AVB_IO_RESULT_OK) {
+        if (StoredVbmetaSysRbiVal < CurrentVbmetaSysRbiVal) {
+          AvbStatus = Ops->write_rollback_index (Ops,
+                            BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION,
+                            CurrentVbmetaSysRbiVal);
+        } else if (StoredVbmetaSysRbiVal > CurrentVbmetaSysRbiVal) {
+          DEBUG ((EFI_D_ERROR,
+             "ERROR: vbmeta_system rbi (0x%x) than stored (0x%x)\n",
+              CurrentVbmetaSysRbiVal, StoredVbmetaSysRbiVal));
+          Status = EFI_LOAD_ERROR;
+          goto out;
+        }
+      }
+    }
+
+    if (AvbStatus == AVB_IO_RESULT_ERROR_OOM) {
+      Status = EFI_OUT_OF_RESOURCES;
+      goto out;
+    } else if (AvbStatus != AVB_IO_RESULT_OK) {
+      DEBUG ((EFI_D_ERROR, "Error getting rollback index for slot.\n"));
+      Status = EFI_DEVICE_ERROR;
+      goto out;
+    }
+    DEBUG ((EFI_D_INFO, "VB2: UpdateRollbackIndex done. \n"));
+  }
+
+out:
+  if (SlotData != NULL) {
+    avb_slot_verify_data_free (SlotData);
+  }
+  if (Ops != NULL) {
+    AvbOpsFree (Ops);
+  }
+
+  if (UserData) {
+    avb_free (UserData);
+  }
+
+  return Status;
+}
+#endif
 
 STATIC EFI_STATUS
 LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
@@ -1606,6 +1742,26 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
     DEBUG ((EFI_D_INFO, "VB2: UpdateRollbackIndex flag set \n"));
   }
 
+#ifdef PVMFW_REVERIFY
+  // PVMFW reverification is required only for unlocked devices.
+  if (IsUnlocked ()) {
+    if (Info->HasPvmFw) {
+      DEBUG ((EFI_D_INFO, "Reverifying pvmfw even if device is unlocked\n"));
+      Status = ReverifyPvmfwImage (Info, SlotSuffix, VerityFlags);
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Reverifying pvmfw was unsuccessful\n"));
+        Status = EFI_LOAD_ERROR;
+        Info->BootState = RED;
+        goto out;
+      } else {
+        DEBUG ((EFI_D_INFO, "Reverifying pvmfw was successful\n"));
+      }
+    } else {
+      DEBUG ((EFI_D_INFO, "No pvmfw, nothing to reverify\n"));
+    }
+  }
+
+#endif
   for (UINTN ReqIndex = 0; ReqIndex < NumRequestedPartition; ReqIndex++) {
     DEBUG ((EFI_D_VERBOSE, "Requested Partition: %a\n",
             RequestedPartition[ReqIndex]));
@@ -1822,8 +1978,8 @@ AuthQtvmDtboImg (BootInfo *Info)
   AvbHashtreeErrorMode VerityFlags =
       AVB_HASHTREE_ERROR_MODE_MANAGED_RESTART_AND_EIO;
   AvbSlotVerifyFlags VerifyFlags = AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION |
-      AllowVerificationError ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
-                             : AVB_SLOT_VERIFY_FLAGS_NONE;
+      (AllowVerificationError ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
+                             : AVB_SLOT_VERIFY_FLAGS_NONE);
 
   UserData = avb_calloc (sizeof (AvbOpsUserData));
   if (UserData == NULL) {
