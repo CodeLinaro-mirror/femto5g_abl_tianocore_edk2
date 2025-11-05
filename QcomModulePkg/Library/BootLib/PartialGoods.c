@@ -761,6 +761,13 @@ FindLabelAndUpdateProperty (VOID *fdt,
   CONST CHAR8 *Label, *LabelNodePath;
   INT32 SymbolsOffset = 0, NodeOffset = 0;
 
+  SymbolsOffset = FdtPathOffset (fdt, SymbolsDtNode);
+  if (SymbolsOffset < 0) {
+    DEBUG ((EFI_D_ERROR, "Failed to get Symbols node: %a\terror: %d\n",
+            SymbolsDtNode, SymbolsOffset));
+    return;
+  }
+
   for (i = 0; i < TableSz; i++, Table++) {
     if (!(Value & Table->Val)) {
       continue;
@@ -775,12 +782,6 @@ FindLabelAndUpdateProperty (VOID *fdt,
 
     LabelHandle = &(Table->LabelRef);
     Label = LabelHandle->LabelName;
-    SymbolsOffset = FdtPathOffset (fdt, SymbolsDtNode);
-    if (SymbolsOffset < 0) {
-      DEBUG ((EFI_D_ERROR, "Failed to get Symbols node: %a\terror: %d\n",
-              SymbolsDtNode, SymbolsOffset));
-      continue;
-    }
 
     LabelNodePath = fdt_getprop (fdt, SymbolsOffset, Label,
                                   &PropLen);
@@ -937,7 +938,9 @@ UpdatePartialGoodsNode (VOID *fdt)
   UINT32 PartialGoodsCPUTypeValue = 0;
   EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol;
   EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 SkuIdx = 0;
 
+  SkuIdx = BoardSoftSkuId ();
   Status = gBS->LocateProtocol (&gEfiChipInfoProtocolGuid, NULL,
                                 (VOID **)&pChipInfoProtocol);
   if (EFI_ERROR (Status))
@@ -974,6 +977,11 @@ UpdatePartialGoodsNode (VOID *fdt)
 
   DEBUG ((EFI_D_INFO, "PartialGoods Value: 0x%x\n",
               PartialGoodsCpuValue));
+
+  if ((SkuIdx == 1) &&
+      (PartialGoodsCpuValue == 0)) {
+        PartialGoodsCpuValue |= 0xc0;
+  }
 
   if (!PartialGoodsCpuValue) {
     return EFI_SUCCESS;
