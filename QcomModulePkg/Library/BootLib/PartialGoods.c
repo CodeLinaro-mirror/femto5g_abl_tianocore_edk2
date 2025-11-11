@@ -756,14 +756,7 @@ FindLabelAndUpdateProperty (VOID *fdt,
   CONST CHAR8 *Label, *LabelNodePath;
   INT32 SymbolsOffset = 0, NodeOffset = 0;
 
-    SymbolsOffset = FdtPathOffset (fdt, SymbolsDtNode);
-    if (SymbolsOffset < 0) {
-      DEBUG ((EFI_D_ERROR, "Failed to get Symbols node: %a\terror: %d\n",
-              SymbolsDtNode, SymbolsOffset));
-      return;
-    }
-
-    for (i = 0; i < TableSz; i++, Table++) {
+  for (i = 0; i < TableSz; i++, Table++) {
     if (!(Value & Table->Val)) {
       continue;
     }
@@ -777,11 +770,17 @@ FindLabelAndUpdateProperty (VOID *fdt,
 
     LabelHandle = &(Table->LabelRef);
     Label = LabelHandle->LabelName;
+    SymbolsOffset = FdtPathOffset (fdt, SymbolsDtNode);
+    if (SymbolsOffset < 0) {
+      DEBUG ((EFI_D_ERROR, "Failed to get Symbols node: %a\terror: %d\n",
+              SymbolsDtNode, SymbolsOffset));
+      continue;
+    }
 
     LabelNodePath = fdt_getprop (fdt, SymbolsOffset, Label,
                                   &PropLen);
     if (!LabelNodePath) {
-      //DEBUG ((EFI_D_ERROR, "Not a Valid Label: %a\n", Label));
+      DEBUG ((EFI_D_ERROR, "Not a Valid Label: %a\n", Label));
       continue;
     }
 
@@ -796,8 +795,8 @@ FindLabelAndUpdateProperty (VOID *fdt,
                       (CONST VOID *)LabelHandle->ReplaceStr,
                       AsciiStrLen (LabelHandle->ReplaceStr) + 1);
     if (!Ret) {
-      //DEBUG ((EFI_D_INFO, "Partial goods Label:(%a) status property disabled\n",
-      //        Label));
+      DEBUG ((EFI_D_INFO, "Partial goods Label:(%a) status property disabled\n",
+              Label));
     } else {
       DEBUG ((EFI_D_ERROR, "Failed to update property, Label:(%a) ret =%d \n",
               Label, Ret));
