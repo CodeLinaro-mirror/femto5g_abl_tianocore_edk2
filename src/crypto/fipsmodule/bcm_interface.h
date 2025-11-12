@@ -83,7 +83,7 @@ bcm_infallible BCM_rand_load_entropy(const uint8_t *entropy, size_t entropy_len,
 
 // BCM_rand_bytes is the same as the public |RAND_bytes| function, other
 // than returning a bcm_infallible status indicator.
-OPENSSL_EXPORT bcm_infallible BCM_rand_bytes(uint8_t *out, size_t out_len);
+bcm_infallible BCM_rand_bytes(uint8_t *out, size_t out_len);
 
 // BCM_rand_bytes_hwrng attempts to fill |out| with |len| bytes of entropy from
 // the CPU hardware random number generator if one is present.
@@ -252,6 +252,10 @@ OPENSSL_EXPORT bcm_status BCM_mldsa65_private_key_from_seed(
 OPENSSL_EXPORT bcm_status BCM_mldsa65_public_from_private(
     MLDSA65_public_key *out_public_key, const MLDSA65_private_key *private_key);
 
+// BCM_mldsa65_public_of_private returns the public half of |private_key|.
+const MLDSA65_public_key *BCM_mldsa65_public_of_private(
+    const MLDSA65_private_key *private_key);
+
 OPENSSL_EXPORT bcm_status
 BCM_mldsa65_check_key_fips(MLDSA65_private_key *private_key);
 
@@ -285,6 +289,11 @@ OPENSSL_EXPORT void BCM_mldsa65_prehash_finalize(
 OPENSSL_EXPORT bcm_status BCM_mldsa65_sign_message_representative(
     uint8_t out_encoded_signature[MLDSA65_SIGNATURE_BYTES],
     const MLDSA65_private_key *private_key,
+    const uint8_t msg_rep[MLDSA_MU_BYTES]);
+
+OPENSSL_EXPORT bcm_status BCM_mldsa65_verify_message_representative(
+    const MLDSA65_public_key *public_key,
+    const uint8_t signature[MLDSA65_SIGNATURE_BYTES],
     const uint8_t msg_rep[MLDSA_MU_BYTES]);
 
 OPENSSL_EXPORT bcm_status
@@ -321,6 +330,12 @@ OPENSSL_EXPORT bcm_status BCM_mldsa65_sign_internal(
     const uint8_t *context, size_t context_len,
     const uint8_t randomizer[BCM_MLDSA_SIGNATURE_RANDOMIZER_BYTES]);
 
+OPENSSL_EXPORT bcm_status BCM_mldsa65_sign_mu_internal(
+    uint8_t out_encoded_signature[MLDSA65_SIGNATURE_BYTES],
+    const MLDSA65_private_key *private_key,
+    const uint8_t msg_rep[MLDSA_MU_BYTES],
+    const uint8_t randomizer[BCM_MLDSA_SIGNATURE_RANDOMIZER_BYTES]);
+
 // BCM_mldsa5_verify_internal verifies that |encoded_signature| is a valid
 // signature of |msg| by |public_key|. The |context_prefix| and |context| are
 // prefixed to the message before verification, in that order.
@@ -334,6 +349,11 @@ OPENSSL_EXPORT bcm_status BCM_mldsa65_verify_internal(
 // NIST format for ML-DSA-65 private keys.
 OPENSSL_EXPORT bcm_status BCM_mldsa65_marshal_private_key(
     CBB *out, const MLDSA65_private_key *private_key);
+
+// BCM_mldsa65_public_keys_equal returns one if |a| and |b| are equal and zero
+// otherwise.
+int BCM_mldsa65_public_keys_equal(const MLDSA65_public_key *a,
+                                  const MLDSA65_public_key *b);
 
 
 // BCM_MLDSA87_PRIVATE_KEY_BYTES is the number of bytes in an encoded ML-DSA-87
@@ -349,6 +369,10 @@ OPENSSL_EXPORT bcm_status BCM_mldsa87_private_key_from_seed(
 
 OPENSSL_EXPORT bcm_status BCM_mldsa87_public_from_private(
     MLDSA87_public_key *out_public_key, const MLDSA87_private_key *private_key);
+
+// BCM_mldsa87_public_of_private returns the public half of |private_key|.
+const MLDSA87_public_key *BCM_mldsa87_public_of_private(
+    const MLDSA87_private_key *private_key);
 
 OPENSSL_EXPORT bcm_status
 BCM_mldsa87_check_key_fips(MLDSA87_private_key *private_key);
@@ -385,6 +409,11 @@ OPENSSL_EXPORT bcm_status BCM_mldsa87_sign_message_representative(
     const MLDSA87_private_key *private_key,
     const uint8_t msg_rep[MLDSA_MU_BYTES]);
 
+OPENSSL_EXPORT bcm_status BCM_mldsa87_verify_message_representative(
+    const MLDSA87_public_key *public_key,
+    const uint8_t signature[MLDSA87_SIGNATURE_BYTES],
+    const uint8_t msg_rep[MLDSA_MU_BYTES]);
+
 OPENSSL_EXPORT bcm_status
 BCM_mldsa87_marshal_public_key(CBB *out, const MLDSA87_public_key *public_key);
 
@@ -419,6 +448,12 @@ OPENSSL_EXPORT bcm_status BCM_mldsa87_sign_internal(
     const uint8_t *context, size_t context_len,
     const uint8_t randomizer[BCM_MLDSA_SIGNATURE_RANDOMIZER_BYTES]);
 
+OPENSSL_EXPORT bcm_status BCM_mldsa87_sign_mu_internal(
+    uint8_t out_encoded_signature[MLDSA87_SIGNATURE_BYTES],
+    const MLDSA87_private_key *private_key,
+    const uint8_t msg_rep[MLDSA_MU_BYTES],
+    const uint8_t randomizer[BCM_MLDSA_SIGNATURE_RANDOMIZER_BYTES]);
+
 // BCM_mldsa87_verify_internal verifies that |encoded_signature| is a valid
 // signature of |msg| by |public_key|. The |context_prefix| and |context| are
 // prefixed to the message before verification, in that order.
@@ -433,6 +468,11 @@ OPENSSL_EXPORT bcm_status BCM_mldsa87_verify_internal(
 OPENSSL_EXPORT bcm_status BCM_mldsa87_marshal_private_key(
     CBB *out, const MLDSA87_private_key *private_key);
 
+// BCM_mldsa87_public_keys_equal returns one if |a| and |b| are equal and zero
+// otherwise.
+int BCM_mldsa87_public_keys_equal(const MLDSA87_public_key *a,
+                                  const MLDSA87_public_key *b);
+
 // BCM_MLDSA44_PRIVATE_KEY_BYTES is the number of bytes in an encoded ML-DSA-44
 // private key.
 #define BCM_MLDSA44_PRIVATE_KEY_BYTES 2560
@@ -446,6 +486,10 @@ OPENSSL_EXPORT bcm_status BCM_mldsa44_private_key_from_seed(
 
 OPENSSL_EXPORT bcm_status BCM_mldsa44_public_from_private(
     MLDSA44_public_key *out_public_key, const MLDSA44_private_key *private_key);
+
+// BCM_mldsa44_public_of_private returns the public half of |private_key|.
+const MLDSA44_public_key *BCM_mldsa44_public_of_private(
+    const MLDSA44_private_key *private_key);
 
 OPENSSL_EXPORT bcm_status
 BCM_mldsa44_check_key_fips(MLDSA44_private_key *private_key);
@@ -482,6 +526,11 @@ OPENSSL_EXPORT bcm_status BCM_mldsa44_sign_message_representative(
     const MLDSA44_private_key *private_key,
     const uint8_t msg_rep[MLDSA_MU_BYTES]);
 
+OPENSSL_EXPORT bcm_status BCM_mldsa44_verify_message_representative(
+    const MLDSA44_public_key *public_key,
+    const uint8_t signature[MLDSA44_SIGNATURE_BYTES],
+    const uint8_t msg_rep[MLDSA_MU_BYTES]);
+
 OPENSSL_EXPORT bcm_status
 BCM_mldsa44_marshal_public_key(CBB *out, const MLDSA44_public_key *public_key);
 
@@ -516,6 +565,12 @@ OPENSSL_EXPORT bcm_status BCM_mldsa44_sign_internal(
     const uint8_t *context, size_t context_len,
     const uint8_t randomizer[BCM_MLDSA_SIGNATURE_RANDOMIZER_BYTES]);
 
+OPENSSL_EXPORT bcm_status BCM_mldsa44_sign_mu_internal(
+    uint8_t out_encoded_signature[MLDSA44_SIGNATURE_BYTES],
+    const MLDSA44_private_key *private_key,
+    const uint8_t msg_rep[MLDSA_MU_BYTES],
+    const uint8_t randomizer[BCM_MLDSA_SIGNATURE_RANDOMIZER_BYTES]);
+
 // BCM_mldsa44_verify_internal verifies that |encoded_signature| is a valid
 // signature of |msg| by |public_key|. The |context_prefix| and |context| are
 // prefixed to the message before verification, in that order.
@@ -529,6 +584,11 @@ OPENSSL_EXPORT bcm_status BCM_mldsa44_verify_internal(
 // NIST format for ML-DSA-44 private keys.
 OPENSSL_EXPORT bcm_status BCM_mldsa44_marshal_private_key(
     CBB *out, const MLDSA44_private_key *private_key);
+
+// BCM_mldsa44_public_keys_equal returns one if |a| and |b| are equal and zero
+// otherwise.
+int BCM_mldsa44_public_keys_equal(const MLDSA44_public_key *a,
+                                  const MLDSA44_public_key *b);
 
 
 // ML-KEM
@@ -797,26 +857,24 @@ OPENSSL_EXPORT bcm_status BCM_slhdsa_sha2_128s_prehash_verify(
 
 // BCM_aes_encrypt encrypts a single block from |in| to |out| with |key|. The
 // |in| and |out| pointers may overlap.
-OPENSSL_EXPORT bcm_infallible BCM_aes_encrypt(const uint8_t *in, uint8_t *out,
-                                              const AES_KEY *key);
+bcm_infallible BCM_aes_encrypt(const uint8_t *in, uint8_t *out,
+                               const AES_KEY *key);
 // BCM_aes_decrypt decrypts a single block from |in| to |out| with |key|. The
 // |in| and |out| pointers may overlap.
-OPENSSL_EXPORT bcm_infallible BCM_aes_decrypt(const uint8_t *in, uint8_t *out,
-                                              const AES_KEY *key);
+bcm_infallible BCM_aes_decrypt(const uint8_t *in, uint8_t *out,
+                               const AES_KEY *key);
 
 // BCM_aes_set_encrypt_key configures |aeskey| to encrypt with the |bits|-bit
 // key, |key|. |key| must point to |bits|/8 bytes. It will return failure if
 // |bits| is an invalid AES key size.
-OPENSSL_EXPORT bcm_status BCM_aes_set_encrypt_key(const uint8_t *key,
-                                                  unsigned bits,
-                                                  AES_KEY *aeskey);
+bcm_status BCM_aes_set_encrypt_key(const uint8_t *key, unsigned bits,
+                                   AES_KEY *aeskey);
 
 // BCM_aes_set_decrypt_key configures |aeskey| to decrypt with the |bits|-bit
 // key, |key|. |key| must point to |bits|/8 bytes. It will return failure if
 // |bits| is an invalid AES key size.
-OPENSSL_EXPORT bcm_status BCM_aes_set_decrypt_key(const uint8_t *key,
-                                                  unsigned bits,
-                                                  AES_KEY *aeskey);
+bcm_status BCM_aes_set_decrypt_key(const uint8_t *key, unsigned bits,
+                                   AES_KEY *aeskey);
 
 
 #if defined(__cplusplus)
