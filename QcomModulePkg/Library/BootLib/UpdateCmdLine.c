@@ -167,6 +167,16 @@ STATIC CHAR8 *MemOff = " mem=";
 STATIC CONST CHAR8 *MemHpState = " memhp_default_state=online";
 STATIC CONST CHAR8 *MovableNode = " movable_node";
 
+#ifdef ENABLE_CHECK_MTE
+/* Memory tagging arguments */
+#ifdef EXCLUSIVE_SME_MTE
+STATIC CONST CHAR8 *KasanOn = " kasan=on kasan.mode=asymm arm64.nosme";
+STATIC CONST CHAR8 *NoSME = " arm64.nosme";
+#else
+STATIC CONST CHAR8 *KasanOn =" kasan=on kasan.mode=asymm";
+#endif
+#endif
+
 STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 LIST_ENTRY *BootConfigListHead = NULL;
@@ -1086,6 +1096,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     }
   }
 
+  if (Param->MTECmdLine != NULL) {
+    Src = Param->MTECmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
   return EFI_SUCCESS;
 }
 CHAR8* RemoveSpace (CHAR8* param, UINT32 ParamLen)
@@ -1392,6 +1407,9 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 **FinalBootConfig = &BootParamlistPtr->FinalBootConfig;
   UINT32 *FinalBootConfigLen = &BootParamlistPtr->FinalBootConfigLen;
   VOID *fdt = (VOID *)BootParamlistPtr->DeviceTreeLoadAddr;
+#ifdef ENABLE_CHECK_MTE
+  UINT32 Memtags = 0;
+#endif
 
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
   if (BootConfigListHead == NULL) {
@@ -1834,6 +1852,26 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   } else {
     Param.MemOffAmt = NULL;
   }
+
+#ifdef ENABLE_CHECK_MTE
+  if (GetMemtagMode(&Memtags) == EFI_SUCCESS) {
+    if (Memtags &
+        (MISC_MEMTAG_MODE_MEMTAG_KERNEL |
+          MISC_MEMTAG_MODE_MEMTAG_KERNEL_ONCE)) {
+      Param.MTECmdLine = KasanOn;
+      CmdLineLen += AsciiStrLen (Param.MTECmdLine);
+    } else {
+#ifdef EXCLUSIVE_SME_MTE
+      Param.MTECmdLine = NoSME;
+      CmdLineLen += AsciiStrLen (Param.MTECmdLine);
+#else
+      Param.MTECmdLine = NULL;
+#endif
+    }
+  }
+#else
+  Param.MTECmdLine = NULL;
+#endif
 
   if (Update_PartialGoods_Bootconfig (HeaderVersion, &CmdLineLen,
       &BootConfigLen) != EFI_SUCCESS) {

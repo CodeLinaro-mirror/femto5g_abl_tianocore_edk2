@@ -16,6 +16,8 @@ PVMFW_CONFIG_EXT=1
 # Uncomment to enable pvmfw reverification
 # PVMFW_REVERIFY=1
 CHECK_CPU_FREQ_MITIGATION=1
+ENABLE_CHECK_MTE=1
+EXCLUSIVE_SME_MTE=1
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common
