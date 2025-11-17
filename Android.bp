@@ -82,6 +82,7 @@ cc_defaults {
         "cc_baremetal_defaults",
     ],
     apex_available: [
+        "com.android.compos",
         "com.android.virt",
     ],
 }
@@ -481,6 +482,7 @@ cc_library {
         "//apex_available:platform",
         "com.android.adbd",
         "com.android.bt",
+        "com.android.compos",
         "com.android.configinfrastructure",
         "com.android.conscrypt",
         "com.android.resolv",
@@ -770,6 +772,7 @@ rust_bindgen {
     min_sdk_version: "29",
     apex_available: [
         "//apex_available:platform",
+        "com.android.compos",
         "com.android.configinfrastructure",
         "com.android.virt",
     ],
@@ -788,6 +791,7 @@ cc_library_static {
     min_sdk_version: "29",
     apex_available: [
         "//apex_available:platform",
+        "com.android.compos",
         "com.android.configinfrastructure",
         "com.android.virt",
     ],
@@ -886,6 +890,7 @@ rust_library_rlib {
     min_sdk_version: "29",
     apex_available: [
         "//apex_available:platform",
+        "com.android.compos",
         "com.android.configinfrastructure",
         "com.android.virt",
     ],
@@ -947,6 +952,7 @@ rust_library {
     host_supported: true,
     apex_available: [
         "//apex_available:platform",
+        "com.android.compos",
         "com.android.virt",
     ],
     vendor_available: true,
