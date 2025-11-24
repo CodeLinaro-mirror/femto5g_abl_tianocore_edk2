@@ -49,10 +49,9 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-/* Changes from Qualcomm Innovation Center are provided under the following
- * license:
+/* ​​​​​Changes from Qualcomm Technologies, Inc. are provided under the following license:
  *
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -63,6 +62,10 @@
 #include <Protocol/EFIScm.h>
 #include <Protocol/scm_sip_interface.h>
 #include "PartitionTableUpdate.h"
+
+#include "../SmciInvokeUtils.h"
+#include "../CUpdateRollbackVersion.h"
+#include "../IUpdateRollbackVersion.h"
 
 #define SECBOOT_FUSE 0
 #define SHK_FUSE 1
@@ -763,6 +766,68 @@ bool avb_should_update_rollback(bool is_multi_slot) {
   return update_rollback_index;
 }
 
+/* This API triggers UpdateRollback Syscall from Rollback Syscall Service*/
+static EFI_STATUS
+ARBSycall (VOID)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  STATIC Object ServiceClientObj = Object_NULL;
+  STATIC Object ClientEnvObj = Object_NULL;
+  STATIC QCOM_SCM_PROTOCOL *pQcomScmProtocol = NULL;
+
+  if (pQcomScmProtocol == NULL) {
+    // Locate QCOM_SCM_PROTOCOL.
+    Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL,
+                                  (VOID **)&pQcomScmProtocol);
+     DEBUG ((EFI_D_ERROR, "ARBSyscall LocateProtocol Status: (0x%x)\r\n", Status));
+    if (Status != EFI_SUCCESS || (pQcomScmProtocol == NULL)) {
+      DEBUG ((EFI_D_ERROR,
+              "ARBSycall: Locate SCM Protocol failed, Status: (0x%x)\n",
+              Status));
+      return Status;
+    }
+  }
+
+  if (Object_isNull (ClientEnvObj)) {
+    Status =
+        pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
+    DEBUG ((EFI_D_ERROR, "ARBSyscall ScmGetClientEnv Status: (0x%x)\r\n", Status));
+    if (Object_isERROR (Status) || Object_isNull (ClientEnvObj)) {
+      DEBUG ((EFI_D_ERROR,
+              "ARBSycall: Failed to get Client Env, Status: (0x%x)\n", Status));
+      goto out;
+    }
+  }
+
+  if (Object_isNull (ServiceClientObj)) {
+    Status = IClientEnvOpen (ClientEnvObj, CUpdateRollbackVersion_UID,
+                             &ServiceClientObj);
+    DEBUG ((EFI_D_ERROR, "ARBSyscall IClientEnvOpen Status: (0x%x)\r\n", Status));
+    if (Object_isERROR (Status) || Object_isNull (ServiceClientObj)) {
+      DEBUG (
+          (EFI_D_ERROR,
+           "ARBSycall: Failed to get Service Client, Status: (0x%x) UID=%d\n",
+           Status, CUpdateRollbackVersion_UID));
+      goto out;
+    }
+  }
+
+  /* Trigger UpdateollbackSyscall*/
+  Status = IUpdateRollbackVersion_updateRollbackVersion (ServiceClientObj);
+  DEBUG ((EFI_D_ERROR, "ARBSyscall IUpdateRollbackVersion_updateRollbackVersion Status: (0x%x)\r\n", Status));
+  if (Object_isERROR (Status)) {
+    DEBUG ((EFI_D_ERROR,
+            "ARBSycall: Failed to get Service Client Object, Status: (0x%x)\n",
+            Status));
+  }
+
+  Object_ASSIGN_NULL (ServiceClientObj);
+out:
+  Object_ASSIGN_NULL (ClientEnvObj);
+
+  return Status;
+}
+
 EFI_STATUS UpdateRollbackSyscall ()
 {
   EFI_STATUS Status = EFI_SUCCESS;
@@ -776,10 +841,10 @@ EFI_STATUS UpdateRollbackSyscall ()
 
   // Locate QCOM_SCM_PROTOCOL.
   Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL,
-                               (VOID **)&pQcomScmProtocol);
+                              (VOID **)&pQcomScmProtocol);
   if (Status != EFI_SUCCESS || (pQcomScmProtocol == NULL)) {
     DEBUG ((EFI_D_ERROR, "UpdateRollbackSyscall: Locate SCM Status: (0x%x)\r\n",
-             Status));
+            Status));
     Status = EFI_FAILURE;
     return Status;
   }
@@ -809,34 +874,47 @@ EFI_STATUS UpdateRollbackSyscall ()
                  pQcomScmProtocol, TZ_UPDATE_ROLLBACK_VERSION_ID,
                  TZ_UPDATE_ROLLBACK_VERSION_ID_PARAM_ID, Parameters, Results);
 
-        if (Status != EFI_SUCCESS) {
+        if(Status == EFI_UNSUPPORTED){
+            Status = ARBSycall();
+            if (Status != EFI_SUCCESS) {
+            DEBUG((EFI_D_ERROR, "UpdateRollbackSyscall: SMCI Status: (0x%x)\r\n", Status));
+            Status = EFI_FAILURE;
+            }
+        }
+        else if (Status != EFI_SUCCESS) {
             DEBUG ((EFI_D_ERROR, "UpdateRollbackSyscall: ScmCall Status:"
                     " (0x%x)\r\n", Status));
             Status = EFI_FAILURE;
-            return Status;
         }
-        if (SysCallRsp->status != 1) {
+        else if (SysCallRsp->status != 1) {
             Status = SysCallRsp->status;
-            DEBUG ((EFI_D_ERROR, "TZ_UPDATE_ROLLBACK_VERSION_ID"
-                    " failed, Status = (0x%x)\r\n", Status));
+            DEBUG ((EFI_D_ERROR,
+                     "TZ_UPDATE_ROLLBACK_VERSION_ID"
+                     " failed, Status = (0x%x)\r\n",
+                     Status));
             return Status;
         }
-    } else if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "UpdateRollbackSyscall: ScmCall Status:"
-                " (0x%x)\r\n", Status));
-        Status = EFI_FAILURE;
-        return Status;
     }
-    if (SysCallRsp->status != 1) {
-      Status = SysCallRsp->status;
-      DEBUG ((EFI_D_ERROR,
-              "TZ_UPDATE_ROLLBACK_VERSION_IF_A_B_PARTITION_FEATURE_ENABLED_ID"
-              " failed, Status = (0x%x)\r\n", Status));
-      return Status;
+    else{
+        if (Status != EFI_SUCCESS) {
+             DEBUG ((EFI_D_ERROR,
+                      "UpdateRollbackSyscall: ScmCall Status:"
+                      " (0x%x)\r\n",
+                      Status));
+            Status = EFI_FAILURE;
+            return Status;
+        }
+        else if (SysCallRsp->status != 1) {
+          Status = SysCallRsp->status;
+          DEBUG ((EFI_D_ERROR,
+                    "TZ_UPDATE_ROLLBACK_VERSION_IF_A_B_PARTITION_FEATURE_ENABLED_ID"
+                    " failed, Status = (0x%x)\r\n", Status));
+          return Status;
+        }
+      }
     }
-  } else {
-      DEBUG ((EFI_D_WARN,
-              "UpdateRollbackSyscall: Older TZ, skipping update\n"));
-  }
-  return Status;
+    else {
+        DEBUG((EFI_D_WARN, "UpdateRollbackSyscall: Older TZ, skipping update\n"));
+    }
+    return Status;
 }
