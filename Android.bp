@@ -939,6 +939,10 @@ rust_defaults {
     features: ["std"],
     srcs: ["src/rust/bssl-crypto/src/lib.rs"],
     rustlibs: ["libbssl_sys"],
+    no_std: {
+        features: [],
+        enabled: true,
+    },
 }
 
 rust_library {
