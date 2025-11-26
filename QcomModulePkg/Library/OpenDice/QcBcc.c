@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -14,7 +14,7 @@
 #include <dice/ops/trait/cose.h>
 #include <dice/utils.h>
 
-#include "../avb/SmciInvokeUtils.h"
+#include "SmciInvokeUtils.h"
 #include "CRkpBCC.h"
 #include "IRkpBCC.h"
 #include <Protocol/EFIScm.h>
