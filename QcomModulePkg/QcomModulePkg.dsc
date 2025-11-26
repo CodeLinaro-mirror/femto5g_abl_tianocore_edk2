@@ -154,6 +154,9 @@
   !if $(BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL) == 1
       GCC:*_*_*_CC_FLAGS = -DBOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
   !endif
+  !if $(LV_GVM_KM_VIRT) == 1
+      GCC:*_*_*_CC_FLAGS = -DLV_GVM_KM_VIRT
+  !endif
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
