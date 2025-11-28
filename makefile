@@ -76,6 +76,18 @@ ABL_FV_IMG := $(BUILD_ROOT)/FV/abl.fv
 ABL_FV_ELF := $(BOOTLOADER_OUT)/../../unsigned_abl.elf
 SHELL:=/bin/bash
 
+# Override toolchain for sdxecho
+ifeq ($(BOOTLOADER_PLATFORM), sdxecho)
+TARGET_TOOLS := GCC13
+TARGET := DEBUG
+BUILD_ROOT := $(ABL_OUT)/$(TARGET)_$(TARGET_TOOLS)
+EDK_TOOLS := $(BUILDDIR)/BaseTools
+EDK_TOOLS_BIN := $(EDK_TOOLS)/Source/C/bin
+ABL_FV_IMG := $(BUILD_ROOT)/FV/abl.fv
+ABL_FV_ELF := $(BOOTLOADER_OUT)/../unsigned_abl.elf
+SHELL:=/bin/bash
+endif
+
 EDK_TOOLS_SRC_FILE := $(shell find $(EDK_TOOLS) -name "*" -type f)
 EDK_TOOLS_PATH_MARK_FILE := $(ABL_OUT)/BaseTools_Mark
 EDK_TOOLS_GENERATE_CLEAN := $(ABL_OUT)/BaseTools_Clean
