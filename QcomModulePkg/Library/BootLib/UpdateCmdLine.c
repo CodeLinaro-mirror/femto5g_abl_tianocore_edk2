@@ -88,8 +88,6 @@ STATIC CONST CHAR8 *MdtpActiveFlag = " mdtp";
 STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
 STATIC CHAR8 SystemdSlotEnv[] = " systemd.setenv=\"SLOT_SUFFIX=_a\"";
 STATIC CONST CHAR8 *NoPasr = " mem_offline.nopasr=1";
-STATIC CONST CHAR8 *DefaultGovernor = " cpufreq.default_governor=powersave";
-STATIC CONST CHAR8 *BCLBootFrequency = " bcl_soc.boot_frequency=1017600";
 /*Silent Boot Mode */
 STATIC CHAR8 *SilentBootEnbCmdLine =
                            " silent_boot.mode=silent";
@@ -170,39 +168,6 @@ STATIC CONST CHAR8 *MovableNode = " movable_node";
 STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 LIST_ENTRY *BootConfigListHead = NULL;
-
-/**
-  Check if cpu frequency needs to be capped.
-  This is needed in case battery voltage is low and a slow charger is connected.
-  @retval     BOOLEAN           Whether cpu freq mitigation is required or not.
-**/
-BOOLEAN
-TargetCheckIsCpuFreqMitigationReq()
-{
-  EFI_STATUS Status;
-  EFI_CHARGER_EX_PROTOCOL *ChgDetectProtocol;
-  BOOLEAN MitigateCpuFreq = FALSE;
-
-  Status = gBS->LocateProtocol (&gChargerExProtocolGuid, NULL,
-                                (VOID **)&ChgDetectProtocol);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "Error locating charger detect protocol: %r\n", Status));
-    return FALSE;
-  }
-
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_1004) {
-    Status = ChgDetectProtocol->IsCpuFreqMitigationReq(&MitigateCpuFreq);
-    if (EFI_ERROR(Status)) {
-      DEBUG ((EFI_D_ERROR, "Error checking for cpu frequency mitigation requirement: %r\n", Status));
-      return FALSE;
-    }
-
-    return MitigateCpuFreq;
-  }
-
-  return FALSE;
-}
-
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
 {
@@ -920,13 +885,6 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
   Src = Param->GpuCmdLine;
   AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
-  if (TargetCheckIsCpuFreqMitigationReq()) {
-    Src = DefaultGovernor;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-    Src = BCLBootFrequency;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-  }
-
   if (Param->MdtpActive) {
     Src = Param->MdtpActiveFlag;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
@@ -1479,22 +1437,6 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                      BootConfigListHead, ParamLen, AsciiStrLen (StrSerialNum));
   ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (StrSerialNum), CmdLineLen,
                                        BootConfigLen);
-  if (TargetCheckIsCpuFreqMitigationReq()) {
-    ParamLen = AsciiStrLen (DefaultGovernor);
-    BootConfigFlag = IsAndroidBootParam (DefaultGovernor,
-                                ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
-                                        BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, DefaultGovernor, NULL,
-                      BootConfigListHead, ParamLen, 0);
-    ParamLen = AsciiStrLen (BCLBootFrequency);
-    BootConfigFlag = IsAndroidBootParam (BCLBootFrequency,
-                                ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
-                                        BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, BCLBootFrequency, NULL,
-                      BootConfigListHead, ParamLen, 0);
-  }
 
   /* Ignore the EFI_STATUS return value as the default Battery Status = 0 and is
    * not fatal */

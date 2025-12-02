@@ -183,7 +183,4 @@ AddtoBootConfigList (BOOLEAN BootConfigFlag,
 
 UINT32
 GetResumeCmdLine (CHAR8 **ResumeCmdLine, CHAR16 *ReqPartition);
-
-BOOLEAN
-TargetCheckIsCpuFreqMitigationReq();
 #endif
