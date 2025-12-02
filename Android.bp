@@ -858,6 +858,7 @@ rust_defaults {
     visibility: [
         "//external/rust/crates/openssl",
         "//external/rust/android-crates-io/crates/tokio-openssl",
+        "//external/rust/android-crates-io/crates/aws-lc-rs",
         "//system/gatekeeper/rust/boringssl",
         "//system/keymint/boringssl",
         "//system/security/prng_seeder",
