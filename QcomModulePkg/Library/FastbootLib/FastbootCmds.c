@@ -47,39 +47,9 @@ found at
 */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include <Library/BaseLib.h>
@@ -750,10 +720,11 @@ WriteUbiRawChunk (SparseImgParam *SparseImgData,
   EFI_STATUS Status;
   UbiHeader_t *UbiHeader;
 
-  /* Determine how much to copy
-     1. chunk size if fits in buffer
-     2. if bigger, then till end of buffer
-  */
+  /*
+   * Determine how much to copy
+   * 1) The entire chunk 'Size' if it fits in the remaining space
+   * 2) Otherwise, fill the buffer, and compute the remainder
+   */
   DEBUG ((EFI_D_VERBOSE, "CSz:%d BytesWritten:%d\n", Size,
           BufferInfo->BytesWritten));
   if (BufferInfo->BytesWritten + Size <= BufferSize) {
@@ -765,34 +736,30 @@ WriteUbiRawChunk (SparseImgParam *SparseImgData,
             SparseImgData->ChunkDataSz, Remaining));
   }
 
-  /* Copy Chunk */
+  /* Copy the first piece into the UBI staging buffer */
   gBS->CopyMem (BufferInfo->Buffer + BufferInfo->BytesWritten, Image, CopySize);
   BufferInfo->BytesWritten += CopySize;
 
-  /* Validate Ubi header */
+  /* Validate UBI header at the start of the overall input buffer */
   UbiHeader = SparseImgData->UbiInputBufferInfo.Buffer;
   if (AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
     DEBUG ((EFI_D_ERROR, "Corrupt UBI magic!\n"));
     return EFI_VOLUME_CORRUPTED;
   }
 
-  /* Three  possibilites :
-     Case 0. We are writing last chunk
-     Case 1. Buffer is not full. So, process next chunk
-     Case 2. Buffer is full & nothing left in current chunk,
-     So write to storage and process next chunk
-     Case 3. Buffer is full & more to be written.
-     So, write to storage and copy excess into the buffer.
-     Then process next chunk.
-  */
-
-  /* Case 0 :  Last chunk */
+  /*
+   * Case 0: If this is the last chunk, we may need to flush a partial frame
+   * by making BufferSize reflect actual pending data.
+   */
   if (LastChunk) {
     BufferSize = (BufferInfo->BytesWritten);
   }
 
-  /* Case 1 : Nothing to do if the buffer is not filled */
-  if (BufferInfo->BytesWritten != BufferSize)  {
+  /*
+   * Case 1: If the buffer isn't full yet, nothing to write now.
+   * We'll accumulate more data on the next call.
+   */
+  if (BufferInfo->BytesWritten != BufferSize) {
     return EFI_SUCCESS;
   }
 
@@ -810,25 +777,65 @@ WriteUbiRawChunk (SparseImgParam *SparseImgData,
 
   BufferInfo->BytesWritten = 0;
 
-  /* Case 2 : No excess data */
+  /* Case 2: No excess data from this chunk */
   if (!Remaining) {
     return EFI_SUCCESS;
   }
 
-  /* Case 3: Excess data */
+  /*
+   * Case 3: Excess data remains from this RAW chunk.
+   * Stream it safely in buffer-sized pieces, writing a frame whenever full.
+   */
   Image = (CHAR8 *) Image + CopySize;
-  UbiHeader = Image;
+  UbiHeader = (UbiHeader_t *)Image;
   if (AsciiStrnCmp (UbiHeader->HdrMagic, UBI_HEADER_MAGIC, 4)) {
     DEBUG ((EFI_D_ERROR, "R: Corrupt UBI magic!\n"));
   }
 
-  gBS->CopyMem (BufferInfo->Buffer, Image, Remaining);
-  BufferInfo->BytesWritten = Remaining;
+  while (Remaining > 0) {
+    UINT64 Space  = BufferInfo->Size - BufferInfo->BytesWritten;
+    UINT64 ToCopy = (Remaining < Space) ? Remaining : Space;
 
-  /* TODO for buffer chunk  */
-  while (Remaining > BufferSize) {
-    DEBUG ((EFI_D_ERROR, "Need bigger buffer than %d only have %d!\n"
-            "Currently not supported\n", Remaining, BufferSize));
+    /* Copy only what fits into the staging buffer */
+    gBS->CopyMem (BufferInfo->Buffer + BufferInfo->BytesWritten, Image, ToCopy);
+    BufferInfo->BytesWritten += ToCopy;
+    Image     = (CHAR8 *)Image + ToCopy;
+    Remaining -= ToCopy;
+
+    /* If the buffer is now full, emit a frame */
+    if (BufferInfo->BytesWritten == BufferInfo->Size) {
+      Flasher->UbiFrameNo += 1;
+      Status = Flasher->Ubi->UbiFlasherWrite (Flasher->UbiFlasherHandle,
+                                              Flasher->UbiFrameNo,
+                                              BufferInfo->Buffer,
+                                              BufferInfo->Size);
+      DEBUG ((EFI_D_VERBOSE, "flashwriter(stream): buffer:%p frame:%d ret %d\n",
+              BufferInfo->Buffer, Flasher->UbiFrameNo, Status));
+      if (EFI_ERROR (Status)) {
+        return Status;
+      }
+      BufferInfo->BytesWritten = 0;
+    }
+  }
+
+  /*
+   * If this was the last chunk overall and we still have a partial frame
+   * pending,flush it now so the UBI flasher receives the final tail.
+   */
+  if (LastChunk &&
+      BufferInfo->BytesWritten > 0) {
+    Flasher->UbiFrameNo += 1;
+    Status = Flasher->Ubi->UbiFlasherWrite (Flasher->UbiFlasherHandle,
+                                            Flasher->UbiFrameNo,
+                                            BufferInfo->Buffer,
+                                            BufferInfo->BytesWritten);
+    DEBUG ((EFI_D_VERBOSE,
+        "flashwriter(final-tail): buffer:%p frame:%d ret %d\n",
+        BufferInfo->Buffer, Flasher->UbiFrameNo, Status));
+    if (EFI_ERROR (Status)) {
+      return Status;
+    }
+    BufferInfo->BytesWritten = 0;
   }
 
   return EFI_SUCCESS;
@@ -1488,6 +1495,48 @@ HandleUbiVolFlash (
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Failed to write UBI volume\n"));
   }
+
+  Status = Ubi->UbiFlasherClose (UbiFlasherHandle);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to close UBI volume\n"));
+    return Status;
+  }
+
+  return Status;
+}
+
+/* UBI Volume Erase */
+STATIC
+EFI_STATUS
+HandleUbiVolErase (
+  IN CHAR16  *VolumeName, IN UINT32 VolumeMaxSize)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 UbiPageSize;
+  UINT32 UbiBlockSize;
+  EFI_UBI_FLASHER_PROTOCOL *Ubi;
+  UBI_FLASHER_HANDLE UbiFlasherHandle;
+  CHAR8 VolumeNameAscii[MAX_GPT_NAME_SIZE] = {'\0'};
+
+  Status = gBS->LocateProtocol (&gEfiUbiFlasherProtocolGuid,
+                                NULL,
+                                (VOID **) &Ubi);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "UBI Volume erasing not supported\n"));
+    return Status;
+  }
+
+  UnicodeStrToAsciiStr (VolumeName, VolumeNameAscii);
+  Status = Ubi->UbiFlasherOpen (VolumeNameAscii,
+                                &UbiFlasherHandle,
+                                &UbiPageSize,
+                                &UbiBlockSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to open and erase UBI volume\n"));
+    return Status;
+  }
+
+  /* ubi volume erasing is taken care by UbiFlasherOpen itself */
 
   Status = Ubi->UbiFlasherClose (UbiFlasherHandle);
   if (EFI_ERROR (Status)) {
@@ -2478,6 +2527,15 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   }
   AsciiStrToUnicodeStr (arg, PartitionName);
 
+#ifdef NAND_UBI_VOLUME_FLASHING_ENABLED
+  CHAR16 OrigPartitionName[MAX_GPT_NAME_SIZE];
+
+  /* The MultiSlot logic may not be applicable for all volumes, thus we need
+   * to retain the original partition name for volume erasing.
+  */
+  StrnCpyS (OrigPartitionName, ARRAY_SIZE (PartitionName),
+                PartitionName, ARRAY_SIZE (PartitionName));
+#endif
 
   if ((GetAVBVersion () == AVB_LE) ||
       ((GetAVBVersion () != AVB_LE) &&
@@ -2547,7 +2605,15 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   // Build output string
   UnicodeSPrint (OutputString, sizeof (OutputString),
                  L"Erasing partition %s\r\n", PartitionName);
+
   Status = FastbootErasePartition (PartitionName);
+#ifdef NAND_UBI_VOLUME_FLASHING_ENABLED
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "[%s] Partition Not Found - trying volume\n",
+            PartitionName));
+    Status = HandleUbiVolErase (OrigPartitionName, MAX_GPT_NAME_SIZE);
+  }
+#endif
   if (EFI_ERROR (Status)) {
     FastbootFail ("Check device console.");
     DEBUG ((EFI_D_ERROR, "Couldn't erase image:  %r\n", Status));
@@ -2987,6 +3053,10 @@ STATIC VOID GetBufferSize (UINT64 *MaxBufferSize, UINT64 *MinBufferSize)
   if (DdrSize <= DDR_512MB) {
     /* 16MB */
     *MinBufferSize = 16777216;
+    if (DdrSize <= DDR_128MB) {
+      /* 35MB */
+      *MaxBufferSize = 36700160;
+    }
   }
 }
 
