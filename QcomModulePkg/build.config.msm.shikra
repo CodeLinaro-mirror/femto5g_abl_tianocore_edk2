@@ -1,5 +1,5 @@
 ################################################################################
-MSM_ARCH=colibri
+MSM_ARCH=shikra
 BOOTLOADER_ARCH=AARCH64
 
 VERIFIED_BOOT_ENABLED=0     #TODO - review this for RUMI

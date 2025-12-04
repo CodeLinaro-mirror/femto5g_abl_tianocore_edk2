@@ -31,40 +31,9 @@
  */
 
 /*
- *  Changes from Qualcomm Innovation Center are provided under the following license:
- *
- *  Copyright (c) 2022 - 2024 Qualcomm Innovation Center, Inc. All rights
- *  reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "AutoGen.h"
@@ -103,7 +72,6 @@ STATIC BOOLEAN BootReasonAlarm = FALSE;
 STATIC BOOLEAN BootIntoFastboot = FALSE;
 STATIC BOOLEAN BootIntoRecovery = FALSE;
 UINT64 FlashlessBootImageAddr = 0;
-STATIC DeviceInfo DevInfo;
 STATIC UINT32 BootDeviceType = EFI_MAX_FLASH_TYPE;
 
 // This function is used to Deactivate MDTP by entering recovery UI
@@ -163,43 +131,27 @@ SetDefaultAudioFw ()
   STATIC UINT32 Length;
   EFI_STATUS Status;
 
+  /* Update Audio framework if
+   * devmem Src is empty
+   * devmem Src is empty or not same as default.
+  */
+
   AUDIOFRAMEWORK = GetAudioFw ();
+  if (AUDIOFRAMEWORK == NULL) {
+     DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NULL\n"));
+     return;
+  }
+
+  if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
   Status = ReadAudioFrameWork (&Src, &Length);
-  if ((AsciiStrCmp (Src, "audioreach") == 0) ||
-                              (AsciiStrCmp (Src, "elite") == 0) ||
-                              (AsciiStrCmp (Src, "awe") == 0)) {
     if (Status == EFI_SUCCESS) {
-      if (AsciiStrLen (Src) == 0) {
-        if (AsciiStrLen (AUDIOFRAMEWORK) > 0) {
+      if ((AsciiStrLen (Src) == 0)) {
           AsciiStrnCpyS (AudioFW, MAX_AUDIO_FW_LENGTH, AUDIOFRAMEWORK,
           AsciiStrLen (AUDIOFRAMEWORK));
           StoreAudioFrameWork (AudioFW, AsciiStrLen (AUDIOFRAMEWORK));
         }
       }
     }
-    else {
-      DEBUG ((EFI_D_ERROR, "AUDIOFRAMEWORK is NOT updated length =%d, %a\n",
-      Length, AUDIOFRAMEWORK));
-    }
-  }
-  else {
-    if (Src != NULL) {
-      Status =
-      ReadWriteDeviceInfo (READ_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
-      if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "Unable to Read Device Info: %r\n", Status));
-       }
-      gBS->SetMem (DevInfo.AudioFramework, sizeof (DevInfo.AudioFramework), 0);
-      gBS->CopyMem (DevInfo.AudioFramework, AUDIOFRAMEWORK,
-                                      AsciiStrLen (AUDIOFRAMEWORK));
-      Status =
-      ReadWriteDeviceInfo (WRITE_CONFIG, (VOID *)&DevInfo, sizeof (DevInfo));
-      if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "Unable to store audio framework: %r\n", Status));
-        return;
-      }
-    }
-  }
 }
 
 BOOLEAN IsABRetryCountUpdateRequired (VOID)

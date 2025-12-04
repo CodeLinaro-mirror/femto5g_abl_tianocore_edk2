@@ -30,13 +30,12 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **/
-/*
-  * Changes from Qualcomm Technologies, Inc. are provided under the following
-  * license:
-  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
-  * SPDX-License-Identifier: BSD-3-Clause-Clear
-  */
 
+/*
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
 
 #include <Library/BaseLib.h>
 #include <Library/BootLinux.h>
@@ -481,13 +480,24 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
 {
   EFI_STATUS Status;
   CHAR8 *Src;
+  CHAR8 *AUDIOFRAMEWORK;
 
-  Status = ReadAudioFrameWork (&Src, Length);
-  if (Status == EFI_SUCCESS) {
-     if (*Length) {
+  AUDIOFRAMEWORK = GetAudioFw ();
+
+  if (AUDIOFRAMEWORK == NULL) {
+      *Length = 0;
+      return;
+  } else {
+  if ((*Length = AsciiStrLen (AUDIOFRAMEWORK)) > 0) {
+      AsciiStrCpyS (FrameWork, *Length + 1, AUDIOFRAMEWORK);
+      Status = ReadAudioFrameWork (&Src, Length);
+    if (Status == EFI_SUCCESS) {
+      if (*Length) {
         AsciiStrCpyS (FrameWork, *Length, Src);
-   }
- }
+        }
+      }
+    }
+  }
 }
 
 /*
