@@ -171,6 +171,7 @@ STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 LIST_ENTRY *BootConfigListHead = NULL;
 
+#ifdef CHECK_CPU_FREQ_MITIGATION
 /**
   Check if cpu frequency needs to be capped.
   This is needed in case battery voltage is low and a slow charger is connected.
@@ -202,6 +203,13 @@ TargetCheckIsCpuFreqMitigationReq()
 
   return FALSE;
 }
+#else
+BOOLEAN
+TargetCheckIsCpuFreqMitigationReq()
+{
+  return FALSE;
+}
+#endif
 
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)

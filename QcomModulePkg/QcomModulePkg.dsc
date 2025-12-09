@@ -237,6 +237,9 @@
   !if $(CFI_ENABLED)
       GCC:*_*_*_CC_FLAGS = -fsanitize=cfi -flto -fvisibility=hidden -fno-sanitize=cfi-icall
   !endif
+  !if $(CHECK_CPU_FREQ_MITIGATION) == 1
+      GCC:*_*_*_CC_FLAGS = -DCHECK_CPU_FREQ_MITIGATION
+  !endif
 
 
 [PcdsFixedAtBuild.common]
