@@ -291,7 +291,7 @@ def both_builders(
 
 LINUX_HOST = {
     "dimensions": {
-        "os": "Ubuntu-22.04",
+        "os": "Ubuntu-24.04",
         "cpu": "x86-64",
     },
 }
@@ -356,7 +356,7 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "arm64-v8a",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
         },
     },
 )
@@ -371,7 +371,7 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "arm64-v8a",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
             "CMAKE_BUILD_TYPE": "Release",
         },
     },
@@ -387,7 +387,7 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "arm64-v8a",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
             # FIPS mode on Android uses shared libraries.
             "BUILD_SHARED_LIBS": "1",
             "FIPS": "1",
@@ -407,7 +407,7 @@ both_builders(
         "cmake_args": {
             "OPENSSL_NO_ASM": "1",
             "ANDROID_ABI": "arm64-v8a",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
             # FIPS mode on Android uses shared libraries.
             "BUILD_SHARED_LIBS": "1",
             "FIPS": "1",
@@ -429,7 +429,7 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "arm64-v8a",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
             "FIPS": "1",
         },
     },
@@ -445,7 +445,7 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "armeabi-v7a",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
         },
     },
 )
@@ -460,7 +460,7 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "armeabi-v7a",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
             "CMAKE_BUILD_TYPE": "Release",
             # Although Android now requires NEON support, on one builder, we
             # ignore the |__ARM_NEON| preprocessor option, to keep testing
@@ -482,7 +482,7 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "armeabi-v7a",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
             # FIPS mode on Android uses shared libraries.
             "BUILD_SHARED_LIBS": "1",
             "FIPS": "1",
@@ -500,7 +500,7 @@ both_builders(
         "cmake_args": {
             "ANDROID_ABI": "armeabi-v7a",
             "ANDROID_ARM_MODE": "arm",
-            "ANDROID_PLATFORM": "android-21",
+            "ANDROID_PLATFORM": "android-24",
             "CMAKE_BUILD_TYPE": "Release",
         },
     },
@@ -940,6 +940,8 @@ both_builders(
     category = "mac",
     short_name = "bzl",
     recipe = "boringssl_bazel",
+    # TODO(crbug.com/463446310): Re-enable once the builder is fixed.
+    cq_enabled = False,
 )
 both_builders(
     "win32",
@@ -986,8 +988,12 @@ both_builders(
     short_name = "sm",
     properties = {
         "cmake_args": {
-            "CMAKE_C_FLAGS": "-DOPENSSL_SMALL=1",
-            "CMAKE_CXX_FLAGS": "-DOPENSSL_SMALL=1",
+            # Setting CMAKE_${LANG}_FLAGS this way overrides CMake's default
+            # toolchain-level flags, so we must respecify them.
+            # TODO(davidben): Should we be specify flags differently? C(XX)FLAGS
+            # environment variable or a CMake-level OPENSSL_SMALL toggle?
+            "CMAKE_C_FLAGS": "/DWIN32 /D_WINDOWS /DOPENSSL_SMALL=1",
+            "CMAKE_CXX_FLAGS": "/DWIN32 /D_WINDOWS /EHsc /DOPENSSL_SMALL=1",
         },
         "msvc_target": "x86",
     },
@@ -1063,8 +1069,12 @@ both_builders(
     short_name = "sm",
     properties = {
         "cmake_args": {
-            "CMAKE_C_FLAGS": "-DOPENSSL_SMALL=1",
-            "CMAKE_CXX_FLAGS": "-DOPENSSL_SMALL=1",
+            # Setting CMAKE_${LANG}_FLAGS this way overrides CMake's default
+            # toolchain-level flags, so we must respecify them.
+            # TODO(davidben): Should we be specify flags differently? C(XX)FLAGS
+            # environment variable or a CMake-level OPENSSL_SMALL toggle?
+            "CMAKE_C_FLAGS": "/DWIN32 /D_WINDOWS /DOPENSSL_SMALL=1",
+            "CMAKE_CXX_FLAGS": "/DWIN32 /D_WINDOWS /EHsc /DOPENSSL_SMALL=1",
         },
         "msvc_target": "x64",
     },
