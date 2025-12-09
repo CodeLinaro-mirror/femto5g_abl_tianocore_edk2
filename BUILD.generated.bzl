@@ -76,7 +76,6 @@ fips_fragments = [
     "src/crypto/fipsmodule/mlkem/mlkem.cc.inc",
     "src/crypto/fipsmodule/rand/ctrdrbg.cc.inc",
     "src/crypto/fipsmodule/rand/rand.cc.inc",
-    "src/crypto/fipsmodule/rsa/blinding.cc.inc",
     "src/crypto/fipsmodule/rsa/padding.cc.inc",
     "src/crypto/fipsmodule/rsa/rsa.cc.inc",
     "src/crypto/fipsmodule/rsa/rsa_impl.cc.inc",
@@ -858,7 +857,6 @@ tool_sources = [
     "src/tool/rand.cc",
     "src/tool/server.cc",
     "src/tool/sign.cc",
-    "src/tool/speed.cc",
     "src/tool/tool.cc",
     "src/tool/transport_common.cc",
 ]
