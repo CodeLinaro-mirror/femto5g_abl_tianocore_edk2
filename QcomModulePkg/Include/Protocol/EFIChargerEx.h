@@ -60,7 +60,7 @@ Protocol version.
 
 /** @ingroup efi_chargerex_protocol_data */
 #define CHARGER_EX_REVISION 0x0000000000010003
-#define CHARGER_EX_REVISION_1004 0x0000000000010004
+#define CHARGER_EX_REVISION_10005 0x0000000000010005
 
 /*  Protocol GUID definition */
 /** @ingroup efi_chargerex_protocol_data */

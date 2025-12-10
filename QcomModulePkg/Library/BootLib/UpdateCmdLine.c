@@ -191,7 +191,7 @@ TargetCheckIsCpuFreqMitigationReq()
     return FALSE;
   }
 
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_1004) {
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10005) {
     Status = ChgDetectProtocol->IsCpuFreqMitigationReq(&MitigateCpuFreq);
     if (EFI_ERROR(Status)) {
       DEBUG ((EFI_D_ERROR, "Error checking for cpu frequency mitigation requirement: %r\n", Status));
