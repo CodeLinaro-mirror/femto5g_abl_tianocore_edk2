@@ -2032,7 +2032,7 @@ DEFINE GCC13_ARM_ASM_FLAGS            = DEF(GCC49_ARM_ASM_FLAGS)
 DEFINE GCC13_AARCH64_ASM_FLAGS        = DEF(GCC49_AARCH64_ASM_FLAGS)
 DEFINE GCC13_ARM_CC_FLAGS             = DEF(GCC49_ARM_CC_FLAGS)
 DEFINE GCC13_ARM_CC_XIPFLAGS          = DEF(GCC49_ARM_CC_XIPFLAGS)
-DEFINE GCC13_AARCH64_CC_FLAGS         = DEF(GCC49_AARCH64_CC_FLAGS) -Wno-error=attributes -Wno-error=unused-function -Wno-error=address-of-packed-member -Wno-error=multistatement-macros -Wno-error=unused-variable
+DEFINE GCC13_AARCH64_CC_FLAGS         = DEF(GCC49_AARCH64_CC_FLAGS) -O1 -Wno-error=attributes -Wno-error=unused-function -Wno-error=address-of-packed-member -Wno-error=multistatement-macros -Wno-error=unused-variable
 DEFINE GCC13_AARCH64_CC_XIPFLAGS      = DEF(GCC49_AARCH64_CC_XIPFLAGS)
 DEFINE GCC13_ARM_DLINK_FLAGS          = DEF(GCC49_ARM_DLINK_FLAGS)
 DEFINE GCC13_ARM_DLINK2_FLAGS         = DEF(GCC49_ARM_DLINK2_FLAGS) -Wno-error
