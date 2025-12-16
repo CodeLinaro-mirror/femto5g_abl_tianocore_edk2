@@ -327,9 +327,9 @@ load_and_verify_hash_partition (AvbOps *ops,
   AvbIOResult io_ret;
   uint8_t *image_buf = NULL;
   bool image_preloaded = false;
-  uint8_t *digest;
-  size_t digest_len;
-  AvbDigestType digest_type;
+  uint8_t *digest = NULL;
+  size_t digest_len = 0;
+  AvbDigestType digest_type = AVB_DIGEST_TYPE_SHA256;
   const char *found;
   uint64_t image_size;
   size_t expected_digest_len = 0;
@@ -647,6 +647,12 @@ load_and_verify_vbmeta (AvbOps *ops,
   AvbVBMetaData *vbmeta_image_data = NULL;
 
   ret = AVB_SLOT_VERIFY_RESULT_OK;
+
+  /*Ensure slot_data is valid before proceeding.*/
+  if (slot_data == NULL) {
+    ret = AVB_SLOT_VERIFY_RESULT_ERROR_INVALID_METADATA;
+    goto out;
+  }
 
   avb_assert (slot_data != NULL);
 
