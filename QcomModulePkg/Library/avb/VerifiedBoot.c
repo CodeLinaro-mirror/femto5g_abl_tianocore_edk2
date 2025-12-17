@@ -1914,9 +1914,9 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
 #ifdef VERIFIED_BOOT_LE_ARB
     UINTN RollbackSize = VBLE_ROLLBACK_SIZE;
     UINT32 RollbackValue = 0;
+    UINTN ImgSize = 0;
 #endif
     UINT8 *ImgHash = NULL;
-    UINTN ImgSize = 0;
     UINTN ActualImgSize = 0;
     VB_HASH HashAlgorithm;
     UINT8 *SigAddr = NULL;
@@ -2007,9 +2007,9 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
         /*Calculate kernel image hash, SHA256 is used by default*/
         HashAlgorithm = VB_SHA256;
         HashSize = VB_SHA256_SIZE;
-        ImgSize = Info->Images[0].ImageSize;
         ImgHash = AllocateZeroPool (HashSize);
 #ifdef VERIFIED_BOOT_LE_ARB
+        ImgSize = Info->Images[0].ImageSize;
         /* Includes rollback index size as part of image size */
         if (!avb_safe_add(&ActualImgSize, ImgSize, RollbackSize)) {
             DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Integer overflow in ActualImgSize calculation\n"));
