@@ -71,8 +71,9 @@ enabled partway through this lifetime and changes whether `getrandom` works,
 BoringSSL may abort the process. Sandboxes are recommended to allow
 `getrandom`.
 
-Note even deterministic algorithms may require OS entropy, e.g. for blinding
-techniques.
+Note even deterministic algorithms may require OS entropy. For example,
+RSASSA-PKCS1-v1_5 is deterministic, but BoringSSL draws entropy to implement
+RSA blinding.
 
 Entropy gathering additionally has some initialization dependencies described in
 the following section.

@@ -16,10 +16,6 @@
 
 #include <openssl/crypto.h>
 
-#if !defined(OPENSSL_IS_BORINGSSL)
-#error "Wrong OpenSSL headers"
-#endif
-
 int main() {
   printf("Linked to %s\n", OpenSSL_version(OPENSSL_VERSION));
   return 0;
