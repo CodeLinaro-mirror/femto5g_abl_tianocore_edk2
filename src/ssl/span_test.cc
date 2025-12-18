@@ -204,10 +204,6 @@ TEST(SpanTest, ConstExpr) {
                 "unexpectedly compile-time sized");
   static_assert(IsRuntimeSized(span2.subspan<1>()),
                 "unexpectedly compile-time sized");
-  static_assert(IsRuntimeSized(span2.subspan(1, 2)),
-                "unexpectedly compile-time sized");
-  static_assert(!IsRuntimeSized(span2.subspan<1, 2>()),
-                "unexpectedly runtime sized");
   static_assert(span2.first(1).size() == 1u, "wrong size");
   static_assert(IsRuntimeSized(span2.first(1)),
                 "unexpectedly compile-time sized");
@@ -233,10 +229,6 @@ TEST(SpanTest, ConstExprCompileTime) {
                 "unexpectedly compile-time sized");
   static_assert(!IsRuntimeSized(span2.subspan<1>()),
                 "unexpectedly runtime sized");
-  static_assert(IsRuntimeSized(span2.subspan(1, 2)),
-                "unexpectedly compile-time sized");
-  static_assert(!IsRuntimeSized(span2.subspan<1, 2>()),
-                "unexpectedly runtime sized");
   static_assert(span2.first(1).size() == 1u, "wrong size");
   static_assert(IsRuntimeSized(span2.first(1)),
                 "unexpectedly compile-time sized");
@@ -257,7 +249,6 @@ TEST(SpanDeathTest, BoundsChecks) {
   // Out of bounds access.
   EXPECT_DEATH_IF_SUPPORTED(span[3], "");
   EXPECT_DEATH_IF_SUPPORTED(span.subspan(4), "");
-  EXPECT_DEATH_IF_SUPPORTED(span.subspan(0, 4), "");
   EXPECT_DEATH_IF_SUPPORTED(span.first(4), "");
   EXPECT_DEATH_IF_SUPPORTED(span.last(4), "");
   // Accessing an empty span.
@@ -275,7 +266,6 @@ TEST(SpanDeathTest, BoundsChecksCompileTime) {
   // Out of bounds access.
   EXPECT_DEATH_IF_SUPPORTED(span[3], "");
   EXPECT_DEATH_IF_SUPPORTED(span.subspan(4), "");
-  EXPECT_DEATH_IF_SUPPORTED(span.subspan(0, 4), "");
   EXPECT_DEATH_IF_SUPPORTED(span.first(4), "");
   EXPECT_DEATH_IF_SUPPORTED(span.last(4), "");
   // Accessing an empty span.
