@@ -1188,7 +1188,7 @@ dev_tree_add_mem_infoV64 (VOID *fdt, UINT32 offset, UINT64 addr, UINT64 size)
   return ret;
 }
 
-STATIC EFI_STATUS
+EFI_STATUS
 GetDDrRegionsInfo (struct ddr_regions_data_info *DdrRegionsInfo)
 {
   EFI_STATUS  Status = EFI_SUCCESS;
