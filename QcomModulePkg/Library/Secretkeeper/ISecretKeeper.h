@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include <stdint.h>
 // TODO: Replace with actual SmcInvoke implementation.
-#include "../avb/SmciInvokeUtils.h"
+#include "SmciInvokeUtils.h"
 
 typedef Object ISecretKeeper;
 
