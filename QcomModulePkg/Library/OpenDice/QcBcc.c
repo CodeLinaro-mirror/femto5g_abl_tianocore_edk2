@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
- * All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "QcBcc.h"
@@ -440,9 +440,17 @@ GetHWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
 
   /* Fetches the size of BCC from RKP BCC Service */
   Status = GetRkpBCCSize ();
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Failed to Fetch RkpBCC: %r\n", Status));
-    return kDiceResultInvalidInput;
+  switch (Status) {
+    case IOpener_ERROR_NOT_FOUND:
+    case IOpener_ERROR_PRIVILEGE:
+    case IOpener_ERROR_NOT_SUPPORTED:
+      return kDiceResultNotSupported;
+
+    default:
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Failed to Fetch RkpBCC: %r\n", Status));
+        return kDiceResultInvalidInput;
+      }
   }
 
   // Fetch BCC from QTEE BCC service
@@ -569,9 +577,20 @@ GetBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
     Status =
         GetHWBccArtifacts (FinalEncodedBccArtifacts, BccArtifactsBufferSize,
                            BccArtifactsValidSize, BccParamsRecvdFromAVB);
+    if (Status == kDiceResultNotSupported) {
+      DEBUG ((EFI_D_ERROR, "HWBCC Failed: Not Supported, Falling Back to SWBCC\n"));
+      Status =
+          GetSWBccArtifacts (FinalEncodedBccArtifacts, BccArtifactsBufferSize,
+                             BccArtifactsValidSize, BccParamsRecvdFromAVB);
+    }
 #else
     Status = GetHWBccArtifacts (FinalEncodedBccArtifacts,
                                 BccArtifactsBufferSize, BccArtifactsValidSize);
+    if (Status == kDiceResultNotSupported) {
+      DEBUG ((EFI_D_ERROR, "HWBCC Failed: Not Supported, Falling Back to SWBCC\n"));
+      Status = GetSWBccArtifacts (FinalEncodedBccArtifacts,
+                                  BccArtifactsBufferSize, BccArtifactsValidSize);
+    }
 #endif
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Failed to Generate BCC: %r\n", Status));
