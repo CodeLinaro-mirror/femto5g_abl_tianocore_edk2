@@ -44,9 +44,9 @@
 **/
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -60,7 +60,7 @@
  *        disclaimer in the documentation and/or other materials provided
  *        with the distribution.
  *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *      * Neither the name of Qualcomm Technologies, Inc. nor the names of its
  *        contributors may be used to endorse or promote products derived
  *        from this software without specific prior written permission.
  *
@@ -108,6 +108,9 @@
 #include <Protocol/EFIKernelInterface.h>
 #include <Uefi.h>
 
+#define INTENT_BIT_SHIFT	6	/* SDAM bit[7] reserved for reboot intent flag */
+#define REASON_MASK		0x3F	/* Lower 6 bits[1:6] for reboot reason */
+
 // Reboot modes
 typedef enum {
   /* 0 - 31 Cold reset: Common defined features
@@ -126,6 +129,9 @@ typedef enum {
   NON_SILENT_MODE = 0xB,
   FORCED_SILENT = 0xC,
   FORCED_NON_SILENT = 0xD,
+  USER = 0x10,
+  SYSTEM_NORMAL = 0x11,
+  SYSTEM_ABNORMAL = 0x12,
   OEM_RESET_MIN = 0x20,
   OEM_RESET_MAX = 0x3f,
   EMERGENCY_DLOAD = 0xFF,
