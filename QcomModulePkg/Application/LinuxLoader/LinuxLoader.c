@@ -31,10 +31,9 @@
  */
 
 /*
- *  Changes from Qualcomm Innovation Center are provided under the following license:
+ *  Changes from Qualcomm Technologies, Inc. are provided under the following license:
  *
- *  Copyright (c) 2022 - 2024 Qualcomm Innovation Center, Inc. All rights
- *  reserved.
+ *  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -48,7 +47,7 @@
  *        disclaimer in the documentation and/or other materials provided
  *        with the distribution.
  *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *      * Neither the name of Qualcomm Technologies, Inc. nor the names of its
  *        contributors may be used to endorse or promote products derived
  *        from this software without specific prior written permission.
  *
@@ -395,6 +394,13 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     goto stack_guard_update_default;
   }
 
+  /*
+   * SDAM 0x7148 layout:
+   * bit[7] -> Intentional reboot flag (0 = unintentional, 1 = intentional)
+   * bits[1:6] -> Reboot reason code
+   * Mask reason with REASON_MASK to keep lower 6 bits
+   */
+  BootReason = BootReason & REASON_MASK;
   switch (BootReason) {
   case FASTBOOT_MODE:
     BootIntoFastboot = TRUE;
