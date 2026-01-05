@@ -497,6 +497,10 @@ flashless_boot:
   }
 
 fastboot:
+#ifdef AUTO_VIRT_ABL
+  DEBUG ((EFI_D_INFO, "Rebooting the device.\n"));
+  RebootDevice (NORMAL_MODE);
+#endif
   if (FlashlessBoot) {
     DEBUG ((EFI_D_ERROR, "No fastboot support for flashless chipsets,"
                                " Infinte loop\n"));
