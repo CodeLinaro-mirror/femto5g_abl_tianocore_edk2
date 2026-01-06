@@ -33,7 +33,7 @@
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
-  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2024, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -424,13 +424,19 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
 {
   EFI_STATUS Status;
   CHAR8 *Src;
+  CHAR8 *AUDIOFRAMEWORK;
 
-  Status = ReadAudioFrameWork (&Src, Length);
-  if (Status == EFI_SUCCESS) {
-     if (*Length) {
+  AUDIOFRAMEWORK = GetAudioFw ();
+
+  if ((*Length = AsciiStrLen (AUDIOFRAMEWORK)) > 0) {
+      AsciiStrCpyS (FrameWork, *Length + 1, AUDIOFRAMEWORK);
+      Status = ReadAudioFrameWork (&Src, Length);
+    if (Status == EFI_SUCCESS) {
+      if (*Length) {
         AsciiStrCpyS (FrameWork, *Length, Src);
-   }
- }
+      }
+    }
+  }
 }
 
 /*
