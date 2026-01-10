@@ -251,6 +251,12 @@
   !if $(CHECK_CPU_FREQ_MITIGATION) == 1
       GCC:*_*_*_CC_FLAGS = -DCHECK_CPU_FREQ_MITIGATION
   !endif
+  !if $(ENABLE_CHECK_MTE)
+      GCC:*_*_*_CC_FLAGS = -DENABLE_CHECK_MTE
+  !endif
+  !if $(EXCLUSIVE_SME_MTE)
+      GCC:*_*_*_CC_FLAGS = -DEXCLUSIVE_SME_MTE
+  !endif
 
 
 [PcdsFixedAtBuild.common]
