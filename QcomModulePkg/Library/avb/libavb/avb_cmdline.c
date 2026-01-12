@@ -22,6 +22,14 @@
  * SOFTWARE.
  */
 
+
+ /*
+  * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+  * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
+
 #include "avb_cmdline.h"
 #include "avb_sha.h"
 #include "avb_util.h"
@@ -42,6 +50,10 @@ char* avb_sub_cmdline(AvbOps* ops,
   const char* replace_str[NUM_GUIDS] = {"$(ANDROID_SYSTEM_PARTUUID)",
                                         "$(ANDROID_BOOT_PARTUUID)",
                                         "$(ANDROID_VBMETA_PARTUUID)"};
+#ifdef AUTO_LVGVM_ABL
+  char* replaceSystemPartuuid = "PARTUUID=$(ANDROID_SYSTEM_PARTUUID)";
+#endif
+
   char* ret = NULL;
   AvbIOResult io_ret;
   size_t n;
@@ -85,8 +97,26 @@ char* avb_sub_cmdline(AvbOps* ops,
       goto fail;
     }
 
+    /*
+     * For LVGVM, system can't find PARTUUID from GUID. Therefore,
+     * use vda/vdc replace the partuuid for dm-verity.
+     *
+     * By default, in LVGVM device tree, we reserve the first vblk for
+     * system_a, the second one for userdata and the third one for
+     * system_b, so here we should take "root=/dev/vda" when cureent
+     * slot is '_a' and take "root=/dev/vdc" when current slot is '_b'.
+     * */
+#if AUTO_LVGVM_ABL
     if (ret == NULL) {
-      ret = avb_replace(cmdline, replace_str[n], guid_buf);
+      if (avb_strncmp ("_a", ab_suffix, avb_strlen (ab_suffix)) == 0) {
+        ret = avb_replace (cmdline, replaceSystemPartuuid, "/dev/vda");
+      } else if (avb_strncmp ("_b", ab_suffix, avb_strlen (ab_suffix)) == 0) {
+        ret = avb_replace (cmdline, replaceSystemPartuuid, "/dev/vdc");
+      }
+#else
+    if (ret == NULL) {
+      ret = avb_replace (cmdline, replace_str[n], guid_buf);
+#endif
     } else {
       char* new_ret = avb_replace(ret, replace_str[n], guid_buf);
       avb_free(ret);

@@ -168,6 +168,47 @@ STATIC CONST CHAR8 *MovableNode = " movable_node";
 STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 LIST_ENTRY *BootConfigListHead = NULL;
+
+#ifdef CHECK_CPU_FREQ_MITIGATION
+/**
+  Check if cpu frequency needs to be capped.
+  This is needed in case battery voltage is low and a slow charger is connected.
+  @retval     BOOLEAN           Whether cpu freq mitigation is required or not.
+**/
+BOOLEAN
+TargetCheckIsCpuFreqMitigationReq()
+{
+  EFI_STATUS Status;
+  EFI_CHARGER_EX_PROTOCOL *ChgDetectProtocol;
+  BOOLEAN MitigateCpuFreq = FALSE;
+
+  Status = gBS->LocateProtocol (&gChargerExProtocolGuid, NULL,
+                                (VOID **)&ChgDetectProtocol);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Error locating charger detect protocol: %r\n", Status));
+    return FALSE;
+  }
+
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10005) {
+    Status = ChgDetectProtocol->IsCpuFreqMitigationReq(&MitigateCpuFreq);
+    if (EFI_ERROR(Status)) {
+      DEBUG ((EFI_D_ERROR, "Error checking for cpu frequency mitigation requirement: %r\n", Status));
+      return FALSE;
+    }
+
+    return MitigateCpuFreq;
+  }
+
+  return FALSE;
+}
+#else
+BOOLEAN
+TargetCheckIsCpuFreqMitigationReq()
+{
+  return FALSE;
+}
+#endif
+
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
 {

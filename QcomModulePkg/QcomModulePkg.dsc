@@ -130,9 +130,20 @@
   !if $(EARLY_ETH_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED
   !endif
+  !if $(AUTO_LVGVM_ABL)
+      GCC:*_*_*_CC_FLAGS = -DAUTO_LVGVM_ABL
+  !endif
   !if $(HIBERNATION_SUPPORT_NO_AES)
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_NO_AES
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT_NO_AES
+  !endif
+  !if $(NUM_CORES_TARGET) != ""
+      GCC:*_*_*_CC_FLAGS = -DNUM_CORES_TARGET=$(NUM_CORES_TARGET)
+      GCC:*_*_*_PP_FLAGS = -DNUM_CORES_TARGET=$(NUM_CORES_TARGET)
+  !endif
+  !if $(NUM_SILVER_CORES_TARGET) != ""
+      GCC:*_*_*_CC_FLAGS = -DNUM_SILVER_CORES_TARGET=$(NUM_SILVER_CORES_TARGET)
+      GCC:*_*_*_PP_FLAGS = -DNUM_SILVER_CORES_TARGET=$(NUM_SILVER_CORES_TARGET)
   !endif
   !if $(HIBERNATION_SUPPORT_AES)
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_AES
@@ -153,6 +164,9 @@
   !endif
   !if $(BOOTIMAGE_LOAD_VERIFY_IN_PARALLEL) == 1
       GCC:*_*_*_CC_FLAGS = -DBOOTIMAGE_LOAD_VERIFY_IN_PARALLEL
+  !endif
+  !if $(LV_GVM_KM_VIRT) == 1
+      GCC:*_*_*_CC_FLAGS = -DLV_GVM_KM_VIRT
   !endif
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
@@ -188,6 +202,9 @@
   !endif
   !if $(VERIFIED_BOOT_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_ENABLED
+  !endif
+  !if $(USE_DUMMY_BCC)
+      GCC:*_*_*_CC_FLAGS = -DUSE_DUMMY_BCC
   !endif
   !if $(BASE_ADDRESS)
       GCC:*_*_*_CC_FLAGS = -DBASE_ADDRESS=$(BASE_ADDRESS)
@@ -230,6 +247,9 @@
   !endif
   !if $(CFI_ENABLED)
       GCC:*_*_*_CC_FLAGS = -fsanitize=cfi -flto -fvisibility=hidden -fno-sanitize=cfi-icall
+  !endif
+  !if $(CHECK_CPU_FREQ_MITIGATION) == 1
+      GCC:*_*_*_CC_FLAGS = -DCHECK_CPU_FREQ_MITIGATION
   !endif
 
 
