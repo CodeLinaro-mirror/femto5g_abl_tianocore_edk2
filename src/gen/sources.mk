@@ -85,7 +85,6 @@ boringssl_bcm_internal_headers := \
   crypto/fipsmodule/mlkem/mlkem.cc.inc \
   crypto/fipsmodule/rand/ctrdrbg.cc.inc \
   crypto/fipsmodule/rand/rand.cc.inc \
-  crypto/fipsmodule/rsa/blinding.cc.inc \
   crypto/fipsmodule/rsa/padding.cc.inc \
   crypto/fipsmodule/rsa/rsa.cc.inc \
   crypto/fipsmodule/rsa/rsa_impl.cc.inc \
@@ -232,6 +231,33 @@ boringssl_bcm_sources_nasm := \
   gen/bcm/x86_64-mont-win.asm \
   gen/bcm/x86_64-mont5-win.asm
 
+boringssl_bench_sources := \
+  bench/aead.cc \
+  bench/aes.cc \
+  bench/base64.cc \
+  bench/curve25519.cc \
+  bench/ecdh.cc \
+  bench/ecdsa.cc \
+  bench/hash.cc \
+  bench/hash_to_curve.cc \
+  bench/hrss.cc \
+  bench/main.cc \
+  bench/mldsa.cc \
+  bench/mlkem.cc \
+  bench/rand.cc \
+  bench/rsa.cc \
+  bench/rsakeygen.cc \
+  bench/scrypt.cc \
+  bench/selftest.cc \
+  bench/siphash.cc \
+  bench/slhdsa.cc \
+  bench/spake2.cc \
+  bench/trust_token.cc \
+  bench/x509.cc
+
+boringssl_bench_internal_headers := \
+  bench/internal.h
+
 boringssl_bssl_sources := \
   tool/args.cc \
   tool/ciphers.cc \
@@ -247,7 +273,6 @@ boringssl_bssl_sources := \
   tool/rand.cc \
   tool/server.cc \
   tool/sign.cc \
-  tool/speed.cc \
   tool/tool.cc \
   tool/transport_common.cc
 
@@ -898,10 +923,13 @@ boringssl_crypto_test_data := \
   crypto/rsa/test/rsa8193.pem \
   crypto/rsa/test/rsa8193pub.pem \
   crypto/siphash/siphash_tests.txt \
-  crypto/slhdsa/slhdsa_keygen.txt \
-  crypto/slhdsa/slhdsa_prehash.txt \
-  crypto/slhdsa/slhdsa_siggen.txt \
-  crypto/slhdsa/slhdsa_sigver.txt \
+  crypto/slhdsa/slhdsa_sha2_128s_keygen.txt \
+  crypto/slhdsa/slhdsa_sha2_128s_prehash.txt \
+  crypto/slhdsa/slhdsa_sha2_128s_siggen.txt \
+  crypto/slhdsa/slhdsa_sha2_128s_sigver.txt \
+  crypto/slhdsa/slhdsa_shake_256f_keygen.txt \
+  crypto/slhdsa/slhdsa_shake_256f_siggen.txt \
+  crypto/slhdsa/slhdsa_shake_256f_sigver.txt \
   crypto/x509/test/basic_constraints_ca.pem \
   crypto/x509/test/basic_constraints_ca_pathlen_0.pem \
   crypto/x509/test/basic_constraints_ca_pathlen_1.pem \
@@ -1046,10 +1074,13 @@ boringssl_crypto_test_data := \
   third_party/wycheproof_testvectors/hmac_sha384_test.txt \
   third_party/wycheproof_testvectors/hmac_sha512_test.txt \
   third_party/wycheproof_testvectors/mldsa_44_sign_noseed_test.txt \
+  third_party/wycheproof_testvectors/mldsa_44_sign_seed_test.txt \
   third_party/wycheproof_testvectors/mldsa_44_verify_test.txt \
   third_party/wycheproof_testvectors/mldsa_65_sign_noseed_test.txt \
+  third_party/wycheproof_testvectors/mldsa_65_sign_seed_test.txt \
   third_party/wycheproof_testvectors/mldsa_65_verify_test.txt \
   third_party/wycheproof_testvectors/mldsa_87_sign_noseed_test.txt \
+  third_party/wycheproof_testvectors/mldsa_87_sign_seed_test.txt \
   third_party/wycheproof_testvectors/mldsa_87_verify_test.txt \
   third_party/wycheproof_testvectors/primality_test.txt \
   third_party/wycheproof_testvectors/rsa_oaep_2048_sha1_mgf1sha1_test.txt \
