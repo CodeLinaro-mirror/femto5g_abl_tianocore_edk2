@@ -1853,6 +1853,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.MemOffAmt = NULL;
   }
 
+  Param.MTECmdLine = NULL;
 #ifdef ENABLE_CHECK_MTE
   if (GetMemtagMode(&Memtags) == EFI_SUCCESS) {
     if (Memtags &
@@ -1860,17 +1861,15 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
           MISC_MEMTAG_MODE_MEMTAG_KERNEL_ONCE)) {
       Param.MTECmdLine = KasanOn;
       CmdLineLen += AsciiStrLen (Param.MTECmdLine);
-    } else {
+    } else if (Memtags &
+        (MISC_MEMTAG_MODE_MEMTAG |
+          MISC_MEMTAG_MODE_MEMTAG_ONCE)) {
 #ifdef EXCLUSIVE_SME_MTE
       Param.MTECmdLine = NoSME;
       CmdLineLen += AsciiStrLen (Param.MTECmdLine);
-#else
-      Param.MTECmdLine = NULL;
 #endif
     }
   }
-#else
-  Param.MTECmdLine = NULL;
 #endif
 
   if (Update_PartialGoods_Bootconfig (HeaderVersion, &CmdLineLen,
