@@ -853,7 +853,9 @@ GetBootDevice (CHAR8 *BootDevBuf, UINT32 Len)
   } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC"))) {
     AsciiSPrint (BootDevBuf, Len, "%x.sdhci", BootDevAddr);
   } else if (!AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
-    AsciiSPrint (BootDevBuf, Len, "%x.pcie", BootDevAddr);
+    DEBUG ((EFI_D_ERROR,
+      "Boot Device NVME detected, use 0x1bf8000.pcie as default \n"));
+    AsciiSPrint (BootDevBuf, Len, "%x.pcie", 0x1bf8000);
   } else if (!AsciiStrnCmp (BootDeviceType, "VBLK", AsciiStrLen ("VBLK"))) {
     DEBUG ((EFI_D_ERROR, "Virtio Block Device is not"
                          " supported as Boot Device\n"));
