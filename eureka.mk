@@ -482,7 +482,6 @@ tool_sources := \
   src/tool/rand.cc\
   src/tool/server.cc\
   src/tool/sign.cc\
-  src/tool/speed.cc\
   src/tool/tool.cc\
   src/tool/transport_common.cc\
 
