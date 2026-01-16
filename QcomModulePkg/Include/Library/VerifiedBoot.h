@@ -26,6 +26,12 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+/*
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+*/
+
 #ifndef __VERIFIEDBOOT_H__
 #define __VERIFIEDBOOT_H__
 
@@ -39,6 +45,7 @@ enum
   AVB_LE
 };
 
+#define VBLE_ROLLBACK_SIZE  4
 #define VB_SHA256_SIZE  32
 #define LE_BOOTIMG_SIG_SIZE 256
 
