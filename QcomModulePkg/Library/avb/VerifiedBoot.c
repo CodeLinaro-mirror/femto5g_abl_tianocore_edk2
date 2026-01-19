@@ -1914,9 +1914,9 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
 #ifdef VERIFIED_BOOT_LE_ARB
     UINTN RollbackSize = VBLE_ROLLBACK_SIZE;
     UINT32 RollbackValue = 0;
-    UINTN ImgSize = 0;
 #endif
     UINT8 *ImgHash = NULL;
+    UINTN ImgSize = 0;
     UINTN ActualImgSize = 0;
     VB_HASH HashAlgorithm;
     UINT8 *SigAddr = NULL;
@@ -2008,14 +2008,16 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
         HashAlgorithm = VB_SHA256;
         HashSize = VB_SHA256_SIZE;
         ImgHash = AllocateZeroPool (HashSize);
-#ifdef VERIFIED_BOOT_LE_ARB
         ImgSize = Info->Images[0].ImageSize;
-        /* Includes rollback index size as part of image size */
+#ifdef VERIFIED_BOOT_LE_ARB
+        /* Includes rollback index size as part of ActualImgSize */
         if (!avb_safe_add(&ActualImgSize, ImgSize, RollbackSize)) {
             DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Integer overflow in ActualImgSize calculation\n"));
             Status = EFI_BAD_BUFFER_SIZE;
             return Status;
         }
+#else
+        ActualImgSize = ImgSize;
 #endif
         if (ImgHash == NULL) {
             DEBUG ((EFI_D_ERROR, 
@@ -2031,22 +2033,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                    "VB: Error during VBGetImageHash: %r\n", Status));
             return Status;
         }
-
-#ifdef VERIFIED_BOOT_LE_ARB
-    /* Rollback value is appended at the end of boot image of VBLE_ROLLBACK_SIZE bytes */
-    if (ImgSize < RollbackSize) {
-        DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Image too small for rollback data\n"));
-        Status = EFI_BAD_BUFFER_SIZE;
-        return Status;
-    }
-    CopyMem((VOID *)&RollbackValue,
-            (VOID *)(Info->Images[0].ImageBuffer + ImgSize), RollbackSize);
-    Status = updateHLOSVersion(RollbackValue);
-    if (SecureDevice && (Status != EFI_SUCCESS)) {
-        DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Halting boot as updateHLOSVersion failed" ));
-        return Status;
-    }
-#endif
         SigAddr = (UINT8 *)Info->Images[0].ImageBuffer + ActualImgSize;
         SigSize = LE_BOOTIMG_SIG_SIZE;
         Status = LEVerifyHashWithSignature (QcomAsn1X509Protocal, ImgHash,
@@ -2092,6 +2078,21 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
             }
             return Status;
         }
+#ifdef VERIFIED_BOOT_LE_ARB
+        /* Rollback value is appended at the end of boot image of VBLE_ROLLBACK_SIZE bytes */
+        if (ImgSize < RollbackSize) {
+            DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Image too small for rollback data\n"));
+            Status = EFI_BAD_BUFFER_SIZE;
+            return Status;
+        }
+        CopyMem((VOID *)&RollbackValue,
+                (VOID *)(Info->Images[0].ImageBuffer + ImgSize), RollbackSize);
+        Status = updateHLOSVersion(RollbackValue);
+        if (SecureDevice && (Status != EFI_SUCCESS)) {
+            DEBUG ((EFI_D_ERROR, "LoadImageAndAuthForLE: Halting boot as updateHLOSVersion failed"));
+            return Status;
+        }
+#endif
     }
     if (!SetRotAndBootState) {
         if (KeymasterEnabled) {
