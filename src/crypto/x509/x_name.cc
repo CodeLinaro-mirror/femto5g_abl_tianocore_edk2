@@ -35,13 +35,15 @@
 #include "internal.h"
 
 
+using namespace bssl;
+
 // X509_NAME_MAX is the length of the maximum encoded |X509_NAME| we accept.
 #define X509_NAME_MAX (1024 * 1024)
 
 static int asn1_marshal_string_canon(CBB *cbb, const ASN1_STRING *in);
 
-X509_NAME_ENTRY *X509_NAME_ENTRY_new(void) {
-  bssl::UniquePtr<X509_NAME_ENTRY> ret = bssl::MakeUnique<X509_NAME_ENTRY>();
+X509_NAME_ENTRY *X509_NAME_ENTRY_new() {
+  UniquePtr<X509_NAME_ENTRY> ret = MakeUnique<X509_NAME_ENTRY>();
   if (ret == nullptr) {
     return nullptr;
   }
@@ -92,24 +94,28 @@ static int x509_marshal_name_entry(CBB *cbb, const X509_NAME_ENTRY *entry,
 }
 
 static int i2d_x509_name_entry(const X509_NAME_ENTRY *entry, uint8_t **out) {
-  return bssl::I2DFromCBB(/*initial_capacity=*/16, out, [&](CBB *cbb) -> bool {
+  return I2DFromCBB(/*initial_capacity=*/16, out, [&](CBB *cbb) -> bool {
     return x509_marshal_name_entry(cbb, entry, /*canonicalize=*/0);
   });
 }
+
+BSSL_NAMESPACE_BEGIN
 
 IMPLEMENT_EXTERN_ASN1_SIMPLE(X509_NAME_ENTRY, X509_NAME_ENTRY_new,
                              X509_NAME_ENTRY_free, CBS_ASN1_SEQUENCE,
                              x509_parse_name_entry, i2d_x509_name_entry)
 
+BSSL_NAMESPACE_END
+
 X509_NAME_ENTRY *X509_NAME_ENTRY_dup(const X509_NAME_ENTRY *entry) {
-  bssl::ScopedCBB cbb;
+  ScopedCBB cbb;
   if (!CBB_init(cbb.get(), 16) ||
       !x509_marshal_name_entry(cbb.get(), entry, /*canonicalize=*/0)) {
     return nullptr;
   }
   CBS cbs;
   CBS_init(&cbs, CBB_data(cbb.get()), CBB_len(cbb.get()));
-  bssl::UniquePtr<X509_NAME_ENTRY> copy(X509_NAME_ENTRY_new());
+  UniquePtr<X509_NAME_ENTRY> copy(X509_NAME_ENTRY_new());
   if (copy == nullptr || !x509_parse_name_entry(&cbs, copy.get())) {
     return nullptr;
   }
@@ -124,16 +130,16 @@ static void x509_name_cache_free(X509_NAME_CACHE *cache) {
   }
 }
 
-void x509_name_init(X509_NAME *name) {
+void bssl::x509_name_init(X509_NAME *name) {
   OPENSSL_memset(name, 0, sizeof(X509_NAME));
 }
 
-void x509_name_cleanup(X509_NAME *name) {
+void bssl::x509_name_cleanup(X509_NAME *name) {
   sk_X509_NAME_ENTRY_pop_free(name->entries, X509_NAME_ENTRY_free);
   x509_name_cache_free(name->cache.exchange(nullptr));
 }
 
-X509_NAME *X509_NAME_new(void) {
+X509_NAME *X509_NAME_new() {
   return static_cast<X509_NAME *>(OPENSSL_zalloc(sizeof(X509_NAME)));
 }
 
@@ -144,7 +150,7 @@ void X509_NAME_free(X509_NAME *name) {
   }
 }
 
-int x509_parse_name(CBS *cbs, X509_NAME *out) {
+int bssl::x509_parse_name(CBS *cbs, X509_NAME *out) {
   // Reset the old state.
   x509_name_cleanup(out);
   x509_name_init(out);
@@ -168,12 +174,12 @@ int x509_parse_name(CBS *cbs, X509_NAME *out) {
       return 0;
     }
     while (CBS_len(&rdn) != 0) {
-      bssl::UniquePtr<X509_NAME_ENTRY> entry(X509_NAME_ENTRY_new());
+      UniquePtr<X509_NAME_ENTRY> entry(X509_NAME_ENTRY_new());
       if (entry == nullptr || !x509_parse_name_entry(&rdn, entry.get())) {
         return 0;
       }
       entry->set = set;
-      if (!bssl::PushToStack(out->entries, std::move(entry))) {
+      if (!PushToStack(out->entries, std::move(entry))) {
         return 0;
       }
     }
@@ -213,7 +219,7 @@ static int x509_marshal_name_entries(CBB *out, const X509_NAME *name,
   return CBB_flush_asn1_set_of(&rdn) && CBB_flush(out);
 }
 
-const X509_NAME_CACHE *x509_name_get_cache(const X509_NAME *name) {
+const X509_NAME_CACHE *bssl::x509_name_get_cache(const X509_NAME *name) {
   const X509_NAME_CACHE *cache = name->cache.load();
   if (cache != nullptr) {
     return cache;
@@ -222,7 +228,7 @@ const X509_NAME_CACHE *x509_name_get_cache(const X509_NAME *name) {
   X509_NAME_CACHE *new_cache =
       static_cast<X509_NAME_CACHE *>(OPENSSL_zalloc(sizeof(X509_NAME_CACHE)));
   // Cache the DER encoding, including the outer TLV.
-  bssl::ScopedCBB cbb;
+  ScopedCBB cbb;
   CBB seq;
   if (!CBB_init(cbb.get(), 16) ||
       !CBB_add_asn1(cbb.get(), &seq, CBS_ASN1_SEQUENCE) ||
@@ -252,11 +258,11 @@ const X509_NAME_CACHE *x509_name_get_cache(const X509_NAME *name) {
   return expected;
 }
 
-void x509_name_invalidate_cache(X509_NAME *name) {
+void bssl::x509_name_invalidate_cache(X509_NAME *name) {
   x509_name_cache_free(name->cache.exchange(nullptr));
 }
 
-int x509_marshal_name(CBB *out, const X509_NAME *in) {
+int bssl::x509_marshal_name(CBB *out, const X509_NAME *in) {
   const X509_NAME_CACHE *cache = x509_name_get_cache(in);
   if (cache == nullptr) {
     return 0;
@@ -264,7 +270,7 @@ int x509_marshal_name(CBB *out, const X509_NAME *in) {
   return CBB_add_bytes(out, cache->der, cache->der_len);
 }
 
-int x509_name_copy(X509_NAME *dst, const X509_NAME *src) {
+int bssl::x509_name_copy(X509_NAME *dst, const X509_NAME *src) {
   const X509_NAME_CACHE *cache = x509_name_get_cache(src);
   if (cache == nullptr) {
     return 0;
@@ -286,7 +292,7 @@ int x509_name_copy(X509_NAME *dst, const X509_NAME *src) {
 }
 
 X509_NAME *X509_NAME_dup(const X509_NAME *name) {
-  bssl::UniquePtr<X509_NAME> copy(X509_NAME_new());
+  UniquePtr<X509_NAME> copy(X509_NAME_new());
   if (copy == nullptr || !x509_name_copy(copy.get(), name)) {
     return nullptr;
   }
@@ -294,14 +300,13 @@ X509_NAME *X509_NAME_dup(const X509_NAME *name) {
 }
 
 X509_NAME *d2i_X509_NAME(X509_NAME **out, const uint8_t **inp, long len) {
-  return bssl::D2IFromCBS(
-      out, inp, len, [](CBS *cbs) -> bssl::UniquePtr<X509_NAME> {
-        bssl::UniquePtr<X509_NAME> name(X509_NAME_new());
-        if (name == nullptr || !x509_parse_name(cbs, name.get())) {
-          return nullptr;
-        }
-        return name;
-      });
+  return D2IFromCBS(out, inp, len, [](CBS *cbs) -> UniquePtr<X509_NAME> {
+    UniquePtr<X509_NAME> name(X509_NAME_new());
+    if (name == nullptr || !x509_parse_name(cbs, name.get())) {
+      return nullptr;
+    }
+    return name;
+  });
 }
 
 int i2d_X509_NAME(const X509_NAME *in, uint8_t **outp) {
@@ -404,7 +409,7 @@ static int asn1_marshal_string_canon(CBB *cbb, const ASN1_STRING *in) {
 }
 
 int X509_NAME_set(X509_NAME **xn, const X509_NAME *name) {
-  bssl::UniquePtr<X509_NAME> copy(X509_NAME_dup(name));
+  UniquePtr<X509_NAME> copy(X509_NAME_dup(name));
   if (copy == nullptr) {
     return 0;
   }

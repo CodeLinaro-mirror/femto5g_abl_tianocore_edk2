@@ -26,6 +26,7 @@
 #include "../internal.h"
 
 
+BSSL_NAMESPACE_BEGIN
 // abi_test provides routines for verifying that functions satisfy platform ABI
 // requirements.
 namespace abi_test {
@@ -396,14 +397,14 @@ bool UnwindTestsEnabled();
 #endif
 
 // CHECK_ABI_SEH behaves like |CHECK_ABI| but enables unwind testing on Windows.
-#define CHECK_ABI_SEH(...)                                               \
-  abi_test::internal::CheckGTest(#__VA_ARGS__, __FILE__, __LINE__, true, \
-                                 __VA_ARGS__)
+#define CHECK_ABI_SEH(...)                                                     \
+  bssl::abi_test::internal::CheckGTest(#__VA_ARGS__, __FILE__, __LINE__, true, \
+                                       __VA_ARGS__)
 
 // CHECK_ABI_NO_UNWIND behaves like |CHECK_ABI| but disables unwind testing.
-#define CHECK_ABI_NO_UNWIND(...)                                          \
-  abi_test::internal::CheckGTest(#__VA_ARGS__, __FILE__, __LINE__, false, \
-                                 __VA_ARGS__)
+#define CHECK_ABI_NO_UNWIND(...)                                         \
+  bssl::abi_test::internal::CheckGTest(#__VA_ARGS__, __FILE__, __LINE__, \
+                                       false, __VA_ARGS__)
 
 
 // Internal functions.
@@ -450,33 +451,35 @@ void abi_test_unwind_stop(Uncallable);
 
 // abi_test_bad_unwind_wrong_register preserves the ABI, but annotates the wrong
 // register in unwind metadata.
-void abi_test_bad_unwind_wrong_register(void);
+void abi_test_bad_unwind_wrong_register();
 
 // abi_test_bad_unwind_temporary preserves the ABI, but temporarily corrupts the
 // storage space for a saved register, breaking unwind.
-void abi_test_bad_unwind_temporary(void);
+void abi_test_bad_unwind_temporary();
 
 #if defined(OPENSSL_WINDOWS)
 // abi_test_bad_unwind_epilog preserves the ABI, and correctly annotates the
 // prolog, but the epilog does not match Win64's rules, breaking unwind during
 // the epilog.
-void abi_test_bad_unwind_epilog(void);
+void abi_test_bad_unwind_epilog();
 #endif
 #endif  // OPENSSL_X86_64
 
 #if defined(OPENSSL_X86_64) || defined(OPENSSL_X86)
 // abi_test_get_and_clear_direction_flag clears the direction flag. If the flag
 // was previously set, it returns one. Otherwise, it returns zero.
-int abi_test_get_and_clear_direction_flag(void);
+int abi_test_get_and_clear_direction_flag();
 
 // abi_test_set_direction_flag sets the direction flag. This does not conform to
 // ABI requirements and must only be called within a |CHECK_ABI| guard to avoid
 // errors later in the program.
-int abi_test_set_direction_flag(void);
+int abi_test_set_direction_flag();
 #endif  // OPENSSL_X86_64 || OPENSSL_X86
 
 }  // extern C
 #endif  // SUPPORTS_ABI_TEST
+
+BSSL_NAMESPACE_END
 
 
 #endif  // OPENSSL_HEADER_CRYPTO_TEST_ABI_TEST_H

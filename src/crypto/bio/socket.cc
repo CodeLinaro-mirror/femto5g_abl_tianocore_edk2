@@ -29,10 +29,10 @@ OPENSSL_MSVC_PRAGMA(comment(lib, "Ws2_32.lib"))
 #include "internal.h"
 
 
+using namespace bssl;
+
 #if !defined(OPENSSL_WINDOWS)
-static int closesocket(int sock) {
-  return close(sock);
-}
+static int closesocket(int sock) { return close(sock); }
 #endif
 
 static int sock_free(BIO *bio) {
@@ -123,7 +123,7 @@ static const BIO_METHOD methods_sockp = {
     nullptr /* callback_ctrl */,
 };
 
-const BIO_METHOD *BIO_s_socket(void) { return &methods_sockp; }
+const BIO_METHOD *BIO_s_socket() { return &methods_sockp; }
 
 BIO *BIO_new_socket(int fd, int close_flag) {
   BIO *ret;

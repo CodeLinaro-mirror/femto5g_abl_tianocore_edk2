@@ -30,7 +30,9 @@
 // protocol for issuing and redeeming tokens built on top of the PMBTokens
 // construction.
 
-const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v1(void) {
+using namespace bssl;
+
+const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v1() {
   static const TRUST_TOKEN_METHOD kMethod = {
       pmbtoken_exp1_generate_key,
       pmbtoken_exp1_derive_key_from_secret,
@@ -47,7 +49,7 @@ const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v1(void) {
   return &kMethod;
 }
 
-const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v2_voprf(void) {
+const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v2_voprf() {
   static const TRUST_TOKEN_METHOD kMethod = {
       voprf_exp2_generate_key,
       voprf_exp2_derive_key_from_secret,
@@ -64,7 +66,7 @@ const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v2_voprf(void) {
   return &kMethod;
 }
 
-const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v2_pmb(void) {
+const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v2_pmb() {
   static const TRUST_TOKEN_METHOD kMethod = {
       pmbtoken_exp2_generate_key,
       pmbtoken_exp2_derive_key_from_secret,
@@ -81,7 +83,7 @@ const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v2_pmb(void) {
   return &kMethod;
 }
 
-const TRUST_TOKEN_METHOD *TRUST_TOKEN_pst_v1_voprf(void) {
+const TRUST_TOKEN_METHOD *TRUST_TOKEN_pst_v1_voprf() {
   static const TRUST_TOKEN_METHOD kMethod = {
       voprf_pst1_generate_key,
       voprf_pst1_derive_key_from_secret,
@@ -98,7 +100,7 @@ const TRUST_TOKEN_METHOD *TRUST_TOKEN_pst_v1_voprf(void) {
   return &kMethod;
 }
 
-const TRUST_TOKEN_METHOD *TRUST_TOKEN_pst_v1_pmb(void) {
+const TRUST_TOKEN_METHOD *TRUST_TOKEN_pst_v1_pmb() {
   static const TRUST_TOKEN_METHOD kMethod = {
       pmbtoken_pst1_generate_key,
       pmbtoken_pst1_derive_key_from_secret,
@@ -116,7 +118,7 @@ const TRUST_TOKEN_METHOD *TRUST_TOKEN_pst_v1_pmb(void) {
 }
 
 
-void TRUST_TOKEN_PRETOKEN_free(TRUST_TOKEN_PRETOKEN *pretoken) {
+void bssl::TRUST_TOKEN_PRETOKEN_free(TRUST_TOKEN_PRETOKEN *pretoken) {
   OPENSSL_free(pretoken);
 }
 
@@ -225,6 +227,33 @@ void TRUST_TOKEN_CLIENT_free(TRUST_TOKEN_CLIENT *ctx) {
   EVP_PKEY_free(ctx->srr_key);
   sk_TRUST_TOKEN_PRETOKEN_pop_free(ctx->pretokens, TRUST_TOKEN_PRETOKEN_free);
   OPENSSL_free(ctx);
+}
+
+static TRUST_TOKEN_PRETOKEN *dup_pretoken(const TRUST_TOKEN_PRETOKEN *in) {
+  return static_cast<TRUST_TOKEN_PRETOKEN *>(
+      OPENSSL_memdup(in, sizeof(TRUST_TOKEN_PRETOKEN)));
+}
+
+TRUST_TOKEN_CLIENT *TRUST_TOKEN_CLIENT_dup_for_testing(
+    const TRUST_TOKEN_CLIENT *ctx) {
+  bssl::UniquePtr<TRUST_TOKEN_CLIENT> ret(
+      TRUST_TOKEN_CLIENT_new(ctx->method, ctx->max_batchsize));
+  if (ret == nullptr) {
+    return nullptr;
+  }
+  for (size_t i = 0; i < std::size(ret->keys); i++) {
+    ret->keys[i] = ctx->keys[i];
+  }
+  ret->num_keys = ctx->num_keys;
+  if (ctx->pretokens != nullptr) {
+    ret->pretokens = sk_TRUST_TOKEN_PRETOKEN_deep_copy(
+        ctx->pretokens, dup_pretoken, TRUST_TOKEN_PRETOKEN_free);
+    if (ret->pretokens == nullptr) {
+      return nullptr;
+    }
+  }
+  ret->srr_key = bssl::UpRef(ctx->srr_key).release();
+  return ret.release();
 }
 
 int TRUST_TOKEN_CLIENT_add_key(TRUST_TOKEN_CLIENT *ctx, size_t *out_key_index,
@@ -511,7 +540,7 @@ int TRUST_TOKEN_ISSUER_set_metadata_key(TRUST_TOKEN_ISSUER *ctx,
   return 1;
 }
 
-static const struct trust_token_issuer_key_st *trust_token_issuer_get_key(
+static const struct bssl::trust_token_issuer_key_st *trust_token_issuer_get_key(
     const TRUST_TOKEN_ISSUER *ctx, uint32_t key_id) {
   for (size_t i = 0; i < ctx->num_keys; i++) {
     if (ctx->keys[i].id == key_id) {

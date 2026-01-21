@@ -44,6 +44,8 @@
   #define BORINGSSL_WRITE write
 #endif
 
+using namespace bssl;
+
 BIO *BIO_new_fd(int fd, int close_flag) {
   BIO *ret = BIO_new(BIO_s_fd());
   if (ret == nullptr) {
@@ -166,7 +168,7 @@ static const BIO_METHOD methods_fdp = {
     fd_new,      fd_free,           /*callback_ctrl=*/nullptr,
 };
 
-const BIO_METHOD *BIO_s_fd(void) { return &methods_fdp; }
+const BIO_METHOD *BIO_s_fd() { return &methods_fdp; }
 
 #endif  // OPENSSL_NO_POSIX_IO
 

@@ -21,12 +21,18 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
+	"github.com/hexops/gotextdiff/span"
 
 	"boringssl.googlesource.com/boringssl.git/util/build"
 )
@@ -36,8 +42,38 @@ var (
 	numWorkers = flag.Int("num-workers", runtime.NumCPU(), "Runs the given number of workers")
 	dryRun     = flag.Bool("dry-run", false, "Skip actually writing any files")
 	perlPath   = flag.String("perl", "perl", "Path to the perl command")
+	clangPath  = flag.String("clang", findClang(), "Path to the clang command")
 	list       = flag.Bool("list", false, "List all generated files, rather than actually run them")
 )
+
+// findClang returns where clang likely is installed.
+//
+// TODO(crbug.com/42220000): Have the CI builder pass the flag, then remove this hack.
+func findClang() string {
+	if path, err := exec.LookPath("clang"); err == nil {
+		return path
+	}
+	for _, path := range []string{
+		filepath.Join(runtime.GOROOT(), "../llvm-build/bin/clang"),
+		filepath.Join(runtime.GOROOT(), "../llvm-build/bin/clang.exe"),
+		filepath.Join(runtime.GOROOT(), "../llvm-build/bin/clang-cl"),
+		filepath.Join(runtime.GOROOT(), "../llvm-build/bin/clang-cl.exe"),
+	} {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return "clang"
+}
+
+type gotextdiffHandleWrapper struct {
+	io.Writer
+	fmt.State // Usually left as nil as gotextdiff doesn't use it.
+}
+
+func (w gotextdiffHandleWrapper) Write(p []byte) (n int, err error) {
+	return w.Writer.Write(p)
+}
 
 func runTask(t Task) error {
 	expected, err := t.Run()
@@ -57,6 +93,11 @@ func runTask(t Task) error {
 		}
 
 		if !bytes.Equal(expected, actual) {
+			uri := span.URIFromPath(dstPath)
+			// Diff is from actual (i.e. what's in the repo) to expected (i.e. what should be in the repo).
+			edits := myers.ComputeEdits(uri, string(actual), string(expected))
+			unified := gotextdiff.ToUnified(dstPath, dstPath, string(actual), edits)
+			unified.Format(gotextdiffHandleWrapper{Writer: os.Stderr}, 's')
 			return errors.New("file out of date")
 		}
 		return nil
@@ -114,17 +155,33 @@ func run() error {
 	}
 
 	var tasks []Task
+	var perlAsmTasks []WaitableTask
+	var allAsmSrcs []string
 	targetsOut := make(map[string]build.Target)
 	for name, targetIn := range targetsIn {
-		targetOut, targetTasks, err := targetIn.Pregenerate(name)
+		targetOut, targetTasks, targetAsmSrcs, err := targetIn.Pregenerate(name)
 		if err != nil {
 			return err
 		}
 		targetsOut[name] = targetOut
 		tasks = append(tasks, targetTasks...)
+		for _, task := range targetTasks {
+			waitable, ok := task.(WaitableTask)
+			if !ok {
+				continue
+			}
+			if !slices.Contains(targetAsmSrcs, task.Destination()) {
+				return errors.New("asm destination is not contained in target asm sources")
+			}
+			perlAsmTasks = append(perlAsmTasks, waitable)
+
+		}
+		allAsmSrcs = append(allAsmSrcs, targetAsmSrcs...)
 	}
 
+	tasks = append(tasks, MakePrefixingIncludes(targetsIn)...)
 	tasks = append(tasks, MakeBuildFiles(targetsOut)...)
+	tasks = append(tasks, MakeCollectAsmGlobalTasks(perlAsmTasks, allAsmSrcs)...)
 	tasks = append(tasks, NewSimpleTask("gen/README.md", func() ([]byte, error) {
 		return []byte(readme), nil
 	}))
@@ -134,11 +191,26 @@ func run() error {
 		var filtered []Task
 		for _, t := range tasks {
 			dst := t.Destination()
+			matched := false
 			for _, arg := range args {
 				if strings.Contains(dst, arg) {
-					filtered = append(filtered, t)
+					matched = true
 					break
 				}
+			}
+			if matched {
+				filtered = append(filtered, t)
+			} else if wt, ok := t.(WaitableTask); ok {
+				// A filtered-out task can be assumed to have finished _successfully_.
+				// After all, usually one can assume CI has already run it
+				// and compared its output.
+				//
+				// In case the output file does not exist,
+				// the dependent task will sure notice and fail.
+				//
+				// This allows filtering out tasks one e.g. can't currently run
+				// while still running other tasks that depend on them.
+				wt.Close(nil)
 			}
 		}
 		tasks = filtered

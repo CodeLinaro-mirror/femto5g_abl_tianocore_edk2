@@ -25,6 +25,8 @@
 #include "internal.h"
 
 
+using namespace bssl;
+
 static void dh_free(EVP_PKEY *pkey) {
   DH_free(reinterpret_cast<DH *>(pkey->pkey));
   pkey->pkey = nullptr;
@@ -66,9 +68,9 @@ static int dh_param_copy(EVP_PKEY *to, const EVP_PKEY *from) {
   return 1;
 }
 
-static int dh_param_cmp(const EVP_PKEY *a, const EVP_PKEY *b) {
+static bool dh_param_equal(const EVP_PKEY *a, const EVP_PKEY *b) {
   if (dh_param_missing(a) || dh_param_missing(b)) {
-    return -2;
+    return false;
   }
 
   // Matching OpenSSL, only compare p and g for PKCS#3-style Diffie-Hellman.
@@ -79,9 +81,9 @@ static int dh_param_cmp(const EVP_PKEY *a, const EVP_PKEY *b) {
          BN_cmp(DH_get0_g(a_dh), DH_get0_g(b_dh)) == 0;
 }
 
-static int dh_pub_cmp(const EVP_PKEY *a, const EVP_PKEY *b) {
-  if (dh_param_cmp(a, b) <= 0) {
-    return 0;
+static bool dh_pub_equal(const EVP_PKEY *a, const EVP_PKEY *b) {
+  if (!dh_param_equal(a, b)) {
+    return false;
   }
 
   const DH *a_dh = reinterpret_cast<const DH *>(a->pkey);
@@ -96,7 +98,7 @@ static const EVP_PKEY_ASN1_METHOD dh_asn1_meth = {
     /*pkey_method=*/&dh_pkey_meth,
     /*pub_decode=*/nullptr,
     /*pub_encode=*/nullptr,
-    /*pub_cmp=*/dh_pub_cmp,
+    /*pub_equal=*/dh_pub_equal,
     /*priv_decode=*/nullptr,
     /*priv_encode=*/nullptr,
     /*set_priv_raw=*/nullptr,
@@ -112,7 +114,7 @@ static const EVP_PKEY_ASN1_METHOD dh_asn1_meth = {
     /*pkey_bits=*/dh_bits,
     /*param_missing=*/dh_param_missing,
     /*param_copy=*/dh_param_copy,
-    /*param_cmp=*/dh_param_cmp,
+    /*param_equal=*/dh_param_equal,
     /*pkey_free=*/dh_free,
 };
 
@@ -255,7 +257,7 @@ static int pkey_dh_ctrl(EVP_PKEY_CTX *ctx, int type, int p1, void *p2) {
   }
 }
 
-const EVP_PKEY_CTX_METHOD dh_pkey_meth = {
+const EVP_PKEY_CTX_METHOD bssl::dh_pkey_meth = {
     /*pkey_id=*/EVP_PKEY_DH,
     /*init=*/pkey_dh_init,
     /*copy=*/pkey_dh_copy,

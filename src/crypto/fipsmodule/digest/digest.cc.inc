@@ -24,6 +24,8 @@
 #include "internal.h"
 
 
+using namespace bssl;
+
 int EVP_MD_type(const EVP_MD *md) { return md->type; }
 
 int EVP_MD_nid(const EVP_MD *md) { return EVP_MD_type(md); }
@@ -41,7 +43,7 @@ void EVP_MD_CTX_init(EVP_MD_CTX *ctx) {
   ctx->pctx_ops = nullptr;
 }
 
-EVP_MD_CTX *EVP_MD_CTX_new(void) {
+EVP_MD_CTX *EVP_MD_CTX_new() {
   EVP_MD_CTX *ctx =
       reinterpret_cast<EVP_MD_CTX *>(OPENSSL_malloc(sizeof(EVP_MD_CTX)));
 
@@ -52,7 +54,7 @@ EVP_MD_CTX *EVP_MD_CTX_new(void) {
   return ctx;
 }
 
-EVP_MD_CTX *EVP_MD_CTX_create(void) { return EVP_MD_CTX_new(); }
+EVP_MD_CTX *EVP_MD_CTX_create() { return EVP_MD_CTX_new(); }
 
 int EVP_MD_CTX_cleanup(EVP_MD_CTX *ctx) {
   assert(ctx->pctx == nullptr || ctx->pctx_ops != nullptr);
@@ -187,7 +189,7 @@ int EVP_DigestFinal(EVP_MD_CTX *ctx, uint8_t *md, unsigned int *size) {
 
 int EVP_Digest(const void *data, size_t count, uint8_t *out_md,
                unsigned int *out_size, const EVP_MD *type, ENGINE *impl) {
-  bssl::ScopedEVP_MD_CTX ctx;
+  ScopedEVP_MD_CTX ctx;
   return EVP_DigestInit_ex(ctx.get(), type, impl) &&
          EVP_DigestUpdate(ctx.get(), data, count) &&
          EVP_DigestFinal_ex(ctx.get(), out_md, out_size);

@@ -34,6 +34,8 @@
 #define B64_DECODE 2
 #define EVP_ENCODE_LENGTH(l) (((l + 2) / 3 * 4) + (l / 48 + 1) * 2 + 80)
 
+using namespace bssl;
+
 typedef struct b64_struct {
   int buf_len;
   int buf_off;
@@ -482,4 +484,4 @@ static const BIO_METHOD b64_method = {
     b64_callback_ctrl,
 };
 
-const BIO_METHOD *BIO_f_base64(void) { return &b64_method; }
+const BIO_METHOD *BIO_f_base64() { return &b64_method; }
