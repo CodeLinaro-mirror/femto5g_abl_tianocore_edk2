@@ -3053,6 +3053,10 @@ STATIC VOID GetBufferSize (UINT64 *MaxBufferSize, UINT64 *MinBufferSize)
   if (DdrSize <= DDR_512MB) {
     /* 16MB */
     *MinBufferSize = 16777216;
+    if (DdrSize <= DDR_128MB) {
+      /* 35MB */
+      *MaxBufferSize = 36700160;
+    }
   }
 }
 
@@ -3357,13 +3361,15 @@ CmdGetVar (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 
       AsciiStrToUnicodeStr (Token, PartNameUniStr);
 
-      if (PartitionHasMultiSlot (PartNameUniStr)) {
-        CurrentSlot = GetCurrentSlotSuffix ();
-        UnicodeStrToAsciiStr (CurrentSlot.Suffix, CurrentSlotAsc);
-        AsciiStrnCatS ((CHAR8 *)Arg,
-                        MAX_FASTBOOT_COMMAND_SIZE - AsciiStrLen ("getvar:"),
-                        CurrentSlotAsc,
-                        AsciiStrLen (CurrentSlotAsc));
+      if(!IsRecoveryInfo ()) {
+        if (PartitionHasMultiSlot (PartNameUniStr)) {
+          CurrentSlot = GetCurrentSlotSuffix ();
+          UnicodeStrToAsciiStr (CurrentSlot.Suffix, CurrentSlotAsc);
+          AsciiStrnCatS ((CHAR8 *)Arg,
+                          MAX_FASTBOOT_COMMAND_SIZE - AsciiStrLen ("getvar:"),
+                          CurrentSlotAsc,
+                          AsciiStrLen (CurrentSlotAsc));
+        }
       }
     }
   }
