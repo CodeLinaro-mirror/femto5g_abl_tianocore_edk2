@@ -30,7 +30,6 @@ if(WIN32)
 endif()
 
 include(cmake/go.cmake)
-include(cmake/paths.cmake)
 include(gen/sources.cmake)
 
 enable_language(C)
@@ -129,7 +128,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CLANG)
     set(C_CXX_FLAGS "${C_CXX_FLAGS} -fno-common -fvisibility=hidden")
   endif()
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_CXX_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${C_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${C_CXX_FLAGS}")
 elseif(MSVC)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -utf-8")
   # Without /Zc:__cplusplus, MSVC does not define the right value for
@@ -425,7 +424,6 @@ if(BUILD_TESTING)
     set(BENCHMARK_ENABLE_TESTING OFF)
     set(BENCHMARK_ENABLE_INSTALL OFF)
     set(BENCHMARK_INSTALL_DOCS OFF)
-    set(CXXFEATURECHECK_DEBUG ON)
     if(USE_CUSTOM_LIBCXX)
       # benchmark's feature testing does not pick up the custom STL.
       set(HAVE_STD_REGEX 1)
@@ -476,7 +474,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CLANG)
   endif()
 
   if(CLANG)
-    list(APPEND C_CXX_WARNINGS -Wnewline-eof -Wextra-semi -fcolor-diagnostics)
+    list(APPEND C_CXX_WARNINGS -Wnewline-eof -Wextra-semi -fcolor-diagnostics
+         -Wheader-hygiene)
   else()
     list(APPEND C_CXX_WARNINGS -Wformat-signedness)
     # GCC (at least 4.8.4) has a bug where it'll find unreachable free() calls
@@ -609,16 +608,21 @@ if(FIPS_DELOCATE)
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   )
 
-  add_library(bcm_hashunset STATIC bcm-delocated.S)
-  set_target_properties(bcm_hashunset PROPERTIES POSITION_INDEPENDENT_CODE ON)
-  set_target_properties(bcm_hashunset PROPERTIES LINKER_LANGUAGE C)
+  add_library(bcm_hashunset OBJECT bcm-delocated.S)
+
+  # bcm_hashunset may still have relocations, just link-independent ones. Link a
+  # sample shared object before computing the hash.
+  add_library(bcm_relocated SHARED $<TARGET_OBJECTS:bcm_hashunset>)
+  set_target_properties(bcm_relocated PROPERTIES LINKER_LANGUAGE CXX)
+  target_link_options(bcm_relocated PRIVATE "-Wl,-z,undefs")
 
   go_executable(inject_hash
                 boringssl.googlesource.com/boringssl.git/util/fipstools/inject_hash)
   add_custom_command(
     OUTPUT bcm.o
-    COMMAND ./inject_hash -o bcm.o -in-archive $<TARGET_FILE:bcm_hashunset>
-    DEPENDS bcm_hashunset inject_hash
+    COMMAND ./inject_hash -o bcm.o -in-object $<TARGET_OBJECTS:bcm_hashunset>
+            -in-hash $<TARGET_FILE:bcm_relocated>
+    DEPENDS bcm_hashunset bcm_relocated inject_hash
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
   set(CRYPTO_FIPS_OBJECTS bcm.o)

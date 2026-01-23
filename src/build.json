@@ -485,6 +485,7 @@
             "include/openssl/target.h",
             "include/openssl/thread.h",
             "include/openssl/time.h",
+            "include/openssl/tls_prf.h",
             "include/openssl/trust_token.h",
             "include/openssl/type_check.h",
             "include/openssl/x509.h",
@@ -1011,7 +1012,7 @@
             "pki/testdata/verify_name_match_unittest/names/*.pem",
             "pki/testdata/verify_signed_data_unittest/*.pem",
             "pki/testdata/verify_unittest/*.der",
-            "pki/testdata/verify_unittest/self-issued.pem"
+            "pki/testdata/verify_unittest/*.pem"
         ]
     },
     "ssl_test": {

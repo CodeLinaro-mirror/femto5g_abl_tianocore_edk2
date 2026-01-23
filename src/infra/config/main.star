@@ -143,7 +143,10 @@ def ci_builder(
     """
     dimensions = dict(host["dimensions"])
     dimensions["pool"] = "luci.flex.ci"
-    caches = [swarming.cache("gocache"), swarming.cache("gopath")]
+    caches = [
+        swarming.cache("gocache", name = "boringssl_gocache"),
+        swarming.cache("gopath", name = "boringssl_gopath"),
+    ]
     if "caches" in host:
         caches += host["caches"]
     properties = dict(properties)
@@ -301,7 +304,7 @@ MAC_ARM64_HOST = {
         "os": "Mac",
         "cpu": "arm64",
     },
-    "caches": [swarming.cache("osx_sdk")],
+    "caches": [swarming.cache("osx_sdk", name = "boringssl_osx_sdk")],
     # xcode installation can take a while, particularly when running
     # concurrently on multiple VMs on the same host. See crbug.com/1063870
     # for more context.
@@ -314,7 +317,7 @@ MAC_X86_64_HOST = {
         "os": "Mac-12|Mac-13",
         "cpu": "x86-64",
     },
-    "caches": [swarming.cache("osx_sdk")],
+    "caches": [swarming.cache("osx_sdk", name = "boringssl_osx_sdk")],
     # xcode installation can take a while, particularly when running
     # concurrently on multiple VMs on the same host. See crbug.com/1063870
     # for more context.
@@ -326,11 +329,10 @@ WIN_HOST = {
         "os": "Windows-10",
         "cpu": "x86-64",
     },
-    "caches": [swarming.cache("win_toolchain")],
 }
 
 # The Android tests take longer to run. See https://crbug.com/900953.
-ANDROID_TIMEOUT = 60 * time.minute
+ANDROID_TIMEOUT = 90 * time.minute
 
 WALLEYE_HOST = {
     "dimensions": {
@@ -345,6 +347,17 @@ SDE_TIMEOUT = 3 * 60 * time.minute
 # TODO(davidben): Switch the BoringSSL recipe to specify most flags in
 # properties rather than parsing names. Then we can add new configurations
 # without having to touch multiple repositories.
+
+cq_builder(
+    "presubmit",
+    LINUX_HOST,
+    recipe = "presubmit",
+    # TODO(chlily): Enable when ready.
+    cq_enabled = False,
+    properties = {
+        "repo_name": "boringssl",
+    },
+)
 
 both_builders(
     "android_aarch64",
@@ -377,7 +390,7 @@ both_builders(
     },
 )
 both_builders(
-    "android_aarch64_fips",
+    "android_aarch64_fips_rel",
     # The Android FIPS configuration requires a newer device.
     WALLEYE_HOST,
     category = "android|aarch64",
@@ -390,13 +403,14 @@ both_builders(
             "ANDROID_PLATFORM": "android-24",
             # FIPS mode on Android uses shared libraries.
             "BUILD_SHARED_LIBS": "1",
+            "CMAKE_BUILD_TYPE": "RelWithAsserts",
             "FIPS": "1",
         },
     },
 )
 
 both_builders(
-    "android_aarch64_fips_noasm",
+    "android_aarch64_fips_noasm_rel",
     # The Android FIPS configuration requires a newer device.
     WALLEYE_HOST,
     category = "android|aarch64",
@@ -410,6 +424,7 @@ both_builders(
             "ANDROID_PLATFORM": "android-24",
             # FIPS mode on Android uses shared libraries.
             "BUILD_SHARED_LIBS": "1",
+            "CMAKE_BUILD_TYPE": "RelWithAsserts",
             "FIPS": "1",
         },
     },
@@ -419,7 +434,7 @@ both_builders(
 # for android_aarch64_fips. Additionally, urandom_test doesn't work in shared
 # library builds, so this gives Android FIPS coverage for urandom_test.
 both_builders(
-    "android_aarch64_fips_static",
+    "android_aarch64_fips_static_rel",
     # The Android FIPS configuration requires a newer device.
     WALLEYE_HOST,
     category = "android|aarch64",
@@ -430,6 +445,7 @@ both_builders(
         "cmake_args": {
             "ANDROID_ABI": "arm64-v8a",
             "ANDROID_PLATFORM": "android-24",
+            "CMAKE_BUILD_TYPE": "RelWithAsserts",
             "FIPS": "1",
         },
     },
@@ -472,7 +488,7 @@ both_builders(
     },
 )
 both_builders(
-    "android_arm_fips",
+    "android_arm_fips_rel",
     # The Android FIPS configuration requires a newer device.
     WALLEYE_HOST,
     category = "android|thumb",
@@ -485,6 +501,7 @@ both_builders(
             "ANDROID_PLATFORM": "android-24",
             # FIPS mode on Android uses shared libraries.
             "BUILD_SHARED_LIBS": "1",
+            "CMAKE_BUILD_TYPE": "RelWithAsserts",
             "FIPS": "1",
         },
     },
@@ -940,8 +957,6 @@ both_builders(
     category = "mac",
     short_name = "bzl",
     recipe = "boringssl_bazel",
-    # TODO(crbug.com/463446310): Re-enable once the builder is fixed.
-    cq_enabled = False,
 )
 both_builders(
     "win32",

@@ -73,7 +73,7 @@ extern "C" {
 // A consumer may use this symbol in the preprocessor to temporarily build
 // against multiple revisions of BoringSSL at the same time. It is not
 // recommended to do so for longer than is necessary.
-#define BORINGSSL_API_VERSION 37
+#define BORINGSSL_API_VERSION 38
 
 #if defined(BORINGSSL_SHARED_LIBRARY)
 
@@ -309,6 +309,8 @@ typedef struct conf_st CONF;
 typedef struct conf_value_st CONF_VALUE;
 typedef struct crypto_buffer_pool_st CRYPTO_BUFFER_POOL;
 typedef struct crypto_buffer_st CRYPTO_BUFFER;
+typedef struct crypto_ivec_st CRYPTO_IVEC;
+typedef struct crypto_iovec_st CRYPTO_IOVEC;
 typedef struct ctr_drbg_state_st CTR_DRBG_STATE;
 typedef struct dh_st DH;
 typedef struct dsa_st DSA;

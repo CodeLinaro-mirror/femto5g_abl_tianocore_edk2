@@ -688,6 +688,10 @@ set(crypto_test_data
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/unicode_password.p12
   ${BORINGSSL_ROOT}src/crypto/pkcs8/test/windows.p12
   ${BORINGSSL_ROOT}src/crypto/poly1305/poly1305_tests.txt
+  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa16384.pem
+  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa16384pub.pem
+  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa16385.pem
+  ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa16385pub.pem
   ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa511.pem
   ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa511pub.pem
   ${BORINGSSL_ROOT}src/crypto/rsa/test/rsa512.pem

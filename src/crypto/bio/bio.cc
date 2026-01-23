@@ -27,6 +27,8 @@
 #include "internal.h"
 
 
+using namespace bssl;
+
 static CRYPTO_EX_DATA_CLASS g_ex_data_class =
     CRYPTO_EX_DATA_CLASS_INIT_WITH_APP_DATA;
 
@@ -577,7 +579,7 @@ int BIO_set_write_buffer_size(BIO *bio, int buffer_size) { return 0; }
 static CRYPTO_MUTEX g_index_lock = CRYPTO_MUTEX_INIT;
 static int g_index = BIO_TYPE_START;
 
-int BIO_get_new_index(void) {
+int BIO_get_new_index() {
   CRYPTO_MUTEX_lock_write(&g_index_lock);
   // If |g_index| exceeds 255, it will collide with the flags bits.
   int ret = g_index > 255 ? -1 : g_index++;

@@ -48,6 +48,9 @@
 #include <sys/time.h>
 #endif
 
+
+using namespace bssl;
+
 namespace {
 
 template <typename Config>
@@ -365,6 +368,7 @@ const Flag<TestConfig> *FindFlag(const char *name) {
         IntVectorFlag("-expect-peer-verify-pref",
                       &TestConfig::expect_peer_verify_prefs),
         IntVectorFlag("-curves", &TestConfig::curves),
+        IntVectorFlag("-curves-flags", &TestConfig::curves_flags),
         OptionalIntVectorFlag("-key-shares", &TestConfig::key_shares),
         OptionalDefaultInitFlag("-no-key-shares", &TestConfig::key_shares),
         IntVectorFlag("-server-supported-groups-hint",
@@ -2005,7 +2009,10 @@ bssl::UniquePtr<SSL_CTX> TestConfig::SetupCtx(SSL_CTX *old_ctx) const {
 
   SSL_CTX_set0_buffer_pool(ssl_ctx.get(), BufferPool());
 
-  std::string cipher_list = "ALL:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256";
+  std::string cipher_list = "ALL";
+  // Explicitly add deprecated ciphers that are otherwise not included.
+  cipher_list += ":TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256";
+  cipher_list += ":TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256";
   if (!cipher.empty()) {
     cipher_list = cipher;
     SSL_CTX_set_options(ssl_ctx.get(), SSL_OP_CIPHER_SERVER_PREFERENCE);
@@ -2495,7 +2502,7 @@ bssl::UniquePtr<SSL> TestConfig::NewSSL(
   if (min_version != 0 && !SSL_set_min_proto_version(ssl.get(), min_version)) {
     return nullptr;
   }
-  // TODO(crbug.com/42290594): Remove this once DTLS 1.3 is enabled by default.
+  // TODO(crbug.com/382915276): Remove this once DTLS 1.3 is enabled by default.
   if (is_dtls && max_version == 0 &&
       !SSL_set_max_proto_version(ssl.get(), DTLS1_3_VERSION)) {
     return nullptr;
@@ -2527,9 +2534,18 @@ bssl::UniquePtr<SSL> TestConfig::NewSSL(
   if (!check_close_notify) {
     SSL_set_quiet_shutdown(ssl.get(), 1);
   }
-  if (!curves.empty() &&
-      !SSL_set1_group_ids(ssl.get(), curves.data(), curves.size())) {
-    return nullptr;
+  if (!curves.empty()) {
+    if (!curves_flags.empty()) {
+      if (curves.size() != curves_flags.size() ||
+          !SSL_set1_group_ids_with_flags(ssl.get(), curves.data(),
+                                         curves_flags.data(), curves.size())) {
+        return nullptr;
+      }
+    } else {
+      if (!SSL_set1_group_ids(ssl.get(), curves.data(), curves.size())) {
+        return nullptr;
+      }
+    }
   }
   if (key_shares.has_value() &&
       !SSL_set1_client_key_shares(ssl.get(), key_shares->data(),

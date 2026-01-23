@@ -605,6 +605,7 @@ boringssl_crypto_headers := \
   include/openssl/target.h \
   include/openssl/thread.h \
   include/openssl/time.h \
+  include/openssl/tls_prf.h \
   include/openssl/trust_token.h \
   include/openssl/type_check.h \
   include/openssl/x509.h \
@@ -914,6 +915,10 @@ boringssl_crypto_test_data := \
   crypto/pkcs8/test/unicode_password.p12 \
   crypto/pkcs8/test/windows.p12 \
   crypto/poly1305/poly1305_tests.txt \
+  crypto/rsa/test/rsa16384.pem \
+  crypto/rsa/test/rsa16384pub.pem \
+  crypto/rsa/test/rsa16385.pem \
+  crypto/rsa/test/rsa16385pub.pem \
   crypto/rsa/test/rsa511.pem \
   crypto/rsa/test/rsa511pub.pem \
   crypto/rsa/test/rsa512.pem \
@@ -2263,6 +2268,9 @@ boringssl_pki_test_data := \
   pki/testdata/path_builder_unittest/key_id_prioritization/int_no_ski_c.pem \
   pki/testdata/path_builder_unittest/key_id_prioritization/root.pem \
   pki/testdata/path_builder_unittest/key_id_prioritization/target.pem \
+  pki/testdata/path_builder_unittest/mtc/leaf.pem \
+  pki/testdata/path_builder_unittest/mtc/mtc-ica.pem \
+  pki/testdata/path_builder_unittest/mtc/mtc-leaf.pem \
   pki/testdata/path_builder_unittest/multi-root-A-by-B.pem \
   pki/testdata/path_builder_unittest/multi-root-B-by-C.pem \
   pki/testdata/path_builder_unittest/multi-root-B-by-F.pem \
@@ -2779,6 +2787,10 @@ boringssl_pki_test_data := \
   pki/testdata/verify_unittest/lencr-root-x1-cross-signed.der \
   pki/testdata/verify_unittest/lencr-root-x1.der \
   pki/testdata/verify_unittest/mozilla_roots.der \
+  pki/testdata/verify_unittest/mtc-leaf-b.pem \
+  pki/testdata/verify_unittest/mtc-leaf-bitflip.pem \
+  pki/testdata/verify_unittest/mtc-leaf-c.pem \
+  pki/testdata/verify_unittest/mtc-leaf.pem \
   pki/testdata/verify_unittest/self-issued.pem
 
 boringssl_rust_bssl_crypto_sources := \
@@ -2805,6 +2817,7 @@ boringssl_rust_bssl_crypto_sources := \
   rust/bssl-crypto/src/scoped.rs \
   rust/bssl-crypto/src/slhdsa.rs \
   rust/bssl-crypto/src/test_helpers.rs \
+  rust/bssl-crypto/src/tls12_prf.rs \
   rust/bssl-crypto/src/x25519.rs
 
 boringssl_rust_bssl_sys_sources := \

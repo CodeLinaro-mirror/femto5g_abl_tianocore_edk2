@@ -221,6 +221,7 @@ crypto_headers = [
     "src/include/openssl/target.h",
     "src/include/openssl/thread.h",
     "src/include/openssl/time.h",
+    "src/include/openssl/tls_prf.h",
     "src/include/openssl/trust_token.h",
     "src/include/openssl/type_check.h",
     "src/include/openssl/x509.h",
@@ -839,6 +840,7 @@ rust_bssl_crypto = [
     "src/rust/bssl-crypto/src/scoped.rs",
     "src/rust/bssl-crypto/src/slhdsa.rs",
     "src/rust/bssl-crypto/src/test_helpers.rs",
+    "src/rust/bssl-crypto/src/tls12_prf.rs",
     "src/rust/bssl-crypto/src/x25519.rs",
 ]
 
