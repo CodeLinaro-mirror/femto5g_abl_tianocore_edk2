@@ -121,6 +121,7 @@ STATIC CHAR8 *ResumeCmdLine = NULL;
 /* Display command line related structures */
 #define MAX_DISPLAY_CMD_LINE 256
 STATIC CHAR8 DisplayCmdLine[MAX_DISPLAY_CMD_LINE];
+STATIC UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
 
 #define MAX_DTBO_IDX_STR 64
 STATIC CHAR8 *AndroidBootDtboIdx = " androidboot.dtbo_idx=";
@@ -330,13 +331,12 @@ STATIC VOID GetDisplayCmdline (VOID)
 {
   EFI_STATUS Status;
 
-  UINTN DisplayCmdLineLen = sizeof (DisplayCmdLine);
   Status = gRT->GetVariable ((CHAR16 *)L"DisplayPanelConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &DisplayCmdLineLen,
                              DisplayCmdLine);
+  DisplayCmdLineLen = sizeof (DisplayCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get Panel Config, %r\n", Status));
-    DisplayCmdLine[0] = '\0';  // Clear buffer on failure
   }
 }
 
