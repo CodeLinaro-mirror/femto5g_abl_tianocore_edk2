@@ -76,7 +76,6 @@ void OPENSSL_cpuid_setup();
 // OPENSSL_init_cpuid initializes the platform-specific feature cache, if
 // needed. This function is idempotent and may be called concurrently.
 void OPENSSL_init_cpuid();
-
 #else
 inline void OPENSSL_init_cpuid() {}
 #endif
