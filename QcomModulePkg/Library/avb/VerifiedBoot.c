@@ -618,6 +618,22 @@ ErrV3:
 }
 
 STATIC EFI_STATUS
+#if DISABLE_DTBO_PARTITION
+LoadImageNoAuth (BootInfo *Info)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 PageSize = 0;
+  BOOLEAN FastbootPath;
+
+  Status = LoadBootImageNoAuth (Info, &PageSize, &FastbootPath);
+  if (Status != EFI_SUCCESS) {
+    return Status;
+  }
+  DEBUG ((EFI_D_INFO, "Skip load dtbo partition\n"));
+
+  return EFI_SUCCESS;
+}
+#else
 LoadImageNoAuth (BootInfo *Info)
 {
   EFI_STATUS Status = EFI_SUCCESS;
@@ -694,6 +710,7 @@ Err:
 err_out:
   return Status;
 }
+#endif
 
 STATIC EFI_STATUS
 LoadImageNoAuthWrapper (BootInfo *Info)
