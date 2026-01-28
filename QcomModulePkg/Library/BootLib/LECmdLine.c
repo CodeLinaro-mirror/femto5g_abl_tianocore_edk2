@@ -40,7 +40,9 @@
 #define MAX_VERITY_HASH_LEN 65
 #define MAX_VERITY_NAND_IGNORE_LEN 2
 #define MAX_VERITY_SYSTEM_PARTITION_STR_LEN 20
+#define LUN_CHAR_MAPPING_SIZE 8
 STATIC CONST CHAR8 *VeritySystemPartitionStrEmmc = "/dev/mmcblk0p";
+STATIC CONST CHAR8 *VeritySystemPartitionStrUfs = "/dev/sd";
 STATIC CONST CHAR8 *VeritySystemPartitionStrNand = "/dev/ubiblock0_0";
 STATIC CONST CHAR8 *VerityName = "verity";
 STATIC CONST CHAR8 *VerityAppliedOn = "system";
@@ -171,6 +173,8 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
   BOOLEAN MultiSlotBoot = FALSE;
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
   INT32 Index = 0;
+  UINT32 Lun = 0;
+  CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
 #if VERITY_LE_ROOTHASH_SIGNED
   CHAR8 *HashSig = NULL;
 #endif
@@ -290,6 +294,13 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       goto ErrLEVerityout;
     }
 
+    Lun = GetPartitionLunFromIndex (Index);
+    if (Lun >= LUN_CHAR_MAPPING_SIZE) {
+      DEBUG ((EFI_D_ERROR, "Lun index out of bounds: %d\n", Lun));
+      Status = EFI_DEVICE_ERROR;
+      goto ErrLEVerityout;
+    }
+
     DMTemp = AllocateZeroPool (sizeof (CHAR8) * MAX_VERITY_CMD_LINE);
     if (!DMTemp) {
       DEBUG ((EFI_D_ERROR, "Failed to allocate memory for DMTemp\n"));
@@ -323,13 +334,23 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       "%a",
       VeritySystemPartitionStrNand
       );
-    } else {
+    } else if (!AsciiStrCmp ("EMMC", RootDevStr)) {
       /* Append index to EMMC partition string */
       AsciiSPrint (
       VeritySystemPartitionStr,
       MAX_VERITY_SYSTEM_PARTITION_STR_LEN,
       "%a%d",
       VeritySystemPartitionStrEmmc, Index
+      );
+    } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
+      /* Append index to UFS partition string */
+      AsciiSPrint (
+      VeritySystemPartitionStr,
+      MAX_VERITY_SYSTEM_PARTITION_STR_LEN,
+      "%a%c%d",
+      VeritySystemPartitionStrUfs,
+      LunCharMapping[Lun],
+      GetPartitionIdxInLun (PartitionName, Lun)
       );
     }
 
