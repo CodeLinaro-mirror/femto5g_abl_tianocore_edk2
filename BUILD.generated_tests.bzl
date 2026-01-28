@@ -78,6 +78,7 @@ test_support_sources = [
     "src/crypto/test/wycheproof_util.h",
     "src/crypto/trust_token/internal.h",
     "src/crypto/x509/internal.h",
+    "src/include/openssl/prefix_symbols.h",
     "src/pki/cert_error_id.h",
     "src/pki/cert_error_params.h",
     "src/pki/cert_errors.h",
