@@ -31,36 +31,10 @@
  *
  **/
 /*
-  * Changes from Qualcomm Innovation Center are provided under the following
-  * license:
-  * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
-  *
-  * Redistribution and use in source and binary forms, with or without
-  * modification, are permitted (subject to the limitations in the disclaimer
-  * below) provided that the following conditions are met:
-  *  * Redistributions of source code must retain the above copyright notice,
-  *    this list of conditions and the following disclaimer.
-  *  * Redistributions in binary form must reproduce the above copyright notice,
-  *    this list of conditions and the following disclaimer in the documentation
-  *    and/or other materials provided ?with the distribution.
-  *  * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
-  *     contributors may be used to endorse or promote products derived from this
-  *     software without specific prior written permission.
-  *
-  * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED
-  * BY THIS LICENSE.
-  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
-  * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-  * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
-  * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-  * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
-  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  */
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
 
 
 #include <Library/BaseLib.h>
@@ -140,6 +114,7 @@ STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 QosAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 WaitSwitchRdyBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
@@ -567,7 +542,11 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
       }
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
-#ifdef SUPPORT_AB_BOOT_LXC
+#ifdef ROOT_PARTLABEL_SUPPORT
+    /* root=PARTLABEL=system/system_a/system_b */
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=PARTLABEL=%s", Key, PartitionName);
+
+#elif defined(SUPPORT_AB_BOOT_LXC)
     if (MultiSlotBoot &&
          (StrnCmp ((CONST CHAR16 *)L"_a", CurSlot.Suffix,
           StrLen (CurSlot.Suffix)) == 0))
@@ -1062,6 +1041,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     Src = Param->EarlySpeedCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyQosCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyWaitSwitchRdyCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -1820,7 +1801,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                  PhyAddrBufCmdLineCmdLine,
                                  IFaceAddrBufCmdLine,
                                  SpeedAddrBufCmdLine,
-                                 QosAddrBufCmdLine);
+                                 QosAddrBufCmdLine,
+                                 WaitSwitchRdyBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
@@ -1828,6 +1810,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (QosAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (WaitSwitchRdyBufCmdLine);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1919,6 +1902,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
     Param.EarlyQosCmdLine = QosAddrBufCmdLine;
+    Param.EarlyWaitSwitchRdyCmdLine = WaitSwitchRdyBufCmdLine;
   }
 
   if (EarlyUsbInitEnabled ()) {
