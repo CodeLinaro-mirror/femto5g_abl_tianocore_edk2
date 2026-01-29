@@ -818,6 +818,7 @@ rust_bindgen {
         "libssl_baremetal",
     ],
     apex_available: [
+        "com.android.compos",
         "com.android.virt",
     ],
     handle_static_inline: true,
@@ -831,6 +832,7 @@ cc_library_static {
     include_dirs: ["."],
     local_include_dirs: ["include/"],
     apex_available: [
+        "com.android.compos",
         "com.android.virt",
     ],
 
@@ -936,6 +938,9 @@ rust_library_rlib {
     // we need to redeclare the staticfns dependency
     whole_static_libs: [
         "libbssl_sys_raw_nostd_staticfns",
+    ],
+    apex_available: [
+        "com.android.compos",
     ],
 }
 
