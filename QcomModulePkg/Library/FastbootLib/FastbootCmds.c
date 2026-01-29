@@ -3344,6 +3344,16 @@ CmdOemSetDispOpMode (CONST CHAR8 *arg, VOID *data, UINT32 Size)
     arg,
     AsciiStrLen (arg));
 
+  /* Update variable only if disp op is exactly one of the valid values */
+  if ((AsciiStrCmp(DispOpValue, "loopback") != 0) &&
+      (AsciiStrCmp(DispOpValue, "hfi") != 0) &&
+      (AsciiStrCmp(DispOpValue, "hyp") != 0) &&
+      (AsciiStrCmp(DispOpValue, "hwio") != 0)) {
+    AsciiStrnCatS (Resp, sizeof (Resp), ": failed!", AsciiStrLen (": failed!"));
+    FastbootFail (Resp);
+    return;
+  }
+
   Status = gRT->SetVariable ((CHAR16 *)L"DispOpModeConfig",
                                &gQcomTokenSpaceGuid,
                                EFI_VARIABLE_RUNTIME_ACCESS |
