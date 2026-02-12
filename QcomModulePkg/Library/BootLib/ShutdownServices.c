@@ -15,9 +15,9 @@
  */
 
  /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -31,7 +31,7 @@
  *        disclaimer in the documentation and/or other materials provided
  *        with the distribution.
  *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ *      * Neither the name of Qualcomm Technologies, Inc. nor the names of its
  *        contributors may be used to endorse or promote products derived
  *        from this software without specific prior written permission.
  *
@@ -184,13 +184,17 @@ RebootDevice (UINT8 RebootReason)
   EFI_STATUS Status = EFI_INVALID_PARAMETER;
 
   WaitForFlashFinished ();
-
   StrnCpyS (ResetData.DataBuffer, ARRAY_SIZE (ResetData.DataBuffer),
             (CONST CHAR16 *)STR_RESET_PARAM, ARRAY_SIZE (STR_RESET_PARAM) - 1);
   ResetData.Bdata = RebootReason;
-  if (RebootReason == NORMAL_MODE)
+  if ((RebootReason == NORMAL_MODE) || (RebootReason == FASTBOOT_MODE) || (RebootReason == RECOVERY_MODE)) {
+    /* SDAM 0x7148 layout: bit[7] -> Intentional reboot flag (0 = unintentional, 1 = intentional)
+     * Set bit[7] for intentional reboot modes.
+     */
+    ResetData.Bdata = RebootReason | (1 << INTENT_BIT_SHIFT);
+    DEBUG ((EFI_D_INFO, "DEBUG: Adding intentional bit RebootReason 0x%x \n",ResetData.Bdata));
     Status = EFI_SUCCESS;
-
+  }
   if (RebootReason == EMERGENCY_DLOAD)
     gRT->ResetSystem (EfiResetPlatformSpecific, EFI_SUCCESS,
                       StrSize ((CONST CHAR16 *)STR_RESET_PLAT_SPECIFIC_EDL),
