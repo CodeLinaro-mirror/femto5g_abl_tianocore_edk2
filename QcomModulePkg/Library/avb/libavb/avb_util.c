@@ -63,7 +63,7 @@
 #include <Protocol/scm_sip_interface.h>
 #include "PartitionTableUpdate.h"
 
-#include "../SmciInvokeUtils.h"
+#include "SmciInvokeUtils.h"
 #include "../CUpdateRollbackVersion.h"
 #include "../IUpdateRollbackVersion.h"
 

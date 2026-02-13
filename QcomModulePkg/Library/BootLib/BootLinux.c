@@ -621,6 +621,12 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   }
   DtboImgInvalid = LoadAndValidateDtboImg (Info, BootParamlistPtr);
   if (!DtboImgInvalid) {
+#ifdef AUTO_VIRT_ABL
+    /* For AUTO GVM，there is no device tree to be appended,
+       so, we reset device here. */
+    DEBUG ((EFI_D_INFO, "Rebooting the device.\n"));
+    RebootDevice (NORMAL_MODE);
+#endif
     // appended device tree
     Dtb = DeviceTreeAppended (ImageBuffer,
                              ImageSize,

@@ -52,6 +52,9 @@
 #include <Library/aes/aes_public.h>
 #include <Library/lz4/lib/lz4.h>
 #include <Protocol/EFIQseecom.h>
+#include "IHibernateTzDataMgr.h"
+#include "SmciInvokeUtils.h"
+#include <Protocol/EFIScm.h>
 #endif
 #include "KeymasterClient.h"
 
@@ -64,6 +67,8 @@
 
 #define ALIGN_1GB(address) address &= ~((1 << 30) - 1)
 #define ALIGN_2MB(address) address &= ~((1 << 21) - 1)
+#define UINT32_C(x) x##U
+#define CHibernateTzDataMgr_UID UINT32_C(444)
 
 /* Reserved some free memory for UEFI use */
 #define RESERVE_FREE_SIZE 1024 * 1024 * 10
@@ -73,10 +78,16 @@ typedef struct FreeRanges {
 }FreeRanges;
 
 #if HIBERNATION_SUPPORT_AES
+#ifdef NUM_CORES_TARGET
+#define NUM_CORES NUM_CORES_TARGET
+#else
 #define NUM_CORES 8
+#endif
+#ifdef NUM_SILVER_CORES_TARGET
+#define NUM_SILVER_CORES NUM_SILVER_CORES_TARGET
+#else
 #define NUM_SILVER_CORES 4
-#define NUM_PAGES_PER_GOLD_CORE ((NrCopyPages / 54) * 9)
-#define NUM_PAGES_PER_SILVER_CORE ((NrCopyPages / 54) * 4)
+#endif
 
 static struct DecryptParam *Dp;
 static VOID *Authslot;
@@ -99,6 +110,9 @@ static UINT8 UnwrappedKey[32];
 /* Holds free memory ranges read from UEFI memory map */
 static struct FreeRanges FreeRangeBuf[100];
 static INT32 FreeRangeCount;
+static UINT8 silver_core = NUM_SILVER_CORES;
+static UINT32 number_of_page_per_silver_core = 0;
+static UINT32 number_of_page_per_gold_core = 0;
 
 typedef struct MappedRange {
         UINT64 Start, End;
@@ -1608,69 +1622,116 @@ static UINT64 CopyPageTables ()
         return NewTtbr0;
 }
 
-#if HIBERNATION_SUPPORT_AES
-static INT32 InitTaAndGetKey (struct Secs2dTaHandle *TaHandle)
+/* We assume that total core is always equal to sum of silver core and gold cores.
+   Also cpu configuration is such that first cluster is of silver cores followed by
+   gold cores. The last gold core is reserved for thread which is used to restore
+   remaining pages. If there is no gold core then last silver core is reserved for
+   restoring remaining pages.
+*/
+static INT32 ComputeAdjustedCoresAndPages(VOID)
 {
-        INT32 Status;
-        CmdReq Req = {0};
-        CmdRsp Rsp = {0};
-        UINT32 ReqLen, RspLen;
 
-        Status = gBS->LocateProtocol (&gQcomQseecomProtocolGuid, NULL,
-                (VOID **)&(TaHandle->QseeComProtocol));
-        if (Status) {
-                printf ("Error in locating Qseecom protocol Guid\n");
-                return -1;
+    #if HIBERNATION_SUPPORT_AES
+    /* Fixed-point weights: silver=1.0 -> 10, gold=2.2 -> 22 */
+    const UINT32 W_SILVER = 10;
+    const UINT32 W_GOLD   = 22;
+
+    UINT8 gold_core   = (NUM_CORES > NUM_SILVER_CORES) ? (NUM_CORES - NUM_SILVER_CORES) : 0;
+
+    if (gold_core < 1) {
+        if (silver_core < 2) {
+            silver_core--;
+            number_of_page_per_silver_core=0;
+            number_of_page_per_gold_core=0;
+            return 0;
         }
-        Status = TaHandle->QseeComProtocol->QseecomStartApp (
-                TaHandle->QseeComProtocol, "secs2d_a", &(TaHandle->AppId));
-        if (Status) {
-                printf ("Error in secs2d app loading\n");
-                return -1;
-        }
+        else
+            silver_core--;
+    }
 
-        ReqLen = sizeof (CmdReq);
-        if (ReqLen & QSEECOM_ALIGN_MASK) {
-                ReqLen = QSEECOM_ALIGN (ReqLen);
-        }
+    const UINT64 totalWeight = (NUM_SILVER_CORES * W_SILVER) + (gold_core * W_GOLD);
+    if (totalWeight > 0 ) {
+        number_of_page_per_silver_core = ((UINT64)NrCopyPages / totalWeight) * W_SILVER;
+        number_of_page_per_gold_core = ((UINT64)NrCopyPages / totalWeight) * W_GOLD;
+    }
+    else
+        return -1;
 
-        RspLen = sizeof (CmdRsp);
-        if (RspLen & QSEECOM_ALIGN_MASK) {
-                RspLen = QSEECOM_ALIGN (RspLen);
-        }
+    return 0;
+    #endif
+    silver_core = 0;
+    number_of_page_per_silver_core = 0;
+    number_of_page_per_gold_core = 0;
+    return 0;
+}
 
-        gBS->CopyMem ((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof (Dp->Iv));
+#if HIBERNATION_SUPPORT_AES
+static EFI_STATUS
+HibernateTzDataMgrGetData(void *Key,
+                    size_t KeyLen,
+                    size_t *KeyLenOut) {
 
-        Req.Cmd = UNWRAP_KEY_CMD;
-        Req.UnwrapkeyReq.WrappedKeySize = WRAPPED_KEY_SIZE;
-        gBS->CopyMem ((VOID *)Req.UnwrapkeyReq.WrappedKeyBuffer,
-                        (VOID *)Dp->KeyBlob, sizeof (Dp->KeyBlob));
-        Req.UnwrapkeyReq.CurrTime.Hour = 4;
-        Status = TaHandle->QseeComProtocol->QseecomSendCmd (
-                TaHandle->QseeComProtocol, TaHandle->AppId,
-                        (UINT8 *)&Req, ReqLen,
-                        (UINT8 *)&Rsp, RspLen);
-        if (Status) {
-                printf ("Error in conversion wrappeded key to unwrapped key\n");
-                return -1;
-        }
-        gBS->CopyMem ((VOID *)UnwrappedKey,
-                        (VOID *)Rsp.UnwrapkeyRsp.KeyBuffer, 32);
+   EFI_STATUS        Status       = EFI_SUCCESS;
+   QCOM_SCM_PROTOCOL *ScmProtocol = NULL;
+   Object            appObj       = Object_NULL;
+   Object            clientEnv    = Object_NULL;
 
-        Status = TaHandle->QseeComProtocol->QseecomShutdownApp (
-                TaHandle->QseeComProtocol, TaHandle->AppId);
-        if (Status) {
-                printf ("Error in secs2d app loading\n");
-                return -1;
-        }
+   Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL, (VOID**)&ScmProtocol);
+   if (Status) {
+     DEBUG ((EFI_D_ERROR, "Unable to locate protocol (%d)\n", Status));
+     return Status;
+   }
 
-        return 0;
+   Status = ScmProtocol->ScmGetClientEnv(ScmProtocol, &clientEnv);
+   if (Status) {
+     DEBUG ((EFI_D_ERROR, "Unable to get client environment (%d) \n", Status));
+     clientEnv = Object_NULL;
+     goto Done;
+   }
+
+   Status = IClientEnvOpen(clientEnv, CHibernateTzDataMgr_UID, &appObj);
+   if (Object_isERROR(Status)) {
+     appObj = Object_NULL;
+     goto Done;
+   }
+
+   Status = IHibernateTzDataMgr_getData(appObj, 3, Key, KeyLen, KeyLenOut);
+   if (Object_isERROR(Status)) {
+     goto Done;
+   }
+
+Done:
+   Object_ASSIGN_NULL(appObj);
+   Object_ASSIGN_NULL(clientEnv);
+
+   return Status;
+}
+
+static INT32 InitTaAndGetKey()
+{
+    INT32 Status;
+    size_t key_len = 0;
+    UINT8 temp_key[32];
+
+    // IV setup remains
+    gBS->CopyMem((VOID *)(IvGlb), (VOID *)(Dp->Iv), sizeof(Dp->Iv));
+
+    // call the wrapper for getData
+    Status = HibernateTzDataMgrGetData(temp_key, sizeof(temp_key), &key_len);
+    if (Status || key_len != sizeof(temp_key)) {
+        printf("Failed to get key from TZ: %d\n", Status);
+        return Status;
+    }
+
+    // Copy key to global key buffer
+    gBS->CopyMem((VOID *)UnwrappedKey, (VOID *)temp_key, sizeof(temp_key));
+
+    return Status;
 }
 
 static INT32 InitAesDecrypt (VOID)
 {
         INT32 AuthslotCount;
-        Secs2dTaHandle TaHandle = {0};
         UINT32 NrSwapMapPages, i;
         Authslot = AllocatePages (1);
 
@@ -1718,7 +1779,7 @@ static INT32 InitAesDecrypt (VOID)
                         return -1;
                 }
         }
-        if (InitTaAndGetKey (&TaHandle)) {
+        if (InitTaAndGetKey ()) {
                 return -1;
         }
 
@@ -1833,6 +1894,7 @@ static INT32 RestoreSnapshotImage (VOID)
         UINT64 NumCompPages = 0;
         UINT8 *BlkArr = NULL;
         INT32 BlkLen = 0, DataIndx = 0, j = 0;
+        UINT64 pages_last_thread=0;
 #if HIBERNATION_SUPPORT_AES
         /* Parameters required for decompression */
         INT32 MetaIndx;
@@ -1846,7 +1908,10 @@ static INT32 RestoreSnapshotImage (VOID)
         if (Ret < 0) {
                 return Ret;
         }
-
+        Ret = ComputeAdjustedCoresAndPages();
+        if (Ret) {
+                return Ret;
+        }
         if (InitAesDecrypt ()) {
                 printf ("AES initialization failed\n");
                 return -1;
@@ -1935,7 +2000,7 @@ static INT32 RestoreSnapshotImage (VOID)
                               (NUM_CORES - NUM_SILVER_CORES);
 #endif
         }
-        for (Iter1 = 0; Iter1 < NUM_SILVER_CORES; Iter1++) {
+        for (Iter1 = 0; Iter1 < silver_core; Iter1++) {
                 if (IS_COMPRESS (SwsuspHeader->Flags)) {
 #if HIBERNATION_SUPPORT_AES
                         Ret = ThreadConstructor ((VOID *)&Info[Iter1], &Offset,
@@ -1947,7 +2012,7 @@ static INT32 RestoreSnapshotImage (VOID)
                         Ret = ThreadConstructor ((VOID *)&Info[Iter1], &Offset,
                                                   &PfnOffset, &DataIndx, BlkLen,
                                                   BlkArr,
-                                                  NUM_PAGES_PER_SILVER_CORE
+                                                  number_of_page_per_silver_core
                                                 );
                 }
                 if (Ret) {
@@ -1955,7 +2020,7 @@ static INT32 RestoreSnapshotImage (VOID)
                 }
         }
 
-        for (Iter1 = NUM_SILVER_CORES; Iter1 < NUM_CORES - 1; Iter1++) {
+        for (Iter1 = silver_core; Iter1 < NUM_CORES - 1; Iter1++) {
                 if (IS_COMPRESS (SwsuspHeader->Flags)) {
 #if HIBERNATION_SUPPORT_AES
                         Ret = ThreadConstructor ((VOID *)&Info[Iter1], &Offset,
@@ -1967,7 +2032,7 @@ static INT32 RestoreSnapshotImage (VOID)
                         Ret = ThreadConstructor ((VOID *)&Info[Iter1], &Offset,
                                                   &PfnOffset, &DataIndx, BlkLen,
                                                   BlkArr,
-                                                  NUM_PAGES_PER_GOLD_CORE
+                                                  number_of_page_per_gold_core
                                                 );
                 }
                 if (Ret) {
@@ -1990,12 +2055,14 @@ static INT32 RestoreSnapshotImage (VOID)
                                 );
 #endif
         } else {
+                for (j = 0; j < Iter1; j++) {
+                    pages_last_thread = pages_last_thread + Info[j].NumPages;
+                    DEBUG ((EFI_D_VERBOSE,"cpu[%d] will restore %d pages \n", j, Info[j].NumPages));
+                }
+                pages_last_thread = NrCopyPages - pages_last_thread;
                 Ret = ThreadConstructor ((VOID *)&Info[Iter1], &Offset,
                                 &PfnOffset, &DataIndx, BlkLen, BlkArr,
-                                NrCopyPages - (4 * NUM_PAGES_PER_SILVER_CORE)
-                                                            -
-                                                (3 * NUM_PAGES_PER_GOLD_CORE)
-                                );
+                                pages_last_thread );
         }
         if (Ret) {
                 return Ret;

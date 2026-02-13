@@ -93,6 +93,7 @@ static struct PartialGoods PartialGoodsCpuType3[] = {
 };
 
 #define NUM_OF_CPUS (ARRAY_SIZE(PartialGoodsCpuType0))
+#define SLC_SUBPART_COUNT 2
 
 STATIC struct PartialGoods *PartialGoodsCpuType[MAX_CPU_CLUSTER] = {
     PartialGoodsCpuType0, PartialGoodsCpuType1,
@@ -706,6 +707,60 @@ FindNodeAndUpdateProperty (VOID *fdt,
   }
 }
 
+STATIC VOID UpdateAudioFwName(VOID *fdt, UINT32 Value)
+{
+  INT32 NodeOffset, Ret = 0, i = 0;
+  CONST CHAR8 *UpperHalfFw[] = {"adsp2.mdt", "adsp2_dtb.mdt"};
+  CONST CHAR8 *LowerHalfFw[] = {"adsp3.mdt", "adsp3_dtb.mdt"};
+  CONST CHAR8 **UpdatedFwName = NULL;
+  UINTN TotalSize = 0;
+  CHAR8 *Buffer, *Ptr;
+
+  if (!fdt) {
+    DEBUG ((EFI_D_ERROR, "Invalid fdt\n"));
+    return;
+  }
+
+  NodeOffset = FdtPathOffset(fdt, "/soc/remoteproc-adsp");
+  if (NodeOffset < 0) {
+    DEBUG ((EFI_D_ERROR, "Failed to get audio node, error: %d\n", NodeOffset));
+    return;
+  }
+
+  if (Value & SLC_LOWER_HALF_MASK) {
+    UpdatedFwName = LowerHalfFw;
+  } else if (Value & SLC_UPPER_HALF_MASK) {
+    UpdatedFwName = UpperHalfFw;
+  } else {
+    return;
+  }
+
+  for (i = 0; i < SLC_SUBPART_COUNT; i++) {
+    TotalSize += AsciiStrLen(UpdatedFwName[i]) + 1;
+  }
+
+  Buffer = AllocateZeroPool(TotalSize);
+  if (!Buffer) {
+     DEBUG ((EFI_D_ERROR, "Failed to allocate memory for AudioFwName\n"));
+     return;
+  }
+
+  Ptr = Buffer;
+  for (i = 0; i < SLC_SUBPART_COUNT; i++) {
+    AsciiStrCpy(Ptr, UpdatedFwName[i]);
+    Ptr += AsciiStrLen(UpdatedFwName[i]) + 1;
+  }
+
+  Ret = FdtSetProp (fdt, NodeOffset, "firmware-name", Buffer, TotalSize);
+  if (!Ret) {
+    DEBUG ((EFI_D_INFO, "AudioFwName property updated (%a, %a)\n", UpdatedFwName[0], UpdatedFwName[1]));
+  } else {
+    DEBUG ((EFI_D_ERROR, "Failed to update AudioFwName property, ret =%d \n", Ret));
+  }
+
+  FreePool(Buffer);
+}
+
 STATIC VOID
 FindLabelAndUpdateProperty (VOID *fdt,
                            UINT32 TableSz,
@@ -888,10 +943,33 @@ ReadMMPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 }
 
 EFI_STATUS
+ReadSlcInformation (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  if ((Value == NULL) ||
+      (pChipInfoProtocol == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (pChipInfoProtocol->Revision < EFI_CHIPINFO_PROTOCOL_REVISION_5) {
+    return EFI_UNSUPPORTED;
+  }
+
+  Status = pChipInfoProtocol->GetDisabledFeatures(pChipInfoProtocol, EFICHIPINFO_PART_SLC, 0, Value);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Failed to get SLC information. %r\n", Status));
+  }
+
+  return Status;
+}
+
+EFI_STATUS
 UpdatePartialGoodsNode (VOID *fdt)
 {
   UINT32 i;
   UINT32 PartialGoodsMMValue = 0;
+  UINT32 SlcValue = 0;
   UINT32 PartialGoodsCpuValue;
   UINT32 PartialGoodsCPUTypeValue = 0;
   EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol;
@@ -925,6 +1003,15 @@ UpdatePartialGoodsNode (VOID *fdt)
                                &PartialGoodsMmTypeWithLabel[0],
                                PartialGoodsMMValue);
 
+  }
+
+  Status = ReadSlcInformation(pChipInfoProtocol, &SlcValue);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "SLC information not found.\n"));
+  }
+
+  if(SlcValue) {
+    UpdateAudioFwName (fdt, SlcValue);
   }
 
   /* Read and update CPU Partial Goods nodes */

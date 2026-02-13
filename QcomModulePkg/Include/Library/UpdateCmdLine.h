@@ -124,6 +124,7 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *BootCpuCmdLine;
   CHAR8 *AudioFrameWork;
   CHAR8 *ModemPathCmdLine;
+  CONST CHAR8 *MTECmdLine;
 } UpdateCmdLineParamList;
 
 

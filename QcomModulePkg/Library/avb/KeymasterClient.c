@@ -26,10 +26,11 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+/*
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
 
 #include "Library/KeymasterClient.h"
 #include "VerifiedBoot.h"
@@ -248,7 +249,11 @@ KeyMasterStartApp (VOID)
   }
 
   size_t RspLenOut = 0;
+#ifdef LV_GVM_KM_VIRT
+  CONST CHAR8 *kmAppName = "kmvirt";
+#else
   CONST CHAR8 *kmAppName = "keymaster64";
+#endif
 
   QCOM_SCM_PROTOCOL *pQcomScmProtocol = NULL;
   // Locate QCOM_SCM_PROTOCOL.

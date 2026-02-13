@@ -30,13 +30,12 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **/
-/*
-  * Changes from Qualcomm Technologies, Inc. are provided under the following
-  * license:
-  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
-  * SPDX-License-Identifier: BSD-3-Clause-Clear
-  */
 
+/*
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
 
 #include <Library/BaseLib.h>
 #include <Library/BootLinux.h>
@@ -168,10 +167,21 @@ STATIC CHAR8 *MemOff = " mem=";
 STATIC CONST CHAR8 *MemHpState = " memhp_default_state=online";
 STATIC CONST CHAR8 *MovableNode = " movable_node";
 
+#ifdef ENABLE_CHECK_MTE
+/* Memory tagging arguments */
+#ifdef EXCLUSIVE_SME_MTE
+STATIC CONST CHAR8 *KasanOn = " kasan=on kasan.mode=asymm arm64.nosme";
+STATIC CONST CHAR8 *NoSME = " arm64.nosme";
+#else
+STATIC CONST CHAR8 *KasanOn =" kasan=on kasan.mode=asymm";
+#endif
+#endif
+
 STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 LIST_ENTRY *BootConfigListHead = NULL;
 
+#ifdef CHECK_CPU_FREQ_MITIGATION
 /**
   Check if cpu frequency needs to be capped.
   This is needed in case battery voltage is low and a slow charger is connected.
@@ -191,7 +201,7 @@ TargetCheckIsCpuFreqMitigationReq()
     return FALSE;
   }
 
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_1004) {
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10005) {
     Status = ChgDetectProtocol->IsCpuFreqMitigationReq(&MitigateCpuFreq);
     if (EFI_ERROR(Status)) {
       DEBUG ((EFI_D_ERROR, "Error checking for cpu frequency mitigation requirement: %r\n", Status));
@@ -203,6 +213,13 @@ TargetCheckIsCpuFreqMitigationReq()
 
   return FALSE;
 }
+#else
+BOOLEAN
+TargetCheckIsCpuFreqMitigationReq()
+{
+  return FALSE;
+}
+#endif
 
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
@@ -412,6 +429,7 @@ STATIC VOID GetDisplayCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"DisplayPanelConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &DisplayCmdLineLen,
                              DisplayCmdLine);
+  DisplayCmdLineLen = sizeof (DisplayCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get Panel Config, %r\n", Status));
   }
@@ -424,6 +442,7 @@ STATIC VOID GetHwFenceCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"HwFenceConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &HwFenceCmdLineLen,
                              HwFenceCmdLine);
+  HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get hw fence Config, %r\n", Status));
   }
@@ -437,6 +456,7 @@ STATIC VOID GetDispOpCmdLine (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"DispOpModeConfig",
                              &gQcomTokenSpaceGuid, NULL, &DispOpCmdLineLen,
                              Data);
+  DispOpCmdLineLen = sizeof (DispOpCmdLine);
   if (Status == EFI_SUCCESS) {
     AsciiSPrint (DispOpCmdLine, sizeof (DispOpCmdLine),
                     "%a%a", DispOpStr, Data);
@@ -453,6 +473,7 @@ STATIC VOID GetHfiCoreDbgCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"DispOpModeConfig",
                              &gQcomTokenSpaceGuid, NULL, &HfiDbgCmdLineLen,
                              Data);
+  HfiDbgCmdLineLen = sizeof (HfiDbgCmdLine);
   if (Status == EFI_SUCCESS) {
     AsciiSPrint (HfiDbgCmdLine, sizeof (HfiDbgCmdLine),
                       "%a%a", HfiCoreStr, Data);
@@ -465,9 +486,12 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
 {
   EFI_STATUS Status;
 
+  GpuCmdLineLen = sizeof (GpuCmdLine);
+
   Status = gRT->GetVariable ((CHAR16 *)L"GpuConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &GpuCmdLineLen,
                              GpuCmdLine);
+  GpuCmdLineLen = sizeof (GpuCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get GPU Preempt Config, %r\n", Status));
   }
@@ -481,13 +505,24 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
 {
   EFI_STATUS Status;
   CHAR8 *Src;
+  CHAR8 *AUDIOFRAMEWORK;
 
-  Status = ReadAudioFrameWork (&Src, Length);
-  if (Status == EFI_SUCCESS) {
-     if (*Length) {
+  AUDIOFRAMEWORK = GetAudioFw ();
+
+  if (AUDIOFRAMEWORK == NULL) {
+      *Length = 0;
+      return;
+  } else {
+  if ((*Length = AsciiStrLen (AUDIOFRAMEWORK)) > 0) {
+      AsciiStrCpyS (FrameWork, *Length + 1, AUDIOFRAMEWORK);
+      Status = ReadAudioFrameWork (&Src, Length);
+    if (Status == EFI_SUCCESS) {
+      if (*Length) {
         AsciiStrCpyS (FrameWork, *Length, Src);
-   }
- }
+        }
+      }
+    }
+  }
 }
 
 /*
@@ -1068,6 +1103,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     }
   }
 
+  if (Param->MTECmdLine != NULL) {
+    Src = Param->MTECmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
   return EFI_SUCCESS;
 }
 CHAR8* RemoveSpace (CHAR8* param, UINT32 ParamLen)
@@ -1374,6 +1414,9 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 **FinalBootConfig = &BootParamlistPtr->FinalBootConfig;
   UINT32 *FinalBootConfigLen = &BootParamlistPtr->FinalBootConfigLen;
   VOID *fdt = (VOID *)BootParamlistPtr->DeviceTreeLoadAddr;
+#ifdef ENABLE_CHECK_MTE
+  UINT32 Memtags = 0;
+#endif
 
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
   if (BootConfigListHead == NULL) {
@@ -1816,6 +1859,25 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   } else {
     Param.MemOffAmt = NULL;
   }
+
+  Param.MTECmdLine = NULL;
+#ifdef ENABLE_CHECK_MTE
+  if (GetMemtagMode(&Memtags) == EFI_SUCCESS) {
+    if (Memtags &
+        (MISC_MEMTAG_MODE_MEMTAG_KERNEL |
+          MISC_MEMTAG_MODE_MEMTAG_KERNEL_ONCE)) {
+      Param.MTECmdLine = KasanOn;
+      CmdLineLen += AsciiStrLen (Param.MTECmdLine);
+    } else if (Memtags &
+        (MISC_MEMTAG_MODE_MEMTAG |
+          MISC_MEMTAG_MODE_MEMTAG_ONCE)) {
+#ifdef EXCLUSIVE_SME_MTE
+      Param.MTECmdLine = NoSME;
+      CmdLineLen += AsciiStrLen (Param.MTECmdLine);
+#endif
+    }
+  }
+#endif
 
   if (Update_PartialGoods_Bootconfig (HeaderVersion, &CmdLineLen,
       &BootConfigLen) != EFI_SUCCESS) {
