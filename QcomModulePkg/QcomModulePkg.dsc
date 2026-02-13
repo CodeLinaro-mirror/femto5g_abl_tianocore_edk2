@@ -128,7 +128,7 @@
   GCC:*_*_*_ARCHCC_FLAGS  = -Wno-shift-negative-value -fstack-protector-all -Wno-varargs -fno-common -Wno-misleading-indentation -Wno-unknown-warning-option
   GCC:*_*_*_DLINK_FLAGS = -Wl,-Ttext=0x0
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO
-  GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\"
+  GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME='"$(BOARD_BOOTLOADER_PRODUCT_NAME)"'
 
   !ifdef $(FORCE_NO_PIE)
   GCC:*_*_*_ARCHCC_FLAGS  =  -fno-PIE
@@ -144,6 +144,9 @@
   !endif
   !if $(FORCE_NO_PIE)
       GCC:*_*_*_CC_FLAGS = -DFORCE_NO_PIE
+  !endif
+  !if $(ROOT_PARTLABEL_SUPPORT)
+      GCC:*_*_*_CC_FLAGS = -DROOT_PARTLABEL_SUPPORT
   !endif
   !if $(SUPPORT_AB_BOOT_LXC)
       GCC:*_*_*_CC_FLAGS = -DSUPPORT_AB_BOOT_LXC
