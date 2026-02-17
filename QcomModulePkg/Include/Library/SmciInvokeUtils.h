@@ -77,6 +77,10 @@ ObjectInvokeFunc (Object ArgO, ObjectOp Op, ObjectArg *Args, ObjectCounts ArgK)
 
 #define Object_Release(o) ObjectInvokeFunc ((o), Object_OP_Release, 0, 0)
 #define Object_Retain(o) ObjectInvokeFunc ((o), Object_OP_Retain, 0, 0)
+#define INT32_T(c) c
+#define IOpener_ERROR_NOT_FOUND INT32_T(10)
+#define IOpener_ERROR_PRIVILEGE INT32_T(11)
+#define IOpener_ERROR_NOT_SUPPORTED INT32_T(12)
 
 #define Object_isNull(O) ((O).Invoke == NULL)
 
