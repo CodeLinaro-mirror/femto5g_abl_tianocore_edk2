@@ -27,39 +27,9 @@
 */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2023, 2025, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "Recovery.h"
@@ -68,6 +38,9 @@
 #include <Library/BootLinux.h>
 
 STATIC MiscVirtualABMessage *VirtualAbMsg = NULL;
+#ifdef ENABLE_CHECK_MTE
+STATIC UINT32 MemtagMode = __UINT32_MAX__;
+#endif
 
 STATIC EFI_STATUS
 WriteVirtualABMessage (UINT8 MergeStatus)
@@ -330,6 +303,125 @@ WriteRecoveryMessage (CHAR8 *Command)
   PartitionData = NULL;
   return Status;
 }
+
+#ifdef ENABLE_CHECK_MTE
+EFI_STATUS
+ClearMemtagBits (MiscMemtagMessage *MemtagMsg, VOID *Buf)
+{
+  EFI_STATUS Status;
+  EFI_BLOCK_IO_PROTOCOL *BlkIo = NULL;
+  PartiSelectFilter HandleFilter;
+  HandleInfo HandleInfoList[1];
+  UINT32 MaxHandles;
+  UINT32 BlkIOAttrib = 0;
+  EFI_HANDLE *Handle = NULL;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  MemCardType CardType = UNKNOWN;
+  UINT32 PageSize;
+  UINT32 Offset;
+
+  CardType = CheckRootDeviceType ();
+  if (CardType == NAND) {
+    return EFI_UNSUPPORTED;
+  }
+
+  GetPageSize (&PageSize);
+
+  BlkIOAttrib = BLK_IO_SEL_PARTITIONED_GPT;
+  BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_NON_REMOVABLE;
+  BlkIOAttrib |= BLK_IO_SEL_MATCH_PARTITION_TYPE_GUID;
+
+  HandleFilter.RootDeviceType = NULL;
+  HandleFilter.PartitionType = &Ptype;
+  HandleFilter.VolumeName = NULL;
+
+  MaxHandles = ARRAY_SIZE (HandleInfoList);
+  Status =
+      GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
+
+  if (Status == EFI_SUCCESS) {
+    if (MaxHandles == 0) {
+      return EFI_NO_MEDIA;
+    }
+
+    if (MaxHandles != 1) {
+      // Unable to deterministically load from single partition
+      DEBUG ((EFI_D_ERROR, "%s: multiple partitions found.\r\n", __func__));
+      return EFI_LOAD_ERROR;
+    }
+  } else {
+    DEBUG ((EFI_D_ERROR,
+            "%s: GetBlkIOHandles failed: %r\n", __func__, Status));
+    return Status;
+  }
+  MemtagMsg->MemtagMode &=
+      ~(MISC_MEMTAG_MODE_MEMTAG_ONCE | MISC_MEMTAG_MODE_MEMTAG_KERNEL_ONCE);
+
+  BlkIo = HandleInfoList[0].BlkIo;
+  Handle = HandleInfoList[0].Handle;
+  Offset = MISC_VIRTUALAB_OFFSET / BlkIo->Media->BlockSize;
+  Status = WriteBlockToPartition (BlkIo, Handle,
+                                  Offset, PageSize, Buf);
+  return Status;
+}
+
+EFI_STATUS
+GetMemtagMode (UINT32 *Memtags)
+{
+  MiscMemtagMessage *MemtagMsg = NULL;
+  VOID *Buf = NULL;
+  EFI_STATUS Status = EFI_SUCCESS;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  UINT32 PageSize;
+
+  if (Memtags == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (MemtagMode != __UINT32_MAX__) {
+    *Memtags = MemtagMode;
+    return Status;
+  }
+
+  GetPageSize (&PageSize);
+
+  Status = ReadFromPartitionOffset (&Ptype, (VOID **)&Buf, PageSize,
+                                        MISC_VIRTUALAB_OFFSET);
+
+  if (Buf == NULL || Status != EFI_SUCCESS)  {
+    DEBUG ((EFI_D_ERROR, "Error reading memtag msg from misc partition %r\n",
+            Status));
+    return Status;
+  }
+
+  MemtagMsg = (MiscMemtagMessage *)&(Buf[MISC_VAB_MEMTAG_OFFSET]);
+
+  if (MemtagMsg->Magic != MISC_MEMTAG_MAGIC_HEADER) {
+    DEBUG ((EFI_D_ERROR, "Memtag magic doesn't match\n"));
+    FreePool (Buf);
+    return EFI_INCOMPATIBLE_VERSION;
+  }
+
+  MemtagMode = MemtagMsg->MemtagMode;
+  *Memtags = MemtagMode;
+
+  /* If needed, clear bits that enable MTE for one boot */
+  if (MemtagMode &
+      (MISC_MEMTAG_MODE_MEMTAG_ONCE | MISC_MEMTAG_MODE_MEMTAG_KERNEL_ONCE)) {
+
+    Status = ClearMemtagBits (MemtagMsg, Buf);
+
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Failed to clear memtag single boot bits\n"));
+      FreePool (Buf);
+      return Status;
+    }
+  }
+
+  FreePool (Buf);
+  return Status;
+}
+#endif
 
 EFI_STATUS
 RecoveryInit (BOOLEAN *BootIntoRecovery)
