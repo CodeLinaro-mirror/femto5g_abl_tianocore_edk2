@@ -95,23 +95,7 @@ typedef struct {
 #if VERIFIED_BOOT_ENABLED
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
 {
-  UINT32 PtnCount;
-  INT32 PtnIdx;
-  INT32 PtnIdx_a;
-  GetPartitionCount (&PtnCount);
-  PtnIdx_a = GetPartitionIndex ((CHAR16 *)L"vbmeta_a");
-
-  if (PtnIdx_a < PtnCount &&
-      PtnIdx_a != INVALID_PTN) {
-      return TRUE;
-  } else {
-      PtnIdx = GetPartitionIndex ((CHAR16 *)L"vbmeta");
-      if (PtnIdx < PtnCount &&
-      PtnIdx != INVALID_PTN) {
-      return TRUE;
-    }
-  }
-  return FALSE;
+  return TRUE;
 }
 #else
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
@@ -1788,7 +1772,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   }
 #endif
 #ifdef ENABLE_LE_VARIANT // Only in case where AVB is enabled on LE Build.
-  if (!IsRootCmdLineUpdated (Info)) {
+  if (!IsRootCmdLineUpdated (Info) && !HibernationResume) {
     CHAR8 *SystemPath = NULL;
     UINT32 SystemPathLen = 0;
     SystemPathLen = GetSystemPath (&SystemPath, Info->MultiSlotBoot,
