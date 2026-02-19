@@ -1303,6 +1303,171 @@ SetupSecretkeeperPublicKey (VOID) {
 }
 #endif
 
+#ifdef PVMFW_BCC
+
+/**
+  Load pvmfw image and AVF debug policy DTBO.
+
+  This function fetches the pvmfw image from its partition and records
+  the image buffer and size in the supplied boot parameter list.
+  On unlocked, non-user builds, it also loads the AVF debug policy DTBO
+  and validates that unsupported debug features (e.g. ramdump) are not
+  enabled.
+
+  This function does not perform PVMFW registration or firmware
+  milestone programming.
+
+  @param[in]  Info               Boot information populated by earlier
+                                 boot stages.
+  @param[in]  BootParamlistPtr   Pointer to boot parameter list to be
+                                 populated with pvmfw image metadata
+                                 and optional AVF debug policy DTBO.
+
+  @retval EFI_SUCCESS            pvmfw image and optional DP DTBO loaded
+                                 successfully, or pvmfw not present.
+  @retval EFI_LOAD_ERROR         Failed to retrieve or validate the
+                                 pvmfw image.
+**/
+EFI_STATUS
+LoadPvmFwAndAvfDpDtbo(BootInfo *Info, BootParamlist *BootParamlistPtr)
+{
+  EFI_STATUS Status;
+  VOID *Fdt;
+  UINT32 *Prop = NULL;
+  INT32 PropLen = 0;
+  INT32 Fragment = 0;
+  INT32 Node = 0;
+
+  if (!Info->HasPvmFw)
+    return EFI_SUCCESS;
+
+  Status = GetImage (Info,
+                    &BootParamlistPtr->PvmFwBuffer,
+                    (UINTN *)&BootParamlistPtr->PvmFwSize,
+                    "pvmfw");
+
+  if (Status ||
+      BootParamlistPtr->PvmFwSize <= 0) {
+      DEBUG ((EFI_D_ERROR, "ERROR: BootLinux: Get pvmfw Image failed!\n"));
+      return EFI_LOAD_ERROR;
+  } else {
+      DEBUG ((EFI_D_VERBOSE, "pvmfw size fetched from partition = 0x%x\n",
+             BootParamlistPtr->PvmFwSize));
+  }
+
+  // Load DP DTBO if device is unlocked
+  if (!TargetBuildVariantUser () &&
+      IsUnlocked ()) {
+    Status = GetAvfDpDtbo (&BootParamlistPtr->AvfDpDtboBaseAddr);
+    if (Status == EFI_SUCCESS) {
+      DEBUG ((EFI_D_VERBOSE, "Loaded DP dtbo partition\n"));
+      /* AVF Ramdump is not supported.
+       * So warn if ramdump property is enabled */
+      Fdt = BootParamlistPtr->AvfDpDtboBaseAddr;
+      /* Search fragments */
+      fdt_for_each_subnode (Fragment, Fdt, 0) {
+        if (Fragment >= 0) {
+          //Search for ramdump property in each node of the fragment.
+          for (Node = fdt_next_node (Fdt, Fragment, NULL);
+               Node >= 0;
+               Node = fdt_next_node (Fdt, Node, NULL)) {
+            Prop = (UINT32*) fdt_getprop (Fdt, Node, "ramdump", &PropLen);
+            if (Prop &&
+                *Prop != 0) {
+              DEBUG ((EFI_D_ERROR,
+                     "AVF debug dtbo: ramdump property is not supported\n"));
+            }
+          }
+        }
+      }
+    } else {
+      DEBUG ((EFI_D_INFO, "Not loading AVF debug policy\n"));
+    }
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
+
+  Prepare and register the PVMFW
+
+  This function validates the reserved PVMFW memory region, copies the
+  pvmfw image into the reserved region, registers the pvmfw region with
+  the Resource Manager (RM) by appending the required configuration data,
+  and finally calls the firmware milestone.
+
+  The function assumes that the pvmfw image buffer and size have already
+  been populated in the supplied boot parameter list.
+
+  @param[in]  Info               Boot information populated by earlier
+                                 boot stages.
+  @param[in]  BootParamlistPtr   Boot parameter list containing pvmfw
+                                 image metadata and reserved region
+                                 information.
+
+  @retval EFI_SUCCESS            PVMFW prepared, registered, and firmware
+                                 milestone programmed successfully.
+  @retval EFI_BUFFER_TOO_SMALL   Reserved region is insufficient for the
+                                 pvmfw image.
+  @retval EFI_NOT_FOUND          Required PVMFW parameters are unavailable.
+  @retval Other                  Failed to register pvmfw or set firmware
+                                 milestone.
+**/
+EFI_STATUS
+PrepareAndRegisterPvmFw (BootInfo *Info, BootParamlist *BootParamlistPtr)
+{
+  EFI_STATUS Status;
+  UINT64 PvmFwLoadAddr = 0;
+  UINT64 PvmFwSizeReserved = 0;
+
+  if (!Info->HasPvmFw)
+    return EFI_SUCCESS;
+
+  if (!QueryPvmFwParams (&PvmFwLoadAddr, &PvmFwSizeReserved)) {
+    DEBUG ((EFI_D_ERROR, "Failed to query pvmfw params\n"));
+    return EFI_NOT_FOUND;
+  }
+  BootParamlistPtr->PvmFwLoadAddr = PvmFwLoadAddr;
+  DEBUG ((EFI_D_VERBOSE, "PVMFW Load Address: 0x%lx\n", PvmFwLoadAddr));
+
+  if ((UINT64)BootParamlistPtr->PvmFwSize > PvmFwSizeReserved) {
+    DEBUG ((EFI_D_ERROR,
+           "PVMFW size 0x%x exceeds reserved region 0x%lx\n",
+           BootParamlistPtr->PvmFwSize, PvmFwSizeReserved));
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
+#ifdef PVMFW_CONFIG_EXT
+  // Setting this up here as pvmfw config requires it.
+  Status = SetupSecretkeeperPublicKey ();
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error: Failed to add AVF data to host DT\n"));
+  }
+#endif
+
+  /* Write pvmfw to golden region and register pvmfw region with RM. */
+  gBS->CopyMem ((CHAR8 *)PvmFwLoadAddr,
+                BootParamlistPtr->PvmFwBuffer +
+                /* Skip boot image header */
+                BOOT_IMG_MAX_PAGE_SIZE,
+                BootParamlistPtr->PvmFwSize);
+  DEBUG ((EFI_D_VERBOSE, "Copied pvmfw into golden region\n"));
+
+  Status = AppendPvmFwConfig (Info, BootParamlistPtr);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Failed to write pvmfw config: %r\n", Status));
+    return Status;
+  }
+
+  Status = SetFWMilestone ();
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Failed to set FWMilestone: %r\n", Status));
+  }
+  return Status;
+}
+#endif
+
 STATIC EFI_STATUS
 LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
 {
@@ -1312,9 +1477,6 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   UINT64 RamdiskLoadAddrCopy = 0;
   UINT32 TotalRamdiskSize;
   UINT64 End = 0;
-#ifdef PVMFW_BCC
-  UINT64 PvmFwLoadAddr = 0;
-#endif
   UINT32 VRamdiskSizePageAligned;
   UINT32 VDtbSizePageAligned;
   UINT32 VRamdiskTablesizePageAligned;
@@ -1391,42 +1553,6 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                 BootParamlistPtr->RamdiskSize);
 
   RamdiskLoadAddr +=BootParamlistPtr->RamdiskSize;
-
-#ifdef PVMFW_BCC
-// Setting this up here as PVMFw config requires it.
-#ifdef PVMFW_CONFIG_EXT
-  Status = SetupSecretkeeperPublicKey ();
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Error: Failed to add AVF data to host DT\n"));
-  }
-#endif
-
-  PvmFwLoadAddr = BootParamlistPtr->PvmFwLoadAddr;
-
-  /* Write pvmfw to golden region and register
-   * pvmfw region with RM.
-   */
-  if (Info->HasPvmFw &&
-      BootParamlistPtr->PvmFwSize >= 0 &&
-      PvmFwLoadAddr != 0) {
-    gBS->CopyMem ((CHAR8 *)PvmFwLoadAddr,
-                  BootParamlistPtr->PvmFwBuffer +
-                  /* Skip boot image header */
-                  BOOT_IMG_MAX_PAGE_SIZE,
-                  BootParamlistPtr->PvmFwSize);
-    DEBUG ((EFI_D_VERBOSE, "Copied pvmfw into golden region\n"));
-
-    Status = AppendPvmFwConfig (Info, BootParamlistPtr);
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "Failed to write pvmfw config: %r\n", Status));
-    }
-  }
-  Status = SetFWMilestone ();
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Failed to set FWMilestone: %r\n", Status));
-    return Status;
-  }
-#endif
 
   if (BootParamlistPtr->BootingWith32BitKernel) {
     if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
@@ -1700,11 +1826,6 @@ BootLinux (BootInfo *Info)
 
   RamPartitionEntry *RamPartitions = NULL;
   UINT32 NumPartitions = 0;
-  UINT32 *Prop = NULL;
-  VOID *Fdt;
-  INT32 PropLen = 0;
-  INT32 Fragment = 0;
-  INT32 Node = 0;
 
   if (Info == NULL) {
     DEBUG ((EFI_D_ERROR, "BootLinux: invalid parameter Info\n"));
@@ -1832,51 +1953,13 @@ BootLinux (BootInfo *Info)
   }
 
   BootParamlistPtr.PvmFwBuffer = NULL;
-  if (Info->HasPvmFw) {
-    Status = GetImage (Info,
-                      &BootParamlistPtr.PvmFwBuffer,
-                      (UINTN *)&BootParamlistPtr.PvmFwSize,
-                      "pvmfw");
-
-    if (Status ||
-        BootParamlistPtr.PvmFwSize <= 0) {
-        DEBUG ((EFI_D_ERROR, "ERROR: BootLinux: Get pvmfw Image failed!\n"));
-        return EFI_LOAD_ERROR;
-    } else {
-        DEBUG ((EFI_D_VERBOSE, "pvmfw size fetched from partition = 0x%x\n",
-               BootParamlistPtr.PvmFwSize));
-    }
-
-    // Load DP DTBO if device is unlocked
-    if (!TargetBuildVariantUser () &&
-        IsUnlocked ()) {
-      Status = GetAvfDpDtbo (&BootParamlistPtr.AvfDpDtboBaseAddr);
-      if (Status == EFI_SUCCESS) {
-        DEBUG ((EFI_D_VERBOSE, "Loaded DP dtbo partition\n"));
-        /* AVF Ramdump is not supported.
-         * So warn if ramdump property is enabled */
-        Fdt = BootParamlistPtr.AvfDpDtboBaseAddr;
-        /* Search fragments */
-        fdt_for_each_subnode (Fragment, Fdt, 0) {
-          if (Fragment >= 0) {
-            //Search for ramdump property in each node of the fragment.
-            for (Node = fdt_next_node (Fdt, Fragment, NULL);
-                 Node >= 0;
-                 Node = fdt_next_node (Fdt, Node, NULL)) {
-              Prop = (UINT32*) fdt_getprop (Fdt, Node, "ramdump", &PropLen);
-              if (Prop &&
-                  *Prop != 0) {
-                DEBUG ((EFI_D_ERROR,
-                       "AVF debug dtbo: ramdump property is not supported\n"));
-              }
-            }
-          }
-        }
-      } else {
-        DEBUG ((EFI_D_INFO, "Not loading AVF debug policy\n"));
-      }
-    }
-  }
+#ifdef PVMFW_BCC
+  Status = LoadPvmFwAndAvfDpDtbo(Info, &BootParamlistPtr);
+  if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Failed to load PVMFW/AVF DP DTBO! Status:%r\n", Status));
+      return Status;
+  };
+#endif
 
   // Retrive Base Memory Address from Ram Partition Table
   Status = BaseMem (&BootParamlistPtr.BaseMemory);
@@ -1937,12 +2020,6 @@ BootLinux (BootInfo *Info)
   DEBUG ((EFI_D_VERBOSE, "Ramdisk Size Actual: 0x%x\n", RamdiskSizeActual));
   DEBUG ((EFI_D_VERBOSE, "Ramdisk Offset: 0x%x\n",
                                        BootParamlistPtr.RamdiskOffset));
-#ifdef PVMFW_BCC
-  if (Info->HasPvmFw) {
-        DEBUG ((EFI_D_VERBOSE, "PvmFw Load Address: 0x%x\n",
-                        BootParamlistPtr.PvmFwLoadAddr));
-  }
-#endif
   DEBUG (
       (EFI_D_VERBOSE, "Device Tree Load Address: 0x%x\n",
                              BootParamlistPtr.DeviceTreeLoadAddr));
@@ -1993,6 +2070,14 @@ BootLinux (BootInfo *Info)
     DEBUG ((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
     return Status;
   }
+
+#ifdef PVMFW_BCC
+  Status = PrepareAndRegisterPvmFw (Info, &BootParamlistPtr);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Failed to register pvmfw: %r\n", Status));
+    return Status;
+  }
+#endif
 
   Status = LoadAddrAndDTUpdate (Info, &BootParamlistPtr);
   if (Status != EFI_SUCCESS &&
