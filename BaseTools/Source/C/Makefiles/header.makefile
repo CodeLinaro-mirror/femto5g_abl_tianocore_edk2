@@ -84,10 +84,27 @@ BUILD_LFLAGS =
 
 BUILD_CXXFLAGS = -Wno-unused-result
 
+# Detect GCC major version
+GCC_VERSION := $(shell $(BUILD_CC) -dumpversion)
+GCC_MAJOR_VERSION := $(shell echo $(GCC_VERSION) | cut -d. -f1)
+
 ifeq ($(BUILD_CXX), clang++)
-BUILD_CPPFLAGS += -Wno-error=register
-BUILD_CXXFLAGS += -Wno-error=register
+  BUILD_CPPFLAGS += -Wno-error=register
+  BUILD_CXXFLAGS += -Wno-error=register
+else
+  ifeq ($(shell [ $(GCC_MAJOR_VERSION) -ge 8 ] && echo yes),yes)
+    BUILD_CFLAGS += -Wno-error=stringop-truncation
+  endif
+  ifeq ($(shell [ $(GCC_MAJOR_VERSION) -ge 11 ] && echo yes),yes)
+    BUILD_CFLAGS += -Wno-error=vla-parameter
+  endif
+  ifeq ($(shell [ $(GCC_MAJOR_VERSION) -ge 13 ] && echo yes),yes)
+    BUILD_CFLAGS += -Wno-error=stringop-overflow
+    BUILD_CFLAGS += -Wno-error=use-after-free
+    BUILD_CFLAGS += -Wno-error=dangling-pointer
+  endif
 endif
+
 
 ifeq ($(HOST_ARCH), IA32)
 #
