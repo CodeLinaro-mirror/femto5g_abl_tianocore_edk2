@@ -110,6 +110,9 @@
   !if $(VERIFIED_BOOT_LE_ARB)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE_ARB
   !endif
+  !if $(VB_LE_DTBO_AUTH)
+      GCC:*_*_*_CC_FLAGS = -DVB_LE_DTBO_AUTH
+  !endif
   !if $(SUPPORT_AB_BOOT_LXC)
       GCC:*_*_*_CC_FLAGS = -DSUPPORT_AB_BOOT_LXC
   !endif
