@@ -3293,6 +3293,13 @@ CmdOemSetHwFenceValue (CONST CHAR8 *arg, VOID *data, UINT32 Size)
     }
   }
 
+  if ((AsciiStrLen(arg) != 1) || (arg[0] != '0' && arg[0] != '1')) {
+    AsciiStrnCatS (Resp, sizeof (Resp), "invalid input (must be 0 or 1)",
+                  AsciiStrLen ("invalid input (must be 0 or 1)"));
+    FastbootFail (Resp);
+    return;
+  }
+
   AsciiStrnCatS (HwFenceValue,
                  MAX_DISPLAY_PANEL_OVERRIDE,
                  arg,
@@ -3371,6 +3378,11 @@ CmdOemSetGpuPreemptionValue (CONST CHAR8 *arg, VOID *data, UINT32 Size)
     } else {
       break;
     }
+  }
+
+  if ((AsciiStrLen(arg) != 1) || (arg[0] != '0' && arg[0] != '1')) {
+	  FastbootFail("Set GPU HW Preemption: Invalid Argument, Value must be 1 or 0");
+	  return;
   }
 
   AsciiStrnCatS (GpuPreemptionValue,
