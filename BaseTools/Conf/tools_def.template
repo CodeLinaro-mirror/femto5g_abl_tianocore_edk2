@@ -2509,7 +2509,7 @@ RELEASE_GCC5_AARCH64_DLINK_XIPFLAGS = -z common-page-size=0x20
 *_GCC13_*_DEPS_FLAGS              = DEF(GCC_DEPS_FLAGS)
 
 ##################
-# GCC5 AARCH64 definitions
+# GCC13 AARCH64 definitions
 ###################
 
 *_GCC13_AARCH64_CC_PATH           = ENV(GCC13_AARCH64_PREFIX)gcc
