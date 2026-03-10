@@ -27,9 +27,9 @@
  */
 
 /*
- * Changes from Qualcomm Innovation Center, Inc. are provided under the
+ * Changes from Qualcomm Technologies, Inc. are provided under the
  * following license:
- * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -302,4 +302,10 @@ BOOLEAN IsTargetAuto (VOID);
 BOOLEAN IsHibernationEnabled (VOID);
 BOOLEAN IsLVBootslotEnabled (VOID);
 BOOLEAN BootCpuSelectionEnabled (VOID);
+#ifdef PVMFW_BCC
+EFI_STATUS
+LoadPvmFwAndAvfDpDtbo(BootInfo *Info, BootParamlist *BootParamlistPtr);
+EFI_STATUS
+PrepareAndRegisterPvmFw (BootInfo *Info, BootParamlist *BootParamlistPtr);
+#endif
 #endif
