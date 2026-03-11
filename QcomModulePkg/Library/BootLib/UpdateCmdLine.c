@@ -114,6 +114,7 @@ STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 QosAddrBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 RssAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 WaitSwitchRdyBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
@@ -373,6 +374,7 @@ STATIC VOID GetDisplayCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"DisplayPanelConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &DisplayCmdLineLen,
                              DisplayCmdLine);
+  DisplayCmdLineLen = sizeof (DisplayCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get Panel Config, %r\n", Status));
   }
@@ -385,6 +387,7 @@ STATIC VOID GetHwFenceCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"HwFenceConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &HwFenceCmdLineLen,
                              HwFenceCmdLine);
+  HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get hw fence Config, %r\n", Status));
   }
@@ -399,6 +402,7 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"GpuConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &GpuCmdLineLen,
                              GpuCmdLine);
+  GpuCmdLineLen = sizeof (GpuCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get GPU Preempt Config, %r\n", Status));
   }
@@ -1043,6 +1047,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     Src = Param->EarlySpeedCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyQosCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyRssCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyWaitSwitchRdyCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
@@ -1804,6 +1810,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                  IFaceAddrBufCmdLine,
                                  SpeedAddrBufCmdLine,
                                  QosAddrBufCmdLine,
+                                 RssAddrBufCmdLine,
                                  WaitSwitchRdyBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
@@ -1812,6 +1819,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (QosAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (RssAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (WaitSwitchRdyBufCmdLine);
   }
 
@@ -1904,6 +1912,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
     Param.EarlyQosCmdLine = QosAddrBufCmdLine;
+    Param.EarlyRssCmdLine = RssAddrBufCmdLine;
     Param.EarlyWaitSwitchRdyCmdLine = WaitSwitchRdyBufCmdLine;
   }
 
