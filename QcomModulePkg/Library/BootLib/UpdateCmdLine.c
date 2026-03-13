@@ -185,6 +185,26 @@ STATIC CONST CHAR8 *WarmResetArgs = " reboot=w";
 
 LIST_ENTRY *BootConfigListHead = NULL;
 
+#ifdef AUTO_VIRT_ABL
+#define GVMINFO_MAGIC "GVMINFO!"
+#define MAX_GVMINFO_SIZE 512
+#define GVMINFO_MAGIC_SIZE 8
+#define MAX_AUDIO_FW 4
+#define MAX_USER_CMD_LINE 256
+
+typedef struct {
+  CHAR8 magic[GVMINFO_MAGIC_SIZE];
+  UINT8 HeaderVersion;
+  UINT8 HeaderSize;
+  UINT8 AudioFrameworkSize;
+  UINT8 UserCmdlineSize;
+} GvmInfoHdr;
+
+STATIC VOID *pGvmInfo = NULL;
+STATIC CHAR8 UserCmdLine[MAX_USER_CMD_LINE];
+STATIC UINT32 UserCmdLineLen;
+#endif
+
 #ifdef CHECK_CPU_FREQ_MITIGATION
 /**
   Check if cpu frequency needs to be capped.
@@ -503,6 +523,7 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
   return Status;
 }
 
+#ifndef AUTO_VIRT_ABL
 STATIC VOID
 GetAudioFrameWork (IN OUT CHAR8 *FrameWork, IN OUT UINT32 *Length)
 {
@@ -536,6 +557,94 @@ GetAudioFrameWork (IN OUT CHAR8 *FrameWork, IN OUT UINT32 *Length)
   AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW_LENGTH, Src, SrcLen);
   *Length = (UINT32)AsciiStrnLenS (FrameWork, MAX_AUDIO_FW_LENGTH);
 }
+#else // #ifdef AUTO_VIRT_ABL
+STATIC
+EFI_STATUS
+LoadGvmInfo (VOID)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  VOID *ImageBuffer = NULL;
+  GvmInfoHdr *GvmInfoBufHdr;
+  UINT32 ImageSize = MAX_GVMINFO_SIZE;
+
+  ImageBuffer = AllocateZeroPool (ImageSize);
+  Status = LoadImageFromPartition (ImageBuffer, &ImageSize,
+    (CHAR16 *)L"gvminfo");
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_INFO, "GvmInfo loading falied, %r\n", Status));
+    FreePool (ImageBuffer);
+  } else {
+    GvmInfoBufHdr = (GvmInfoHdr *)ImageBuffer;
+    if (CompareMem (GvmInfoBufHdr->magic, GVMINFO_MAGIC, GVMINFO_MAGIC_SIZE)) {
+      DEBUG ((EFI_D_INFO, "Device Magic does not match\n"));
+      FreePool (ImageBuffer);
+      Status = EFI_INVALID_PARAMETER;
+    } else {
+      pGvmInfo = ImageBuffer;
+    }
+  }
+
+  return Status;
+}
+
+STATIC VOID
+GetUserCmdLine (CHAR8 *CmdLine, UINT32* Length)
+{
+  EFI_STATUS Status;
+  GvmInfoHdr *GvmInfoBufHdr;
+
+  if (pGvmInfo == NULL) {
+    Status = LoadGvmInfo ();
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Load GvmInfo image failed, %r\n", Status));
+      return;
+    }
+  }
+
+  GvmInfoBufHdr = (GvmInfoHdr *)pGvmInfo;
+  *Length = GvmInfoBufHdr->UserCmdlineSize;
+  if (*Length) {
+    AsciiStrnCpyS (CmdLine, MAX_USER_CMD_LINE, " ", 1);
+    AsciiStrnCatS (CmdLine, MAX_USER_CMD_LINE,
+      &pGvmInfo[GvmInfoBufHdr->HeaderSize + GvmInfoBufHdr->AudioFrameworkSize],
+      *Length);
+    DEBUG ((EFI_D_INFO, "User cmdline: %a\n", CmdLine));
+  }
+}
+
+STATIC VOID
+GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
+{
+  EFI_STATUS Status;
+  GvmInfoHdr *GvmInfoBufHdr;
+
+  if (pGvmInfo == NULL) {
+    Status = LoadGvmInfo ();
+    if (Status != EFI_SUCCESS) {
+      CHAR8 *Src;
+      DEBUG ((EFI_D_INFO, "GvmInfo image not present, %r\n", Status));
+      DEBUG ((EFI_D_INFO, "Get Audio FrameWork from devinfo partition.\n"));
+      Status = ReadAudioFrameWork (&Src, Length);
+      if (Status == EFI_SUCCESS) {
+         if (*Length) {
+            AsciiStrCpyS (FrameWork, *Length, Src);
+         }
+      }
+      return;
+    }
+  }
+
+  GvmInfoBufHdr = (GvmInfoHdr *)pGvmInfo;
+  *Length = GvmInfoBufHdr->AudioFrameworkSize;
+  if (*Length) {
+    AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW,
+                   &pGvmInfo[GvmInfoBufHdr->HeaderSize], *Length);
+    DEBUG ((EFI_D_INFO, "Audio FrameWork: %a\n", FrameWork));
+  } else {
+    DEBUG ((EFI_D_INFO, "Audio FrameWork not set in gvminfo.img\n"));
+  }
+}
+#endif
 
 /*
  * Returns length = 0 when there is failure.
@@ -993,6 +1102,11 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     Src = BCLBootFrequency;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
+
+#ifdef AUTO_VIRT_ABL
+  Src = Param->UserCmdLine;
+  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+#endif
 
   if (Param->MdtpActive) {
     Src = Param->MdtpActiveFlag;
@@ -1743,6 +1857,19 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                         BootConfigListHead, ParamLen, 0);
   }
 
+#ifdef AUTO_VIRT_ABL
+  GetUserCmdLine (UserCmdLine, &UserCmdLineLen);
+  if (AsciiStrLen (UserCmdLine)) {
+      ParamLen = AsciiStrLen (UserCmdLine);
+      BootConfigFlag = IsAndroidBootParam (UserCmdLine,
+                              ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+                                          BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, UserCmdLine, NULL,
+                        BootConfigListHead, ParamLen, 0);
+  }
+#endif
+
   if (!FlashlessBoot) {
     GetAudioFrameWork (AudioFrameWork, &AudioFWLen);
     if (AsciiStrLen (AudioFrameWork)) {
@@ -2013,6 +2140,9 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   Param.HfiDbgCmdLine = HfiDbgCmdLine;
   Param.GpuCmdLine = GpuCmdLine;
   Param.CmdLine = CmdLine;
+#ifdef AUTO_VIRT_ABL
+  Param.UserCmdLine = UserCmdLine;
+#endif
   Param.AlarmBootCmdLine = AlarmBootCmdLine;
   Param.MdtpActiveFlag = MdtpActiveFlag;
   Param.BatteryChgPause = BatteryChgPause;
