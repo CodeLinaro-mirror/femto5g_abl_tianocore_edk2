@@ -28,11 +28,11 @@
 #*/
 
 #/*
-# * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-# *
-# * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# * Changes from Qualcomm Technologies, Inc. are provided
+# * under the following license:
+# * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # * SPDX-License-Identifier: BSD-3-Clause-Clear
-#*/
+# */
 
 #/** @file QcomModulePkg.dsc
 # QcomModule package.
@@ -153,6 +153,10 @@
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
   !endif
+  !if $(DISABLE_DTBO_PARTITION)
+      GCC:*_*_*_CC_FLAGS = -DDISABLE_DTBO_PARTITION
+      GCC:*_*_*_PP_FLAGS = -DDISABLE_DTBO_PARTITION
+  !endif
   !if $(AB_RETRYCOUNT_DISABLE)
       GCC:*_*_*_CC_FLAGS = -DAB_RETRYCOUNT_DISABLE
   !endif
@@ -203,6 +207,9 @@
   !if $(VERIFIED_BOOT_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_ENABLED
   !endif
+  !if $(USE_DUMMY_BCC)
+      GCC:*_*_*_CC_FLAGS = -DUSE_DUMMY_BCC
+  !endif
   !if $(BASE_ADDRESS)
       GCC:*_*_*_CC_FLAGS = -DBASE_ADDRESS=$(BASE_ADDRESS)
   !endif
@@ -248,6 +255,12 @@
   !if $(CHECK_CPU_FREQ_MITIGATION) == 1
       GCC:*_*_*_CC_FLAGS = -DCHECK_CPU_FREQ_MITIGATION
   !endif
+  !if $(ENABLE_CHECK_MTE)
+      GCC:*_*_*_CC_FLAGS = -DENABLE_CHECK_MTE
+  !endif
+  !if $(EXCLUSIVE_SME_MTE)
+      GCC:*_*_*_CC_FLAGS = -DEXCLUSIVE_SME_MTE
+  !endif
 
 
 [PcdsFixedAtBuild.common]
@@ -291,7 +304,6 @@
 			StackCanary|QcomModulePkg/Library/StackCanary/StackCanary.inf
 			FastbootLib|QcomModulePkg/Library/FastbootLib/FastbootLib.inf
 			AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
-			GblLib|QcomModulePkg/Library/gbl/GblLib.inf
 			OpenDice|QcomModulePkg/Library/OpenDice/open-dice.inf
 			AesLib|QcomModulePkg/Library/aes/AesLib.inf
 			UbsanLib|QcomModulePkg/Library/UbsanLib/UbsanLib.inf

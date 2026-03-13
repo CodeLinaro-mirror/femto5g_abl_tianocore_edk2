@@ -98,23 +98,7 @@ typedef struct {
 #if VERIFIED_BOOT_ENABLED
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
 {
-  UINT32 PtnCount;
-  INT32 PtnIdx;
-  INT32 PtnIdx_a;
-  GetPartitionCount (&PtnCount);
-  PtnIdx_a = GetPartitionIndex ((CHAR16 *)L"vbmeta_a");
-
-  if (PtnIdx_a < PtnCount &&
-      PtnIdx_a != INVALID_PTN) {
-      return TRUE;
-  } else {
-      PtnIdx = GetPartitionIndex ((CHAR16 *)L"vbmeta");
-      if (PtnIdx < PtnCount &&
-      PtnIdx != INVALID_PTN) {
-      return TRUE;
-    }
-  }
-  return FALSE;
+  return TRUE;
 }
 #else
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
@@ -618,6 +602,22 @@ ErrV3:
 }
 
 STATIC EFI_STATUS
+#if DISABLE_DTBO_PARTITION
+LoadImageNoAuth (BootInfo *Info)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 PageSize = 0;
+  BOOLEAN FastbootPath;
+
+  Status = LoadBootImageNoAuth (Info, &PageSize, &FastbootPath);
+  if (Status != EFI_SUCCESS) {
+    return Status;
+  }
+  DEBUG ((EFI_D_INFO, "Skip load dtbo partition\n"));
+
+  return EFI_SUCCESS;
+}
+#else
 LoadImageNoAuth (BootInfo *Info)
 {
   EFI_STATUS Status = EFI_SUCCESS;
@@ -694,6 +694,7 @@ Err:
 err_out:
   return Status;
 }
+#endif
 
 STATIC EFI_STATUS
 LoadImageNoAuthWrapper (BootInfo *Info)
@@ -1142,7 +1143,7 @@ ComputeVbMetaDigest (AvbSlotVerifyData* SlotData, CHAR8* Digest) {
 }
 
 
-UINT32 ParseFooterOsVersion (CONST CHAR8 *Ptr, UINTN Size)
+static UINT32 ParseFooterOsVersion (CONST CHAR8 *Ptr, UINTN Size)
 {
   UINT32 Major = 0;
   UINT32 Minor = 0;
@@ -1177,7 +1178,7 @@ UINT32 ParseFooterOsVersion (CONST CHAR8 *Ptr, UINTN Size)
 }
 
 
-UINT32 ParseFooterSecPatch (CONST CHAR8 *Ptr, UINTN Size)
+static UINT32 ParseFooterSecPatch (CONST CHAR8 *Ptr, UINTN Size)
 {
   UINT32 Year = 0;
   UINT32 Month = 0;
@@ -2061,7 +2062,7 @@ out:
   return Status;
 }
 
-EFI_STATUS
+STATIC EFI_STATUS
 DisplayVerifiedBootScreen (BootInfo *Info)
 {
   EFI_STATUS Status = EFI_SUCCESS;
