@@ -58,7 +58,6 @@ cc_defaults {
     cppflags: [
         "-Wall",
         "-Werror",
-        "-std=c++17",
     ],
 
     // Build BoringSSL and its tests against the same STL.
