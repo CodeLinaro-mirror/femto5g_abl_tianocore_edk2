@@ -865,6 +865,10 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
       SetVmDisable ();
     }
   }
+
+  // HGY does not need qtvm_dtbo. AUTO_VIRT_ABL is only active in HGY GVM
+  // and does not affect other SPs.
+  #ifndef AUTO_VIRT_ABL
   // Loads qtvm_dtbo partition
   DtboImgInvalid = LoadAndValidateQtvmDtboImg (Info, BootParamlistPtr);
   if (DtboImgInvalid) {
@@ -874,6 +878,7 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   } else {
       DEBUG ((EFI_D_ERROR, "Error: Failed to read qtvm_dtbo partition\n\n\n"));
   }
+  #endif
 
   return EFI_SUCCESS;
 }
