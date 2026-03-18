@@ -1125,7 +1125,11 @@ out:
 INT32
 dev_tree_add_mem_info (VOID *fdt, UINT32 offset, UINT32 addr, UINT32 size)
 {
+#if APPEND_RAM_PARTITIONS_TO_MEM_NODE
+  STATIC INT32 mem_info_cnt = 1;
+#else
   STATIC INT32 mem_info_cnt = 0;
+#endif
   INT32 ret = 0;
 
   if (!mem_info_cnt) {
@@ -1154,7 +1158,11 @@ dev_tree_add_mem_info (VOID *fdt, UINT32 offset, UINT32 addr, UINT32 size)
 INT32
 dev_tree_add_mem_infoV64 (VOID *fdt, UINT32 offset, UINT64 addr, UINT64 size)
 {
+#if APPEND_RAM_PARTITIONS_TO_MEM_NODE
+  STATIC INT32 mem_info_cnt = 1;
+#else
   STATIC INT32 mem_info_cnt = 0;
+#endif
   INT32 ret = 0;
 
   if (!mem_info_cnt) {
