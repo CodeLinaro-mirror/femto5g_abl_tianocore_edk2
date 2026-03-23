@@ -78,8 +78,8 @@
 EFI_STATUS
 GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
                               CHAR8 *phyaddrbuf, CHAR8 *ifacebuf,
-                              CHAR8 *speedbuf, CHAR8 *qosbuf, CHAR8 *rssbuf,
-                              CHAR8 *wait_switch_rdy_buf)
+                              CHAR8 *speedbuf, CHAR8 *qosbuf,
+                              CHAR8 *wait_switch_rdy_buf, CHAR8 *rssbuf)
 {
   EFI_STATUS Status;
   VOID *Buffer;
@@ -99,8 +99,8 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
   memset (ifacebuf, '\0', MAX_IP_ADDR_BUF);
   memset (speedbuf, '\0', MAX_IP_ADDR_BUF);
   memset (qosbuf, '\0' , MAX_IP_ADDR_BUF);
-  memset (rssbuf, '\0' , MAX_IP_ADDR_BUF);
   memset (wait_switch_rdy_buf, '\0', MAX_IP_ADDR_BUF);
+  memset (rssbuf, '\0' , MAX_IP_ADDR_BUF);
 #if EARLY_ETH_AS_DLKM
   AsciiStrnCpyS (ipv4buf, MAX_IP_ADDR_BUF, " dwmac_qcom_eth.eipv4=", 22);
   AsciiStrnCpyS (ipv6buf, MAX_IP_ADDR_BUF, " dwmac_qcom_eth.eipv6=", 22);
@@ -113,9 +113,9 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
   AsciiStrnCpyS (ifacebuf, MAX_IP_ADDR_BUF, " eiface=", 8);
   AsciiStrnCpyS (speedbuf, MAX_IP_ADDR_BUF, " espeed=", 8);
   AsciiStrnCpyS (qosbuf, MAX_IP_ADDR_BUF, " eqos=", 6);
-  AsciiStrnCpyS (rssbuf, MAX_IP_ADDR_BUF, " erss=", 6);
   AsciiStrnCpyS (wait_switch_rdy_buf, MAX_IP_ADDR_BUF,
                  " ewait_switch_rdy=", 18);
+  AsciiStrnCpyS (rssbuf, MAX_IP_ADDR_BUF, " erss=", 6);
 #endif
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
@@ -270,17 +270,6 @@ QwaitSwitchRdyCount = 18;
        Qidx++;
   }
 
-  /* Extract rss config string */
-  ++Pidx;
-  Qidx = 0;
-  while (((CHAR8)rawbuf[Pidx] !=
-         EARLY_ADDR_TERMINATOR) &&
-        (Qidx < RSSCFG_LEN)) {
-       rssbuf[Qidx + Qrsscfgcount] = rawbuf[Pidx];
-       Pidx++;
-       Qidx++;
-  }
-
   /* Extract wait for Rx clk string. (1 or 0) */
   ++Pidx;
   Qidx = 0;
@@ -288,6 +277,17 @@ QwaitSwitchRdyCount = 18;
          EARLY_ADDR_TERMINATOR) &&
         (Qidx < WAIT_SWITCH_RDY_LEN)) {
        wait_switch_rdy_buf[Qidx + QwaitSwitchRdyCount] = rawbuf[Pidx];
+       Pidx++;
+       Qidx++;
+  }
+
+  /* Extract rss config string */
+  ++Pidx;
+  Qidx = 0;
+  while (((CHAR8)rawbuf[Pidx] !=
+         EARLY_ADDR_TERMINATOR) &&
+        (Qidx < RSSCFG_LEN)) {
+       rssbuf[Qidx + Qrsscfgcount] = rawbuf[Pidx];
        Pidx++;
        Qidx++;
   }
