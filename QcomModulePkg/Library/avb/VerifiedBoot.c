@@ -2022,6 +2022,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                 if (!TargetBuildVariantUser () ) {
                     DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
                                                         "debug builds\n"));
+                    Status = EFI_SUCCESS;
                     if (!SetRotAndBootState) {
                         if (KeymasterEnabled) {
                             Data.PublicKeyModLength = DUMMY_PUBLIC_KEY_MOD_LEN;
