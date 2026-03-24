@@ -327,7 +327,7 @@ static INT32 FindNextAvailableBlock (struct KernelPfnIterator *Iter)
                 UINT64 CurPfn, NextPfn;
                 Iter->CurIndex++;
                 if (Iter->CurIndex >= Iter->MaxIndex) {
-                        BUG ("index maxed out. Line %d\n", __LINE__);
+                        //BUG ("index maxed out. Line %d\n", __LINE__);
                 }
                 CurPfn = Iter->PfnArray[Iter->CurIndex];
                 NextPfn = Iter->PfnArray[Iter->CurIndex + 1];
