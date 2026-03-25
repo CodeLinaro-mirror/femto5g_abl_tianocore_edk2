@@ -143,13 +143,6 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                CONST CHAR8 *VBCmdLine,
                UINT32 HeaderVersion,
                CHAR8 SilentMode);
-EFI_STATUS
-UpdateBootConfigParams (LIST_ENTRY *BootConfigListHead,
-                        UINT32 BootConfigLen,
-                        CHAR8 **FinalBootConfig,
-                        UINT32 *FinalBootConfigLen);
-VOID
-ClearBootConfigList (LIST_ENTRY* BootConfigListHead);
 BOOLEAN
 TargetBatterySocOk (UINT32 *BatteryVoltage);
 

@@ -28,11 +28,11 @@
 #*/
 
 #/*
-# * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-# *
-# * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# * Changes from Qualcomm Technologies, Inc. are provided
+# * under the following license:
+# * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # * SPDX-License-Identifier: BSD-3-Clause-Clear
-#*/
+# */
 
 #/** @file QcomModulePkg.dsc
 # QcomModule package.
@@ -152,6 +152,10 @@
   !if $(HIBERNATION_SWAP_PARTITION_NAME)
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SWAP_PARTITION_NAME='L"$(HIBERNATION_SWAP_PARTITION_NAME)"'
+  !endif
+  !if $(APPEND_RAM_PARTITIONS_TO_MEM_NODE)
+      GCC:*_*_*_CC_FLAGS = -DAPPEND_RAM_PARTITIONS_TO_MEM_NODE
+      GCC:*_*_*_PP_FLAGS = -DAPPEND_RAM_PARTITIONS_TO_MEM_NODE
   !endif
   !if $(DISABLE_DTBO_PARTITION)
       GCC:*_*_*_CC_FLAGS = -DDISABLE_DTBO_PARTITION
@@ -304,7 +308,6 @@
 			StackCanary|QcomModulePkg/Library/StackCanary/StackCanary.inf
 			FastbootLib|QcomModulePkg/Library/FastbootLib/FastbootLib.inf
 			AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
-			GblLib|QcomModulePkg/Library/gbl/GblLib.inf
 			OpenDice|QcomModulePkg/Library/OpenDice/open-dice.inf
 			AesLib|QcomModulePkg/Library/aes/AesLib.inf
 			UbsanLib|QcomModulePkg/Library/UbsanLib/UbsanLib.inf

@@ -1143,7 +1143,7 @@ ComputeVbMetaDigest (AvbSlotVerifyData* SlotData, CHAR8* Digest) {
 }
 
 
-UINT32 ParseFooterOsVersion (CONST CHAR8 *Ptr, UINTN Size)
+static UINT32 ParseFooterOsVersion (CONST CHAR8 *Ptr, UINTN Size)
 {
   UINT32 Major = 0;
   UINT32 Minor = 0;
@@ -1178,7 +1178,7 @@ UINT32 ParseFooterOsVersion (CONST CHAR8 *Ptr, UINTN Size)
 }
 
 
-UINT32 ParseFooterSecPatch (CONST CHAR8 *Ptr, UINTN Size)
+static UINT32 ParseFooterSecPatch (CONST CHAR8 *Ptr, UINTN Size)
 {
   UINT32 Year = 0;
   UINT32 Month = 0;
@@ -2062,7 +2062,7 @@ out:
   return Status;
 }
 
-EFI_STATUS
+STATIC EFI_STATUS
 DisplayVerifiedBootScreen (BootInfo *Info)
 {
   EFI_STATUS Status = EFI_SUCCESS;

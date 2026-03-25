@@ -429,6 +429,7 @@ STATIC VOID GetDisplayCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"DisplayPanelConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &DisplayCmdLineLen,
                              DisplayCmdLine);
+  DisplayCmdLineLen = sizeof (DisplayCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get Panel Config, %r\n", Status));
   }
@@ -441,6 +442,7 @@ STATIC VOID GetHwFenceCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"HwFenceConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &HwFenceCmdLineLen,
                              HwFenceCmdLine);
+  HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get hw fence Config, %r\n", Status));
   }
@@ -454,6 +456,7 @@ STATIC VOID GetDispOpCmdLine (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"DispOpModeConfig",
                              &gQcomTokenSpaceGuid, NULL, &DispOpCmdLineLen,
                              Data);
+  DispOpCmdLineLen = sizeof (DispOpCmdLine);
   if (Status == EFI_SUCCESS) {
     AsciiSPrint (DispOpCmdLine, sizeof (DispOpCmdLine),
                     "%a%a", DispOpStr, Data);
@@ -470,6 +473,7 @@ STATIC VOID GetHfiCoreDbgCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"DispOpModeConfig",
                              &gQcomTokenSpaceGuid, NULL, &HfiDbgCmdLineLen,
                              Data);
+  HfiDbgCmdLineLen = sizeof (HfiDbgCmdLine);
   if (Status == EFI_SUCCESS) {
     AsciiSPrint (HfiDbgCmdLine, sizeof (HfiDbgCmdLine),
                       "%a%a", HfiCoreStr, Data);
@@ -487,6 +491,7 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"GpuConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &GpuCmdLineLen,
                              GpuCmdLine);
+  GpuCmdLineLen = sizeof (GpuCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get GPU Preempt Config, %r\n", Status));
   }
@@ -494,30 +499,38 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
   return Status;
 }
 
-
 STATIC VOID
-GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
+GetAudioFrameWork (IN OUT CHAR8 *FrameWork, IN OUT UINT32 *Length)
 {
   EFI_STATUS Status;
-  CHAR8 *Src;
-  CHAR8 *AUDIOFRAMEWORK;
+  CHAR8      *Src;
+  UINTN       SrcLen;
 
-  AUDIOFRAMEWORK = GetAudioFw ();
-
-  if (AUDIOFRAMEWORK == NULL) {
-      *Length = 0;
-      return;
-  } else {
-  if ((*Length = AsciiStrLen (AUDIOFRAMEWORK)) > 0) {
-      AsciiStrCpyS (FrameWork, *Length + 1, AUDIOFRAMEWORK);
-      Status = ReadAudioFrameWork (&Src, Length);
-    if (Status == EFI_SUCCESS) {
-      if (*Length) {
-        AsciiStrCpyS (FrameWork, *Length, Src);
-        }
-      }
-    }
+  if (FrameWork == NULL || Length == NULL) {
+    return;
   }
+
+  gBS->SetMem (FrameWork, MAX_AUDIO_FW_LENGTH, 0);
+
+  Status = ReadAudioFrameWork (&Src, Length);
+  if (EFI_ERROR (Status) || Src == NULL) {
+    *Length = 0;
+    return;
+  }
+
+  SrcLen = AsciiStrnLenS (Src, MAX_AUDIO_FW_LENGTH);
+  if (SrcLen == 0 || SrcLen >= MAX_AUDIO_FW_LENGTH) {
+    *Length = 0;
+    return;
+  }
+
+  if (!IsAllowedAudioFramework (Src)) {
+    *Length = 0;
+    return;
+  }
+
+  AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW_LENGTH, Src, SrcLen);
+  *Length = (UINT32)AsciiStrnLenS (FrameWork, MAX_AUDIO_FW_LENGTH);
 }
 
 /*
