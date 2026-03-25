@@ -1842,7 +1842,7 @@ ValidateSlotGuids (Slot *BootableSlot)
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
     GUARD (UfsGetSetBootLun (&UfsBootLun, TRUE));
-    if (UfsBootLun == 0x0 &&
+    if (UfsBootLun == 0x1 &&
         !StrCmp (BootableSlot->Suffix, (CONST CHAR16 *)L"_a")) {
     } else if (UfsBootLun == 0x2 &&
                !StrCmp (BootableSlot->Suffix, (CONST CHAR16 *)L"_b")) {
