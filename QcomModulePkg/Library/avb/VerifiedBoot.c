@@ -95,23 +95,7 @@ typedef struct {
 #if VERIFIED_BOOT_ENABLED
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
 {
-  UINT32 PtnCount;
-  INT32 PtnIdx;
-  INT32 PtnIdx_a;
-  GetPartitionCount (&PtnCount);
-  PtnIdx_a = GetPartitionIndex ((CHAR16 *)L"vbmeta_a");
-
-  if (PtnIdx_a < PtnCount &&
-      PtnIdx_a != INVALID_PTN) {
-      return TRUE;
-  } else {
-      PtnIdx = GetPartitionIndex ((CHAR16 *)L"vbmeta");
-      if (PtnIdx < PtnCount &&
-      PtnIdx != INVALID_PTN) {
-      return TRUE;
-    }
-  }
-  return FALSE;
+  return TRUE;
 }
 #else
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
@@ -1788,7 +1772,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   }
 #endif
 #ifdef ENABLE_LE_VARIANT // Only in case where AVB is enabled on LE Build.
-  if (!IsRootCmdLineUpdated (Info)) {
+  if (!IsRootCmdLineUpdated (Info) && !HibernationResume) {
     CHAR8 *SystemPath = NULL;
     UINT32 SystemPathLen = 0;
     SystemPathLen = GetSystemPath (&SystemPath, Info->MultiSlotBoot,
@@ -2231,6 +2215,7 @@ get_ptn_name:
 
   AVBVersion = GetAVBVersion ();
   DEBUG ((EFI_D_VERBOSE, "AVB version %d\n", AVBVersion));
+  BOOLEAN ShouldSendMilestone = (AVBVersion != AVB_LE);
 
   /* Load and Authenticate */
   switch (AVBVersion) {
@@ -2280,6 +2265,15 @@ get_ptn_name:
 
   if (AVBVersion != AVB_LE) {
     DisplayVerifiedBootScreen (Info);
+  }
+// Send milestone call for non-LE or LE with SEND_MILESTONE_CALL_LE enabled
+#ifdef SEND_MILESTONE_CALL_LE
+  if (AVBVersion == AVB_LE && KeymasterEnabled) {
+    ShouldSendMilestone = TRUE;
+  }
+#endif
+
+  if (ShouldSendMilestone) {
     DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
     Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
     if (Status != EFI_SUCCESS) {
@@ -2287,6 +2281,7 @@ get_ptn_name:
       return Status;
     }
   }
+
   return Status;
 }
 
