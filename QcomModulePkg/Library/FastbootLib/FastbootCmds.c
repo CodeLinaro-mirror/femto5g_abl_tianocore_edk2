@@ -3930,26 +3930,11 @@ CmdOemAudioFrameWork (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 {
   EFI_STATUS Status;
 
-  if (Arg == NULL || Arg[0] == '\0') {
-    FastbootFail ("Invalid audio-framework command");
-    return;
-  }
-
   if (Arg[0] == ' ') {
-    Arg++;
+     Arg++;
   }
 
-  if (Arg[0] == '\0') {
-    FastbootFail ("Invalid audio-framework command");
-    return;
-  }
-
-  if (!IsAllowedAudioFramework (Arg)) {
-    FastbootFail ("invalid Audio framework");
-     return;
-  }
-
-  Status = StoreAudioFrameWork (Arg, (UINT32)AsciiStrLen (Arg));
+  Status = StoreAudioFrameWork (Arg, AsciiStrLen (Arg));
   if (Status != EFI_SUCCESS) {
     FastbootFail ("Failed to store Audio framework");
   } else {

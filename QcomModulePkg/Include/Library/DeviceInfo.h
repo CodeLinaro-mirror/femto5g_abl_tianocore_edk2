@@ -123,8 +123,6 @@ EFI_STATUS
 StoreAudioFrameWork (CONST CHAR8 *CmdLine, UINT32 CmdLineLen);
 EFI_STATUS
 ReadAudioFrameWork (CHAR8 **CmdLine, UINT32 *CmdLineLen);
-BOOLEAN
-IsAllowedAudioFramework (IN CONST CHAR8 *Value);
 EFI_STATUS
 SetIpcLoggingEnabled (BOOLEAN IsEnabled);
 #endif

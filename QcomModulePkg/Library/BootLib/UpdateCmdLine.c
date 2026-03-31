@@ -410,38 +410,25 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
   return Status;
 }
 
+
 STATIC VOID
-GetAudioFrameWork (IN OUT CHAR8 *FrameWork, IN OUT UINT32 *Length)
+GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
 {
   EFI_STATUS Status;
-  CHAR8      *Src;
-  UINTN       SrcLen;
+  CHAR8 *Src;
+  CHAR8 *AUDIOFRAMEWORK;
 
-  if (FrameWork == NULL || Length == NULL) {
-    return;
+  AUDIOFRAMEWORK = GetAudioFw ();
+
+  if ((*Length = AsciiStrLen (AUDIOFRAMEWORK)) > 0) {
+      AsciiStrCpyS (FrameWork, *Length + 1, AUDIOFRAMEWORK);
+      Status = ReadAudioFrameWork (&Src, Length);
+    if (Status == EFI_SUCCESS) {
+      if (*Length) {
+        AsciiStrCpyS (FrameWork, *Length, Src);
+      }
+    }
   }
-
-  gBS->SetMem (FrameWork, MAX_AUDIO_FW_LENGTH, 0);
-
-  Status = ReadAudioFrameWork (&Src, Length);
-  if (EFI_ERROR (Status) || Src == NULL) {
-    *Length = 0;
-    return;
-  }
-
-  SrcLen = AsciiStrnLenS (Src, MAX_AUDIO_FW_LENGTH);
-  if (SrcLen == 0 || SrcLen >= MAX_AUDIO_FW_LENGTH) {
-    *Length = 0;
-    return;
-  }
-
-  if (!IsAllowedAudioFramework (Src)) {
-    *Length = 0;
-    return;
-  }
-
-  AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW_LENGTH, Src, SrcLen);
-  *Length = (UINT32)AsciiStrnLenS (FrameWork, MAX_AUDIO_FW_LENGTH);
 }
 
 /*
