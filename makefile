@@ -76,8 +76,8 @@ ABL_FV_IMG := $(BUILD_ROOT)/FV/abl.fv
 ABL_FV_ELF := $(BOOTLOADER_OUT)/../../unsigned_abl.elf
 SHELL:=/bin/bash
 
-# Override toolchain for sdxecho
-ifeq ($(BOOTLOADER_PLATFORM), sdxecho)
+# Override toolchain for echo
+ifeq ($(BOOTLOADER_PLATFORM), echo)
 TARGET_TOOLS := GCC13
 TARGET := DEBUG
 BUILD_ROOT := $(ABL_OUT)/$(TARGET)_$(TARGET_TOOLS)
