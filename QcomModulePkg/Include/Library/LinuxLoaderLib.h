@@ -125,6 +125,7 @@
 #define EFI_EMMC_NETWORK_FLASH_TYPE 14
 #define EFI_MMC_FLASH_TYPE 5
 #define EFI_PCIE_FLASH_TYPE 7
+#define EFI_UFS_FLASH_TYPE 8
 #define EFI_MAX_FLASH_TYPE  0x7FFFFFFF
 
 /* Allocate unsafe stack size of 128KB to address worst case,

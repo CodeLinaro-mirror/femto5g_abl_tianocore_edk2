@@ -235,8 +235,8 @@ out:
 /* This API is called when HW backed BCC is not supported.
  * It returns BCC artifacts in the handover format.
  */
-#ifndef USE_DUMMY_BCC
 DiceResult
+#ifndef USE_DUMMY_BCC
 GetSWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
                    size_t BccArtifactsBufferSize,
                    size_t *BccArtifactsValidSize,
@@ -406,8 +406,8 @@ GetSWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
 /* This API is called when HW backed BCC is supported.
  * It returns BCC artifacts in the handover format.
  */
-#ifndef USE_DUMMY_BCC
 DiceResult
+#ifndef USE_DUMMY_BCC
 GetHWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
                    size_t BccArtifactsBufferSize,
                    size_t *BccArtifactsValidSize,
@@ -553,8 +553,8 @@ GetHWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
 }
 
 /* Function that returns BCC artifacts in the handover format.*/
-#ifndef USE_DUMMY_BCC
 DiceResult
+#ifndef USE_DUMMY_BCC
 GetBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
                  size_t BccArtifactsBufferSize,
                  size_t *BccArtifactsValidSize,
