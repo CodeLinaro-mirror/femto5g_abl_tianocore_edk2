@@ -48,6 +48,7 @@
 #include <Library/DxeServicesTableLib.h>
 #include <VerifiedBoot.h>
 #include <Protocol/EFIKernelInterface.h>
+#include "BootLinux.h"
 #if HIBERNATION_SUPPORT_AES
 #include <Library/aes/aes_public.h>
 #include <Library/lz4/lib/lz4.h>
@@ -2214,22 +2215,6 @@ SetLinuxBootCpu (UINT32 BootCpu)
   return;
 }
 
-#ifdef TARGET_LINUX_BOOT_CPU_ID
-#define BootCpuId TARGET_LINUX_BOOT_CPU_ID
-STATIC BOOLEAN
-BootCpuSelectionEnabled (VOID)
-{
-  return TRUE;
-}
-#else
-#define BootCpuId 0
-STATIC BOOLEAN
-BootCpuSelectionEnabled (VOID)
-{
-  return FALSE;
-}
-#endif
-
 static VOID CopyBounceAndBootKernel ()
 {
         INT32 Status;
@@ -2360,6 +2345,9 @@ VOID BootIntoHibernationImage (BootInfo *Info,
 {
         INT32 Ret;
         EFI_STATUS Status = EFI_SUCCESS;
+#ifdef PVMFW_BCC
+        BootParamlist BootParamlistPtr = {0};
+#endif
         printf ("Entrying Hibernation restore\n");
 
         if (CheckForValidHeader () < 0) {
@@ -2392,6 +2380,21 @@ VOID BootIntoHibernationImage (BootInfo *Info,
         if (Status != EFI_SUCCESS) {
                 printf ("Failed to set seed for fbe : %r\n", Status);
         }
+
+#ifdef PVMFW_BCC
+        Status = LoadPvmFwAndAvfDpDtbo(Info, &BootParamlistPtr);
+        if (Status != EFI_SUCCESS) {
+                printf ("Failed to load pvmfw during hibernation: %r\n",
+                        Status);
+                goto err;
+        }
+        Status = PrepareAndRegisterPvmFw (Info, &BootParamlistPtr);
+        if (Status != EFI_SUCCESS) {
+                printf ("Failed to register pvmfw: %r\n",
+                        Status);
+                goto err;
+        }
+#endif
 
         Ret = RestoreSnapshotImage ();
         if (Ret) {
