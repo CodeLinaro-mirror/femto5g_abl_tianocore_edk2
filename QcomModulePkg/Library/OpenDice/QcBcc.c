@@ -75,6 +75,10 @@ static BccRoot_t BccRoot;
 static EFI_STATUS
 GetRkpBCCSize (VOID)
 {
+#ifdef FORCE_SWBCC_WAR
+  // Workaround: Force SW BCC by indicating HW BCC is not supported
+  return IOpener_ERROR_NOT_SUPPORTED;
+#else
   EFI_STATUS Status = EFI_SUCCESS;
   RkpBCCInfo BccInfo = {0};
 
@@ -124,6 +128,7 @@ out2:
   Object_ASSIGN_NULL (ClientEnvObj);
 
   return Status;
+#endif
 }
 
 /* This API fetches RkpBCC from BCC Service*/

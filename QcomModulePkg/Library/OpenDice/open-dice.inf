@@ -13,6 +13,7 @@
   GCC:*_*_*_CC_FLAGS = -DPVMFW_BCC
   GCC:*_*_*_CC_FLAGS = $(PVMFW_USE_DUMMY_BCC)
   GCC:*_*_*_CC_FLAGS = $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT)
+  GCC:*_*_*_CC_FLAGS = $(FORCE_SWBCC_WAR)
 
 [Sources.AARCH64]
 	open-dice/src/android.c
