@@ -114,8 +114,8 @@ STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 QosAddrBufCmdLine[MAX_IP_ADDR_BUF];
-STATIC CHAR8 RssAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 WaitSwitchRdyBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 RssAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
@@ -410,25 +410,38 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
   return Status;
 }
 
-
 STATIC VOID
-GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
+GetAudioFrameWork (IN OUT CHAR8 *FrameWork, IN OUT UINT32 *Length)
 {
   EFI_STATUS Status;
-  CHAR8 *Src;
-  CHAR8 *AUDIOFRAMEWORK;
+  CHAR8      *Src;
+  UINTN       SrcLen;
 
-  AUDIOFRAMEWORK = GetAudioFw ();
-
-  if ((*Length = AsciiStrLen (AUDIOFRAMEWORK)) > 0) {
-      AsciiStrCpyS (FrameWork, *Length + 1, AUDIOFRAMEWORK);
-      Status = ReadAudioFrameWork (&Src, Length);
-    if (Status == EFI_SUCCESS) {
-      if (*Length) {
-        AsciiStrCpyS (FrameWork, *Length, Src);
-      }
-    }
+  if (FrameWork == NULL || Length == NULL) {
+    return;
   }
+
+  gBS->SetMem (FrameWork, MAX_AUDIO_FW_LENGTH, 0);
+
+  Status = ReadAudioFrameWork (&Src, Length);
+  if (EFI_ERROR (Status) || Src == NULL) {
+    *Length = 0;
+    return;
+  }
+
+  SrcLen = AsciiStrnLenS (Src, MAX_AUDIO_FW_LENGTH);
+  if (SrcLen == 0 || SrcLen >= MAX_AUDIO_FW_LENGTH) {
+    *Length = 0;
+    return;
+  }
+
+  if (!IsAllowedAudioFramework (Src)) {
+    *Length = 0;
+    return;
+  }
+
+  AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW_LENGTH, Src, SrcLen);
+  *Length = (UINT32)AsciiStrnLenS (FrameWork, MAX_AUDIO_FW_LENGTH);
 }
 
 /*
@@ -1048,9 +1061,9 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyQosCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-    Src = Param->EarlyRssCmdLine;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyWaitSwitchRdyCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyRssCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -1810,8 +1823,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                  IFaceAddrBufCmdLine,
                                  SpeedAddrBufCmdLine,
                                  QosAddrBufCmdLine,
-                                 RssAddrBufCmdLine,
-                                 WaitSwitchRdyBufCmdLine);
+                                 WaitSwitchRdyBufCmdLine,
+                                 RssAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
@@ -1819,8 +1832,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (QosAddrBufCmdLine);
-    CmdLineLen += AsciiStrLen (RssAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (WaitSwitchRdyBufCmdLine);
+    CmdLineLen += AsciiStrLen (RssAddrBufCmdLine);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1912,8 +1925,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
     Param.EarlyQosCmdLine = QosAddrBufCmdLine;
-    Param.EarlyRssCmdLine = RssAddrBufCmdLine;
     Param.EarlyWaitSwitchRdyCmdLine = WaitSwitchRdyBufCmdLine;
+    Param.EarlyRssCmdLine = RssAddrBufCmdLine;
   }
 
   if (EarlyUsbInitEnabled ()) {
