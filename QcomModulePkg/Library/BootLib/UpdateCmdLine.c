@@ -247,7 +247,7 @@ TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
   }
 
   /* The new protocol are supported on future chipsets */
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION) {
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10003) {
     Status = ChgDetectProtocol->IsOffModeCharging (BatteryStatus);
     if (EFI_ERROR (Status))
       DEBUG (
@@ -384,7 +384,7 @@ TargetBatterySocOk (UINT32 *BatteryVoltage)
   }
 
   /* The new protocol are supported on future chipsets */
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION) {
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10003) {
     Status = ChgDetectProtocol->IsPowerOk (
         EFI_CHARGER_EX_POWER_FLASH_BATTERY_VOLTAGE_TYPE, &FlashInfo);
     if (EFI_ERROR (Status)) {
