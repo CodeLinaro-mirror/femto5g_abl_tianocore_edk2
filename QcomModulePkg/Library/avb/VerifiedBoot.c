@@ -27,9 +27,8 @@
  */
 
 /*
- * Changes from Qualcomm Innovation Center, Inc. are provided
- * under the following license:
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -97,23 +96,7 @@ typedef struct {
 #if VERIFIED_BOOT_ENABLED
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
 {
-  UINT32 PtnCount;
-  INT32 PtnIdx;
-  INT32 PtnIdx_a;
-  GetPartitionCount (&PtnCount);
-  PtnIdx_a = GetPartitionIndex ((CHAR16 *)L"vbmeta_a");
-
-  if (PtnIdx_a < PtnCount &&
-      PtnIdx_a != INVALID_PTN) {
-      return TRUE;
-  } else {
-      PtnIdx = GetPartitionIndex ((CHAR16 *)L"vbmeta");
-      if (PtnIdx < PtnCount &&
-      PtnIdx != INVALID_PTN) {
-      return TRUE;
-    }
-  }
-  return FALSE;
+  return TRUE;
 }
 #else
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
