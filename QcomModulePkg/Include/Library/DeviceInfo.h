@@ -37,6 +37,7 @@
 #define MAX_VERSION_LEN 64
 #define MAX_VB_PARTITIONS 32
 #define MAX_USER_KEY_SIZE 2048
+#define MAX_DISPLAY_CMDLINE_LEN 128
 
 enum unlock_type {
   UNLOCK = 0,
@@ -55,6 +56,7 @@ typedef struct device_info {
   CHAR8 user_public_key[MAX_USER_KEY_SIZE];
   UINT64 rollback_index[MAX_VB_PARTITIONS];
   UINTN golden_snapshot;
+  CHAR8 Display_Cmdline[MAX_DISPLAY_CMDLINE_LEN];
 } DeviceInfo;
 
 struct verified_boot_verity_mode {
@@ -94,4 +96,8 @@ GetUserKey (CHAR8 **UserKey, UINT32 *UserKeySize);
 EFI_STATUS EraseUserKey (VOID);
 EFI_STATUS
 SetSnapshotGolden (UINTN Val);
+EFI_STATUS
+StoreDisplayCmdLine (CONST CHAR8 *CmdLine, UINT32 CmdLineLen);
+EFI_STATUS
+ReadDisplayCmdLine (CHAR8 **CmdLine, UINT32 *CmdLineLen);
 #endif
