@@ -47,6 +47,7 @@
 #include <Protocol/EFICardInfo.h>
 #include <Protocol/EFIChargerEx.h>
 #include <Protocol/EFIChipInfoTypes.h>
+#include <Protocol/EFIDDRGetConfig.h>
 #include <Protocol/EFIPmicPon.h>
 #include <Protocol/Print2.h>
 #include <Library/EarlyUsbInit.h>
@@ -161,6 +162,9 @@ STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
 STATIC CHAR8 *FstabSuffixDefault = "default";
+
+#define MAX_DDR_SIZE_STR 64
+STATIC CHAR8 *AndroidBootDdrSize = " androidboot.ddr_size=";
 
 /* Memory offline arguments */
 STATIC CHAR8 *MemOff = " mem=";
@@ -752,6 +756,32 @@ GetSystemPathByPname (CHAR8 **SysPath, BOOLEAN MultiSlotBoot,
   DEBUG ((EFI_D_ERROR, "GetSystemPathByPname: System Path - %a \n", *SysPath));
 
   return AsciiStrLen (*SysPath);
+}
+
+STATIC
+EFI_STATUS
+GetCompleteDdrSize (UINT64 *DdrSizeRet)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  struct ddr_regions_data_info *DdrRegionsInfo = NULL;
+
+  DdrRegionsInfo = AllocateZeroPool (sizeof (struct ddr_regions_data_info));
+  if (DdrRegionsInfo == NULL)
+    return EFI_OUT_OF_RESOURCES;
+
+  Status = GetDDrRegionsInfo (DdrRegionsInfo);
+  if ((EFI_SUCCESS != Status) ||
+      (NULL == DdrRegionsInfo)) {
+    FreePool (DdrRegionsInfo);
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  *DdrSizeRet = DdrRegionsInfo->ddr_rank0_size +
+                DdrRegionsInfo->ddr_rank1_size;
+
+  FreePool(DdrRegionsInfo);
+
+  return Status;
 }
 
 STATIC
@@ -1416,6 +1446,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 MemOffAmt[MEM_OFF_SIZE];
   BOOLEAN BootConfigFlag = FALSE;
   CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
+  CHAR8 DdrSizeStr[MAX_DDR_SIZE_STR] = "\0";
+  UINT64 FullDdrSize = 0;
 
   CONST CHAR8 *CmdLine = BootParamlistPtr->CmdLine;
   CHAR8 **FinalCmdLine = &BootParamlistPtr->FinalCmdLine;
@@ -1828,6 +1860,19 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (Param.FstabSuffix),
                  CmdLineLen,
                  BootConfigLen);
+
+  Status = GetCompleteDdrSize(&FullDdrSize);
+  if (Status == EFI_SUCCESS) {
+    AsciiSPrint (DdrSizeStr, sizeof(DdrSizeStr),
+                 "%a%dMB", AndroidBootDdrSize, FullDdrSize);
+    ParamLen = AsciiStrLen (DdrSizeStr);
+    BootConfigFlag = IsAndroidBootParam (DdrSizeStr, ParamLen,
+                                         HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                   CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, DdrSizeStr, NULL,
+                         BootConfigListHead, ParamLen, 0);
+  }
 
   Status = GetMemoryLimit (fdt, MemOffAmt);
   /* Don't override "mem" argument if coded into boot image */
