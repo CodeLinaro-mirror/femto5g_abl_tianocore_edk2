@@ -78,13 +78,13 @@ SHELL:=/bin/bash
 
 # Override toolchain for echo
 ifeq ($(BOOTLOADER_PLATFORM), echo)
-TARGET_TOOLS := GCC13
+TARGET_TOOLS := GCC$(TOOLCHAIN_GCC_MAJOR)
 TARGET := DEBUG
 BUILD_ROOT := $(ABL_OUT)/$(TARGET)_$(TARGET_TOOLS)
 EDK_TOOLS := $(BUILDDIR)/BaseTools
 EDK_TOOLS_BIN := $(EDK_TOOLS)/Source/C/bin
 ABL_FV_IMG := $(BUILD_ROOT)/FV/abl.fv
-ABL_FV_ELF := $(BOOTLOADER_OUT)/../unsigned_abl.elf
+ABL_FV_ELF := $(BOOTLOADER_OUT)/../../unsigned_abl.elf
 SHELL:=/bin/bash
 endif
 
