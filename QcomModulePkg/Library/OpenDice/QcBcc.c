@@ -89,6 +89,11 @@ GetRkpBCCSize (VOID)
     return Status;
   }
 
+  if (pQcomScmProtocol->ScmGetClientEnv == NULL) {
+    DEBUG ((EFI_D_ERROR, "GetRkpBCCSize: ScmGetClientEnv is NULL"));
+    return EFI_NOT_FOUND;
+  }
+
   Status = pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
   if (Object_isERROR (Status) ||
       Object_isNull (ClientEnvObj)) {
@@ -147,6 +152,10 @@ GetRkpBCC (UINT8 *bcc, size_t *bccValidSize)
   }
 
   if (Object_isNull (ClientEnvObj)) {
+    if (pQcomScmProtocol->ScmGetClientEnv == NULL) {
+      DEBUG ((EFI_D_ERROR, "GetRkpBCC: ScmGetClientEnv is NULL"));
+      return EFI_NOT_FOUND;
+    }
     Status =
         pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
     if (Object_isERROR (Status) ||
@@ -444,6 +453,7 @@ GetHWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
     case IOpener_ERROR_NOT_FOUND:
     case IOpener_ERROR_PRIVILEGE:
     case IOpener_ERROR_NOT_SUPPORTED:
+    case EFI_NOT_FOUND:
       return kDiceResultNotSupported;
 
     default:
