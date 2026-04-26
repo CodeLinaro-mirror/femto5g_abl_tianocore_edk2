@@ -27,39 +27,10 @@
 */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following
+ * license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef __LOCATEDEVICETREE_H__
@@ -143,8 +114,6 @@ typedef enum {
   VERSION_EXACT_MATCH,
   FOUNDRYID_DEFAULT_MATCH,
   FOUNDRYID_EXACT_MATCH,
-  SOFTSKUID_DEFAULT_MATCH,
-  SOFTSKUID_EXACT_MATCH,
   PMIC_MATCH_DEFAULT_MODEL_IDX0,
   PMIC_MATCH_EXACT_MODEL_IDX0,
   PMIC_MATCH_DEFAULT_MODEL_IDX1,
@@ -177,6 +146,7 @@ typedef enum {
   PMIC_MATCH_EXACT_MODEL_IDXE,
   PMIC_MATCH_DEFAULT_MODEL_IDXF,
   PMIC_MATCH_EXACT_MODEL_IDXF,
+  SOFTSKU_EXACT_MATCH,
   HLOS_SUBTYPE_EXACT_MATCH,
   SUBTYPE_DEFAULT_MATCH,
   SUBTYPE_EXACT_MATCH,
@@ -200,7 +170,7 @@ typedef enum {
    BIT (PMIC_MATCH_EXACT_MODEL_IDXB) | BIT (PMIC_MATCH_EXACT_MODEL_IDXC) | \
    BIT (PMIC_MATCH_EXACT_MODEL_IDXD) | BIT (PMIC_MATCH_EXACT_MODEL_IDXE) | \
    BIT (PMIC_MATCH_EXACT_MODEL_IDXF) | BIT (PACKAGE_EXACT_MATCH) | \
-   BIT (SOFTSKUID_EXACT_MATCH))
+   BIT (SOFTSKU_EXACT_MATCH))
 
 typedef enum {
   PMIC_IDX0,
@@ -222,12 +192,12 @@ typedef struct DtInfo {
   UINT32 DtSocRev;
   UINT32 DtFoundryId;
   UINT32 DtPackageId;
-  UINT32 DtSoftSkuId;
   UINT32 DtVariantId;
   UINT32 DtVariantMajor;
   UINT32 DtVariantMinor;
   UINT32 DtPlatformSubtype;
   UINT32 DtOEMVariantId;
+  UINT32 DtSoftSkuId;
   UINT32 DtPmicModel[MAX_PMIC_IDX];
   UINT32 DtPmicRev[MAX_PMIC_IDX];
   UINT64 DtMatchVal;
@@ -254,6 +224,7 @@ struct dt_entry {
   UINT64 offset;
   UINT32 size;
   UINT32 Idx;
+  UINT32 SkuId;
 };
 
 /*Struct def for device tree entry*/
@@ -296,6 +267,10 @@ struct pmic_id {
   UINT32 pmic_version[4];
 };
 
+typedef struct softsku_id {
+  UINT32 SkuId;
+} softsku_id;
+
 struct oem_id {
   UINT32 oem_variant_id;
 };
@@ -313,7 +288,6 @@ struct dt_mem_node_info {
 
 enum dt_entry_info {
   DTB_FOUNDRY = 0,
-  DTB_SOFTSKU,
   DTB_DDR,
   DTB_SOC,
   DTB_MAJOR_MINOR,
