@@ -40,7 +40,8 @@
  * ip address string and fill into caller supplied buffer.
  */
 EFI_STATUS
-GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
+GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
+                              CHAR8 *dbghmBuf)
 {
   EFI_STATUS Status;
   VOID *Buffer;
@@ -56,6 +57,8 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
   AsciiStrnCpyS (ipv6buf, MAX_IP_ADDR_BUF, " eipv6=", 7);
   memset (macbuf, '\0', MAX_IP_ADDR_BUF);
   AsciiStrnCpyS (macbuf, MAX_IP_ADDR_BUF, " ermac=", 7);
+  memset (dbghmBuf, '\0', MAX_IP_ADDR_BUF);
+  AsciiStrnCpyS (dbghmBuf, MAX_IP_ADDR_BUF, " edbghm=", 8);
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
 
@@ -152,6 +155,21 @@ GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf)
               rawbuf[Pidx], Pidx));
         return EFI_INVALID_PARAMETER;
     }
+  }
+
+  /* Extract debug_hm flag ('0' or '1') */
+  ++Pidx;
+  Qidx = 0;
+  if ((CHAR8)rawbuf[Pidx] != EARLY_ADDR_TERMINATOR) {
+    if (rawbuf[Pidx] == '0' || rawbuf[Pidx] == '1') {
+      dbghmBuf[Qidx + 8] = rawbuf[Pidx];
+    } else {
+      DEBUG ((EFI_D_VERBOSE, "Invalid char for debug_hm 0x%x at %d\n",
+              rawbuf[Pidx], Pidx));
+      dbghmBuf[Qidx + 8] = '0';
+    }
+  } else {
+    dbghmBuf[Qidx + 8] = '0';
   }
 
   FreePages (Buffer, 1);

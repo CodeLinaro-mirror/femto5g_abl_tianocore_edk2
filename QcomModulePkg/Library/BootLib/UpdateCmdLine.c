@@ -80,6 +80,7 @@ STATIC CHAR8 *ResumeCmdLine = NULL;
 CHAR8 IPv4AddrBufCmdLine[MAX_IP_ADDR_BUF];
 CHAR8 IPv6AddrBufCmdLine[MAX_IP_ADDR_BUF];
 CHAR8 MacEthAddrBufCmdLine[MAX_IP_ADDR_BUF];
+CHAR8 DbgHmBufCmdLine[MAX_IP_ADDR_BUF];
 
 /* Display command line related structures */
 #define MAX_DISPLAY_CMD_LINE 256
@@ -609,6 +610,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyEthMacCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyEthDbgHmCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
   if (EarlyUsbInitEnabled()) {
@@ -833,10 +836,12 @@ skip_BoardSerialNum:
   if (EarlyEthEnabled ()) {
     GetEarlyEthInfoFromPartition (IPv4AddrBufCmdLine,
                                  IPv6AddrBufCmdLine,
-                                 MacEthAddrBufCmdLine);
+                                 MacEthAddrBufCmdLine,
+                                 DbgHmBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
+    CmdLineLen += AsciiStrLen (DbgHmBufCmdLine);
   }
 
   if (EarlyUsbInitEnabled()) {
@@ -891,6 +896,7 @@ skip_BoardSerialNum:
     Param.EarlyIPv4CmdLine = IPv4AddrBufCmdLine;
     Param.EarlyIPv6CmdLine = IPv6AddrBufCmdLine;
     Param.EarlyEthMacCmdLine = MacEthAddrBufCmdLine;
+    Param.EarlyEthDbgHmCmdLine = DbgHmBufCmdLine;
   }
 
   if (EarlyUsbInitEnabled()) {

@@ -36,13 +36,14 @@
 #define MAC_ADDR_LEN   17
 
 /**
- *  Reads partition and try to extract IP addresses
- *  and MAC address if found.
+ *  Reads partition and try to extract IP addresses,
+ *  MAC address and debug_hm flag if found.
  *
  * @return EFI_STATUS
  */
 EFI_STATUS
-GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf);
+GetEarlyEthInfoFromPartition (CHAR8 *ipv4buf, CHAR8 *ipv6buf, CHAR8 *macbuf,
+                              CHAR8 *dbghmBuf);
 
 BOOLEAN
 EarlyEthEnabled ();
