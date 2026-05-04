@@ -114,8 +114,8 @@ STATIC CHAR8 PhyAddrBufCmdLineCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 IFaceAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 SpeedAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 QosAddrBufCmdLine[MAX_IP_ADDR_BUF];
-STATIC CHAR8 RssAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 WaitSwitchRdyBufCmdLine[MAX_IP_ADDR_BUF];
+STATIC CHAR8 RssAddrBufCmdLine[MAX_IP_ADDR_BUF];
 STATIC CHAR8 *ResumeCmdLine = NULL;
 STATIC CHAR8 BootCpuCmdLine[BOOT_CPU_PARAM_LEN];
 
@@ -1061,9 +1061,9 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param, CHAR8 **FinalCmdLine,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyQosCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-    Src = Param->EarlyRssCmdLine;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = Param->EarlyWaitSwitchRdyCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->EarlyRssCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -1823,8 +1823,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                                  IFaceAddrBufCmdLine,
                                  SpeedAddrBufCmdLine,
                                  QosAddrBufCmdLine,
-                                 RssAddrBufCmdLine,
-                                 WaitSwitchRdyBufCmdLine);
+                                 WaitSwitchRdyBufCmdLine,
+                                 RssAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv4AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (IPv6AddrBufCmdLine);
     CmdLineLen += AsciiStrLen (MacEthAddrBufCmdLine);
@@ -1832,8 +1832,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     CmdLineLen += AsciiStrLen (IFaceAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (SpeedAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (QosAddrBufCmdLine);
-    CmdLineLen += AsciiStrLen (RssAddrBufCmdLine);
     CmdLineLen += AsciiStrLen (WaitSwitchRdyBufCmdLine);
+    CmdLineLen += AsciiStrLen (RssAddrBufCmdLine);
   }
 
   if (EarlyUsbInitEnabled ()) {
@@ -1925,8 +1925,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.EarlyIFaceCmdLine = IFaceAddrBufCmdLine;
     Param.EarlySpeedCmdLine = SpeedAddrBufCmdLine;
     Param.EarlyQosCmdLine = QosAddrBufCmdLine;
-    Param.EarlyRssCmdLine = RssAddrBufCmdLine;
     Param.EarlyWaitSwitchRdyCmdLine = WaitSwitchRdyBufCmdLine;
+    Param.EarlyRssCmdLine = RssAddrBufCmdLine;
   }
 
   if (EarlyUsbInitEnabled ()) {
