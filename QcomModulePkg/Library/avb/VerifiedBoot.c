@@ -2242,6 +2242,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
             if (!TargetBuildVariantUser () ) {
                 DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
                                                     "debug builds\n"));
+                Status = EFI_SUCCESS;
                 goto skip_verification;
             }
         }

@@ -48,6 +48,7 @@
 #include <Library/DxeServicesTableLib.h>
 #include <VerifiedBoot.h>
 #include <Protocol/EFIKernelInterface.h>
+#include "BootLinux.h"
 #if HIBERNATION_SUPPORT_AES
 #include <Library/aes/aes_public.h>
 #include <Library/lz4/lib/lz4.h>
@@ -255,6 +256,39 @@ static INT32 CheckFreeRanges (UINT64 TargetAddr)
                         return 1;
                 Iter++;
         }
+        return 0;
+}
+
+static INT32 EnableAllCores ()
+{
+        INT32 Iter = 0;
+        UINT32 NumCpus;
+        UINT32 Status;
+
+        DEBUG ((EFI_D_VERBOSE, "Getting count of Max CPUs\n"));
+        NumCpus = KernIntf->MpCpu->MpcoreGetMaxCpuCount ();
+        DEBUG ((EFI_D_VERBOSE, "Available Cores for hibernation: %d\n",
+                NumCpus));
+
+        while (Iter < NumCpus) {
+                DEBUG ((EFI_D_VERBOSE, "Getting Status of core: %d\n", Iter));
+                Status = KernIntf->MpCpu->MpcoreIsCpuActive (Iter);
+                DEBUG ((EFI_D_VERBOSE, "Core: %d, Status: %d\n", Iter, Status));
+                if (!Status) {
+                        DEBUG ((EFI_D_VERBOSE, "Enabling Core: %d\n", Iter));
+                        KernIntf->MpCpu->MpcoreInitDeferredCores (1 << Iter);
+                        KernIntf->Thread->ThreadSleep (10);
+                }
+                Iter++;
+        }
+
+        Iter = 0;
+        while (Iter < NumCpus) {
+                Status = KernIntf->MpCpu->MpcoreIsCpuActive (Iter);
+                DEBUG ((EFI_D_VERBOSE, "Core: %d, Status: %d\n", Iter, Status));
+                Iter++;
+        }
+
         return 0;
 }
 
@@ -1903,6 +1937,11 @@ static INT32 RestoreSnapshotImage (VOID)
         UINT32 SMPage = 0; UINT64 DstPfn_z;
 #endif
         InitReadMultiThreadEnv ();
+        Ret = EnableAllCores ();
+        if (Ret < 0) {
+            DEBUG ((EFI_D_ERROR, "EnableAllCores failed\n"));
+            return Ret;
+        }
         StartMs = GetTimerCountms ();
         Ret = ReadSwapInfoStruct ();
         if (Ret < 0) {
@@ -2214,22 +2253,6 @@ SetLinuxBootCpu (UINT32 BootCpu)
   return;
 }
 
-#ifdef TARGET_LINUX_BOOT_CPU_ID
-#define BootCpuId TARGET_LINUX_BOOT_CPU_ID
-STATIC BOOLEAN
-BootCpuSelectionEnabled (VOID)
-{
-  return TRUE;
-}
-#else
-#define BootCpuId 0
-STATIC BOOLEAN
-BootCpuSelectionEnabled (VOID)
-{
-  return FALSE;
-}
-#endif
-
 static VOID CopyBounceAndBootKernel ()
 {
         INT32 Status;
@@ -2360,6 +2383,9 @@ VOID BootIntoHibernationImage (BootInfo *Info,
 {
         INT32 Ret;
         EFI_STATUS Status = EFI_SUCCESS;
+#ifdef PVMFW_BCC
+        BootParamlist BootParamlistPtr = {0};
+#endif
         printf ("Entrying Hibernation restore\n");
 
         if (CheckForValidHeader () < 0) {
@@ -2392,6 +2418,21 @@ VOID BootIntoHibernationImage (BootInfo *Info,
         if (Status != EFI_SUCCESS) {
                 printf ("Failed to set seed for fbe : %r\n", Status);
         }
+
+#ifdef PVMFW_BCC
+        Status = LoadPvmFwAndAvfDpDtbo(Info, &BootParamlistPtr);
+        if (Status != EFI_SUCCESS) {
+                printf ("Failed to load pvmfw during hibernation: %r\n",
+                        Status);
+                goto err;
+        }
+        Status = PrepareAndRegisterPvmFw (Info, &BootParamlistPtr);
+        if (Status != EFI_SUCCESS) {
+                printf ("Failed to register pvmfw: %r\n",
+                        Status);
+                goto err;
+        }
+#endif
 
         Ret = RestoreSnapshotImage ();
         if (Ret) {
