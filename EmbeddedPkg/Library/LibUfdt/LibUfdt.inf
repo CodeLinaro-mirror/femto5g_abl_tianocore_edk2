@@ -13,7 +13,7 @@
 #
 
 [BuildOptions.AARCH64]
-	GCC:*_*_*_CC_FLAGS = -Wno-error -Oz -O2 -Wno-unused-function
+	GCC:*_*_*_CC_FLAGS = $(GCC_SIZE_OPT) -Wno-error -O2 -Wno-unused-function
 
 [Sources]
   ufdt_convert.c
