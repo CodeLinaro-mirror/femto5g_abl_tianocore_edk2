@@ -47,6 +47,7 @@
 #include <Uefi.h>
 #include <Uefi/UefiSpec.h>
 #include <VerifiedBoot.h>
+#include <Library/ShutdownServices.h>
 
 STATIC BOOLEAN FlashingGpt;
 STATIC BOOLEAN ParseSecondaryGpt;
@@ -1480,6 +1481,96 @@ AtomicABEnabled (VOID)
 }
 #endif
 
+#ifdef ENABLE_FASTBOOT_IF_LOADAUTH_FAIL
+BOOLEAN HandleCurrentSlotAttribute (VOID)
+{
+  Slot CurrentSlot = {{0}};
+  UINT64 RetryCount = 0;
+  UINT64 Unbootable = 0;
+  UINT64 BootSuccess = 0;
+
+  struct PartitionEntry *BootPartition = NULL;
+  EFI_STATUS Status = GetActiveSlot (&CurrentSlot);
+
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "GetActiveSlot: no active slots found!\n"));
+    return FALSE;
+  }
+
+  GUARD_OUT (FindBootableSlot (&CurrentSlot));
+
+  BootPartition = GetBootPartitionEntry (&CurrentSlot);
+  if (BootPartition == NULL) {
+    DEBUG ((EFI_D_ERROR, "GetBootPartitionEntry: No boot partition "
+                         "entry for slot %s\n",
+            CurrentSlot.Suffix));
+    return FALSE;
+  }
+
+  Unbootable = (BootPartition->PartEntry.Attributes &
+                PART_ATT_UNBOOTABLE_VAL) >> PART_ATT_UNBOOTABLE_BIT;
+  BootSuccess = (BootPartition->PartEntry.Attributes &
+                 PART_ATT_SUCCESSFUL_VAL) >> PART_ATT_SUCCESS_BIT;
+  RetryCount = (BootPartition->PartEntry.Attributes &
+                PART_ATT_MAX_RETRY_COUNT_VAL) >> PART_ATT_MAX_RETRY_CNT_BIT;
+
+  if (Unbootable == 0 &&
+      BootSuccess == 0 &&
+      RetryCount > 0) {
+      RetryCount--;
+      BootPartition->PartEntry.Attributes &= ~PART_ATT_MAX_RETRY_COUNT_VAL;
+      BootPartition->PartEntry.Attributes |= RetryCount
+                                         << PART_ATT_MAX_RETRY_CNT_BIT;
+      DEBUG ((EFI_D_INFO, "Current Slot is : %s, retry count %ld\n",
+              CurrentSlot.Suffix, RetryCount));
+      UpdatePartitionAttributes (PARTITION_ATTRIBUTES);
+  }
+
+  return TRUE;
+
+out:
+  return FALSE;
+}
+
+BOOLEAN IsExistBootablePartition (VOID)
+{
+  Slot Slots[] = {{L"_a"}, {L"_b"}};
+  BOOLEAN ExistBootableSlot[] = {TRUE, TRUE};
+  UINT64 Unbootable = 0;
+  UINT64 BootSuccess = 0;
+
+  for (UINTN SlotIndex = 0; SlotIndex < ARRAY_SIZE (Slots); SlotIndex++) {
+    struct PartitionEntry *BootPartition =
+        GetBootPartitionEntry (&Slots[SlotIndex]);
+    if (BootPartition == NULL) {
+      DEBUG ((EFI_D_ERROR, "GetBootPartitionEntry: No boot partition "
+                           "entry for slot %s\n",
+              Slots[SlotIndex].Suffix));
+      return FALSE;
+    }
+
+    Unbootable = (BootPartition->PartEntry.Attributes &
+                  PART_ATT_UNBOOTABLE_VAL) >> PART_ATT_UNBOOTABLE_BIT;
+    BootSuccess = (BootPartition->PartEntry.Attributes &
+                   PART_ATT_SUCCESSFUL_VAL) >> PART_ATT_SUCCESS_BIT;
+
+    if (Unbootable == 0 &&
+        BootSuccess == 1) {
+      ExistBootableSlot[SlotIndex] = TRUE;
+    } else {
+      ExistBootableSlot[SlotIndex] = FALSE;
+	}
+  }
+
+  if (ExistBootableSlot[0] == FALSE &&
+      ExistBootableSlot[1] == FALSE) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+#endif
+
 STATIC EFI_STATUS
 ReadMisc_boot (Slot *BootableSlot)
 {
@@ -1496,6 +1587,11 @@ ReadMisc_boot (Slot *BootableSlot)
 
   CHAR16 PtrName[] = {L"misc_boot"};
   Slot Slots[] = {{L"_a"}, {L"_b"}};
+
+  BOOLEAN FlagReboot = FALSE;
+  EFI_GUID AblRGuid = {
+    0x4ED7A78D, 0x9BB0, 0x478A, {0xB0, 0xB8, 0x93, 0x49, 0xBC, 0xB2, 0xD9, 0x34}
+  };
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC"))) {
@@ -1613,6 +1709,27 @@ ReadMisc_boot (Slot *BootableSlot)
             goto Exit;
         }
         DEBUG ((EFI_D_INFO, "Erase misc_boot cookie is OK.\n"));
+
+        /* When the specified GUID is detected in the A/B partition,
+         * the system will auto reboot from the Recovery chain to the
+         * Primary chain*/
+        for (UINT32 j = 0; j < PartitionCount; j++) {
+          if (StrnCmp (PtnEntries[j].PartEntry.PartitionName,
+                      L"abl_a", StrLen (L"abl_a")) == 0 ||
+              StrnCmp (PtnEntries[j].PartEntry.PartitionName,
+                      L"abl_b", StrLen (L"abl_b")) == 0) {
+             if (CompareGuid (&AblRGuid,
+                 &PtnEntries[j].PartEntry.PartitionTypeGUID)) {
+               FlagReboot = TRUE;
+               break;
+             }
+          }
+        }
+
+        if (FlagReboot) {
+          DEBUG ((EFI_D_INFO, "Reboot Device into Primary chain.\n"));
+          RebootDevice (NORMAL_MODE);
+        }
 
       /* misc_boot cookie is 0xAB, slot should be ActiveSlot */
       } else if (Buffer[0] == AB_BOOT_RECOVERY) {
