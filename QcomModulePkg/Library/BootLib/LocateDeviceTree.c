@@ -27,39 +27,10 @@
 */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following
+ * license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "LocateDeviceTree.h"
@@ -710,29 +681,6 @@ STATIC EFI_STATUS GetPlatformMatchDtb (DtInfo * CurDtbInfo,
       CurDtbInfo->DtMatchVal = BIT (NONE_MATCH);
       return EFI_NOT_FOUND;
     }
-    /*Compare SoftSKu Id of the dtb vs Board*/
-    CurDtbInfo->DtSoftSkuId =
-        fdt32_to_cpu (((struct plat_id *)PlatProp)->platform_id) &
-        SOFTSKU_ID_MASK;
-    DEBUG ((EFI_D_VERBOSE, "BoardSoftSku = %x, DtSoftSku = %x\n",
-            (BoardSoftSkuId () << PLATFORM_SOFTSKU_SHIFT),
-            CurDtbInfo->DtSoftSkuId));
-    if ((BoardSoftSkuId () << PLATFORM_SOFTSKU_SHIFT) > 0) {
-      if (CurDtbInfo->DtSoftSkuId ==
-          (BoardSoftSkuId () << PLATFORM_SOFTSKU_SHIFT)) {
-        CurDtbInfo->DtMatchVal |= BIT (SOFTSKUID_EXACT_MATCH);
-      } else if (BoardSoftSkuId () > 1 &&
-                 (CurDtbInfo->DtSoftSkuId >> PLATFORM_SOFTSKU_SHIFT) == 1) {
-        CurDtbInfo->DtMatchVal |= BIT (SOFTSKUID_DEFAULT_MATCH);
-      } else {
-        DEBUG ((EFI_D_VERBOSE, "soc SoftSku does not match\n"));
-       /* If it's neither exact nor default match don't select dtb */
-       CurDtbInfo->DtMatchVal = BIT (NONE_MATCH);
-       return EFI_NOT_FOUND;
-      }
-    } else if (CurDtbInfo->DtSoftSkuId == 0) {
-      CurDtbInfo->DtMatchVal |= BIT (SOFTSKUID_EXACT_MATCH);
-    }
     /* Compare Package Id of dtb vs Board */
     CurDtbInfo->DtPackageId =
         fdt32_to_cpu (((struct plat_id *)PlatProp)->platform_id) &
@@ -851,6 +799,52 @@ STATIC EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
   return EFI_SUCCESS;
 }
 
+STATIC EFI_STATUS GetSoftSkuMatchDtb (DtInfo *CurDtbInfo,
+                          CONST CHAR8 *SoftSkuProp, INT32 LenSoftSkuId,
+                          CONST CHAR8 *PlatProp)
+{
+  UINT32 DtSoftSkuFromPlatformId = 0;
+  UINT32 BoardSoftSku = BoardSoftSkuId ();
+
+  if (CurDtbInfo == NULL) {
+    DEBUG ((EFI_D_VERBOSE, "Input parameters null\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  /* Check if qcom,softsku-id property exists (Clarence/Ravelin logic) */
+  if ((SoftSkuProp) && (LenSoftSkuId >= 0)) {
+    /* Separate softsku-id field exists - use it directly */
+    CurDtbInfo->DtSoftSkuId =
+           fdt32_to_cpu (((struct softsku_id *)SoftSkuProp)->SkuId);
+    DEBUG ((EFI_D_VERBOSE, "Using qcom,softsku-id field: BoardSoftSkuId = %x, DtSoftSkuId = %x\n",
+                     BoardSoftSku, CurDtbInfo->DtSoftSkuId));
+  } else if (PlatProp) {
+    /* qcom,softsku-id absent - extract from platform-id bits 26-29 of first tuple (Milos/Volcano logic) */
+    DtSoftSkuFromPlatformId =
+        fdt32_to_cpu (((struct plat_id *)PlatProp)->platform_id) &
+        SOFTSKU_ID_MASK;
+    CurDtbInfo->DtSoftSkuId = DtSoftSkuFromPlatformId >> PLATFORM_SOFTSKU_SHIFT;
+    DEBUG ((EFI_D_VERBOSE, "Using platform-id bits[29:26]: BoardSoftSkuId = %x, DtSoftSkuId (from platform-id) = %x (raw: %x)\n",
+                     BoardSoftSku, CurDtbInfo->DtSoftSkuId, DtSoftSkuFromPlatformId));
+  } else {
+    /* Neither property available */
+    CurDtbInfo->DtSoftSkuId = 0;
+    DEBUG ((EFI_D_VERBOSE, "No softsku-id available, setting to 0\n"));
+  }
+
+  /* Match logic */
+  if (CurDtbInfo->DtSoftSkuId == BoardSoftSku) {
+    CurDtbInfo->DtMatchVal |= BIT (SOFTSKU_EXACT_MATCH);
+    DEBUG ((EFI_D_VERBOSE, "SoftSku EXACT match\n"));
+  } else {
+    DEBUG ((EFI_D_VERBOSE, "SoftSku does not match (Board: %x, DT: %x)\n",
+                     BoardSoftSku, CurDtbInfo->DtSoftSkuId));
+  }
+
+  return EFI_SUCCESS;
+}
+
+
 /* Dt selection table for quick reference
   | SNO | Dt Property   | CDT Property    | Exact | Best | Default |
   |-----+---------------+-----------------+-------+------+---------+
@@ -881,7 +875,10 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   CONST CHAR8 *PmicProp = NULL;
   CONST CHAR8 *PmicPropSz = NULL;
   CONST CHAR8 *OemVarProp = NULL;
+  CONST CHAR8 *SoftSkuProp = NULL;
+  CONST CHAR8 *PlatPropOrig = NULL;
   INT32 LenBoardId;
+  INT32 LenSoftSkuId;
   INT32 LenPlatId;
   INT32 LenPmicId;
   INT32 LenPmicIdSz;
@@ -914,6 +911,7 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   /* Get the msm-id prop from DTB */
   PlatProp = (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "qcom,msm-id",
                                          &LenPlatId);
+  PlatPropOrig = PlatProp;  /* Save original pointer for SoftSku extraction */
   if (PlatProp &&
       (LenPlatId > 0) &&
       (!(LenPlatId % MinPlatIdLen))) {
@@ -961,6 +959,14 @@ ReadDtbFindMatch (DtInfo *CurDtbInfo, DtInfo *BestDtbInfo, UINT32 ExactMatch)
   Status = GetBoardMatchDtb (CurDtbInfo, BoardProp, LenBoardId);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_VERBOSE, "Board dt prop search failed.\n"));
+    goto cleanup;
+  }
+
+  SoftSkuProp = (CONST CHAR8 *)fdt_getprop (Dtb, RootOffset, "qcom,softsku-id",
+                                        &LenSoftSkuId);
+  Status = GetSoftSkuMatchDtb (CurDtbInfo, SoftSkuProp, LenSoftSkuId, PlatPropOrig);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_VERBOSE, "SoftSkuId dt prop search failed.\n"));
     goto cleanup;
   }
 
@@ -1049,6 +1055,8 @@ cleanup:
                           CurDtbInfo->DtPlatformSubtype) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else if (BestDtbInfo->DtOEMVariantId < CurDtbInfo->DtOEMVariantId) {
+        gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
+      } else if (BestDtbInfo->DtSoftSkuId > CurDtbInfo->DtSoftSkuId) {
         gBS->CopyMem (BestDtbInfo, CurDtbInfo, sizeof (struct DtInfo));
       } else {
         FindBestMatch = FALSE;
@@ -1500,6 +1508,7 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
   cur_dt_msm_id = (cur_dt_entry->platform_id & 0x0000ffff);
   cur_dt_hw_platform = (cur_dt_entry->variant_id & 0x000000ff);
   cur_dt_hw_subtype = (cur_dt_entry->board_hw_subtype & 0xff);
+  CurDtSkuId   = cur_dt_entry->SkuId;
 
   /* Bits 10:8 contain ddr information */
   cur_dt_hlos_ddr = (cur_dt_entry->board_hw_subtype & 0x700);
@@ -1516,6 +1525,7 @@ platform_dt_absolute_match (struct dt_entry *cur_dt_entry,
       (cur_dt_hw_subtype == BoardPlatformSubType ()) &&
       (CurDtSkuId == (BoardSoftSkuId ())) &&
       (cur_dt_hlos_ddr == (BoardPlatformHlosSubType() & 0x700)) &&
+      (CurDtSkuId == (BoardSoftSkuId ())) &&
       (cur_dt_entry->soc_rev <= BoardPlatformChipVersion ()) &&
       ((cur_dt_entry->variant_id & 0x00ffff00) <=
        (BoardTargetId () & 0x00ffff00)) &&
@@ -1582,10 +1592,6 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
       current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
       board_info = BoardPlatformFoundryId () << 16;
       break;
-    case DTB_SOFTSKU:
-      current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x3c000000);
-      board_info = BoardSoftSkuId () << 26;
-      break;
     case DTB_DDR:
       current_info = ((dt_node_tmp1->dt_entry_m->board_hw_subtype) & 0x700);
       board_info = (BoardPlatformHlosSubType () & 0x700);
@@ -1631,10 +1637,6 @@ platform_dt_absolute_compat_match (struct dt_entry_node *dt_list,
     case DTB_FOUNDRY:
       current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x00ff0000);
       break;
-    case DTB_SOFTSKU:
-      current_info = ((dt_node_tmp1->dt_entry_m->platform_id) & 0x3c000000);
-      break;
-    case DTB_DDR:
       current_info = ((dt_node_tmp1->dt_entry_m->board_hw_subtype) & 0x700);
       break;
     case DTB_PMIC_MODEL:
@@ -1824,14 +1826,8 @@ platform_dt_match_best (struct dt_entry_node *dt_list)
   */
   platform_dt_absolute_compat_match (dt_list, DTB_FOUNDRY);
 
-  /* check SoftSku id
-  * the SoftSku id must exact match board SoftSku id, this is compatibility
-  * check, if couldn't find the exact match from DTB, will exact match 0x0.
-  */
-  platform_dt_absolute_compat_match (dt_list, DTB_SOFTSKU);
-
   /* check DDR type
-  * the DDR type must exact match board DDR tpe, this is compatibility
+  * the DDR type must exact match board DDR type, this is compatibility
   * check, if couldn't find the exact match from DTB, will exact match 0x0.
   */
   platform_dt_absolute_compat_match (dt_list, DTB_DDR);
