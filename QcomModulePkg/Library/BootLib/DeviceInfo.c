@@ -745,6 +745,10 @@ GenerateDICEFRS (DeviceInfo *devinfo)
   EFI_STATUS Status = EFI_SUCCESS;
   EFI_QCOM_RNG_PROTOCOL *RngIf;
 
+  /* Copy latest devinfo into global DevInfo if not null*/
+  if (devinfo) {
+    gBS->CopyMem (&DevInfo, devinfo, sizeof (DeviceInfo));
+  }
   Status = gBS->LocateProtocol (&gQcomRngProtocolGuid, NULL, (VOID **)&RngIf);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR,

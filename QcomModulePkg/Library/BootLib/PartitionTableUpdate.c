@@ -28,39 +28,9 @@
  */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "PartitionTableUpdate.h"
@@ -688,23 +658,24 @@ SwitchPtnSlots (CONST CHAR16 *SetActive)
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
-    UfsGetSetBootLun (&UfsBootLun, UfsGet);
-    // Special case for XBL is to change the bootlun instead of swapping the
-    // guid
-    if (UfsBootLun == 0x1 &&
-        !StrnCmp (SetActive, (CONST CHAR16 *)L"_b",
-                  StrLen ((CONST CHAR16 *)L"_b"))) {
-      DEBUG ((EFI_D_INFO, "Switching the boot lun from 1 to 2\n"));
-      UfsBootLun = 0x2;
-    } else if (UfsBootLun == 0x2 &&
-               !StrnCmp (SetActive, (CONST CHAR16 *)L"_a",
-                         StrLen ((CONST CHAR16 *)L"_a"))) {
-      DEBUG ((EFI_D_INFO, "Switching the boot lun from 2 to 1\n"));
-      UfsBootLun = 0x1;
+    if (GetBootDeviceType () == EFI_UFS_FLASH_TYPE) {
+      UfsGetSetBootLun (&UfsBootLun, UfsGet);
+      // Special case for XBL is to change the bootlun instead of swapping the
+      // guid
+      if (UfsBootLun == 0x1 &&
+          !StrnCmp (SetActive, (CONST CHAR16 *)L"_b",
+                    StrLen ((CONST CHAR16 *)L"_b"))) {
+        DEBUG ((EFI_D_INFO, "Switching the boot lun from 1 to 2\n"));
+        UfsBootLun = 0x2;
+      } else if (UfsBootLun == 0x2 &&
+                 !StrnCmp (SetActive, (CONST CHAR16 *)L"_a",
+                           StrLen ((CONST CHAR16 *)L"_a"))) {
+        DEBUG ((EFI_D_INFO, "Switching the boot lun from 2 to 1\n"));
+        UfsBootLun = 0x1;
+      }
+      UfsGetSetBootLun (&UfsBootLun, UfsSet);
     }
-    UfsGetSetBootLun (&UfsBootLun, UfsSet);
   }
-
   UpdatePartitionAttributes (PARTITION_GUID);
 }
 
@@ -1374,10 +1345,12 @@ BOOLEAN IsCurrentSlotBootable (VOID)
     return FALSE;
   }
 
-  Msg = (struct RecoveryMessage *) PartitionData;
-  if (Msg->Reserved[3] == 'y') {
-    Ret = TRUE;
-  } else if (Msg->Reserved[5] == 'y') {
+  /* Msg->Reserved[1]: target slot
+   * Msg->Reserved[3]: slot 0 mark boot successful status
+   * Msg->Reserved[5]: slot 1 mark boot successful status
+   */
+  if (((Msg->Reserved[1] == 'a') && (Msg->Reserved[3] == 'y')) ||
+      ((Msg->Reserved[1] == 'b') && (Msg->Reserved[5] == 'y'))) {
     Ret = TRUE;
   }
 
@@ -1464,24 +1437,26 @@ GetAtomicABActiveSlot (Slot *ActiveSlot)
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
-    GUARD (UfsGetSetBootLun (&UfsBootLun, TRUE));
-    if (UfsBootLun == 0x1) {
-      GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
-                       Slots[0].Suffix,
-                       StrLen (Slots[0].Suffix)));
-      DEBUG ((EFI_D_INFO, "GetACtiveSlot: ufs device boot lun is %x, "
-                          " select active slot %s\n",
-                          UfsBootLun, ActiveSlot->Suffix));
-    } else if (UfsBootLun == 0x2) {
-      GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
-                       Slots[1].Suffix,
-                       StrLen (Slots[1].Suffix)));
-      DEBUG ((EFI_D_INFO, "GetACtiveSlot: ufs device boot lun is %x, "
-                          " select active slot %s\n",
-                          UfsBootLun, ActiveSlot->Suffix));
-    } else {
-      DEBUG ((EFI_D_ERROR, "Boot lun: %x invalid\n", UfsBootLun));
-      return EFI_DEVICE_ERROR;
+    if (GetBootDeviceType () == EFI_UFS_FLASH_TYPE) {
+      GUARD (UfsGetSetBootLun (&UfsBootLun, TRUE));
+      if (UfsBootLun == 0x1) {
+        GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
+                         Slots[0].Suffix,
+                         StrLen (Slots[0].Suffix)));
+        DEBUG ((EFI_D_INFO, "GetACtiveSlot: ufs device boot lun is %x, "
+                            " select active slot %s\n",
+                            UfsBootLun, ActiveSlot->Suffix));
+      } else if (UfsBootLun == 0x2) {
+        GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
+                         Slots[1].Suffix,
+                         StrLen (Slots[1].Suffix)));
+        DEBUG ((EFI_D_INFO, "GetACtiveSlot: ufs device boot lun is %x, "
+                            " select active slot %s\n",
+                            UfsBootLun, ActiveSlot->Suffix));
+      } else {
+        DEBUG ((EFI_D_ERROR, "Boot lun: %x invalid\n", UfsBootLun));
+        return EFI_DEVICE_ERROR;
+      }
     }
     return EFI_SUCCESS;
   }
@@ -1681,21 +1656,23 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
     /* Check if BootLun is matching with Slot */
     GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
     if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
-      UfsGetSetBootLun (&UfsBootLun, UfsGet);
-      if (UfsBootLun == 0x1 &&
-          !StrnCmp (CurrentSlot.Suffix, (CONST CHAR16 *)L"_b",
-          StrLen ((CONST CHAR16 *)L"_b"))) {
-        DEBUG ((EFI_D_INFO, "Boot lun mismatch switch from 1 to 2\n"));
-        DEBUG ((EFI_D_INFO, "Reboot Required\n"));
-        UfsBootLun = 0x2;
-        UfsGetSetBootLun (&UfsBootLun, UfsSet);
-      } else if (UfsBootLun == 0x2 &&
-               !StrnCmp (CurrentSlot.Suffix, (CONST CHAR16 *)L"_a",
-               StrLen ((CONST CHAR16 *)L"_a"))) {
-        DEBUG ((EFI_D_INFO, "Boot lun mismatch switch from 2 to 1\n"));
-        DEBUG ((EFI_D_INFO, "Reboot Required\n"));
-        UfsBootLun = 0x1;
-        UfsGetSetBootLun (&UfsBootLun, UfsSet);
+      if (GetBootDeviceType () == EFI_UFS_FLASH_TYPE) {
+        UfsGetSetBootLun (&UfsBootLun, UfsGet);
+        if (UfsBootLun == 0x1 &&
+            !StrnCmp (CurrentSlot.Suffix, (CONST CHAR16 *)L"_b",
+            StrLen ((CONST CHAR16 *)L"_b"))) {
+          DEBUG ((EFI_D_INFO, "Boot lun mismatch switch from 1 to 2\n"));
+          DEBUG ((EFI_D_INFO, "Reboot Required\n"));
+          UfsBootLun = 0x2;
+          UfsGetSetBootLun (&UfsBootLun, UfsSet);
+        } else if (UfsBootLun == 0x2 &&
+                 !StrnCmp (CurrentSlot.Suffix, (CONST CHAR16 *)L"_a",
+                 StrLen ((CONST CHAR16 *)L"_a"))) {
+          DEBUG ((EFI_D_INFO, "Boot lun mismatch switch from 2 to 1\n"));
+          DEBUG ((EFI_D_INFO, "Reboot Required\n"));
+          UfsBootLun = 0x1;
+          UfsGetSetBootLun (&UfsBootLun, UfsSet);
+        }
       }
     }
   } else {
@@ -1841,16 +1818,18 @@ ValidateSlotGuids (Slot *BootableSlot)
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
-    GUARD (UfsGetSetBootLun (&UfsBootLun, TRUE));
-    if (UfsBootLun == 0x1 &&
-        !StrCmp (BootableSlot->Suffix, (CONST CHAR16 *)L"_a")) {
-    } else if (UfsBootLun == 0x2 &&
-               !StrCmp (BootableSlot->Suffix, (CONST CHAR16 *)L"_b")) {
-    } else {
-      DEBUG ((EFI_D_ERROR, "Boot lun: %x and BootableSlot: %s "
-                           "do not match\n",
-              UfsBootLun, BootableSlot->Suffix));
-      return EFI_DEVICE_ERROR;
+    if (GetBootDeviceType () == EFI_UFS_FLASH_TYPE) {
+      GUARD (UfsGetSetBootLun (&UfsBootLun, TRUE));
+      if (UfsBootLun == 0x1 &&
+          !StrCmp (BootableSlot->Suffix, (CONST CHAR16 *)L"_a")) {
+      } else if (UfsBootLun == 0x2 &&
+                 !StrCmp (BootableSlot->Suffix, (CONST CHAR16 *)L"_b")) {
+      } else {
+        DEBUG ((EFI_D_ERROR, "Boot lun: %x and BootableSlot: %s "
+                             "do not match\n",
+                UfsBootLun, BootableSlot->Suffix));
+        return EFI_DEVICE_ERROR;
+      }
     }
   } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
            !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
