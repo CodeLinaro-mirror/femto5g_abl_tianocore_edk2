@@ -47,6 +47,7 @@
 #include <Protocol/EFICardInfo.h>
 #include <Protocol/EFIChargerEx.h>
 #include <Protocol/EFIChipInfoTypes.h>
+#include <Protocol/EFIDDRGetConfig.h>
 #include <Protocol/EFIPmicPon.h>
 #include <Protocol/Print2.h>
 #include <Library/EarlyUsbInit.h>
@@ -162,6 +163,9 @@ STATIC CONST CHAR8 *AndroidBootFstabSuffix =
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
 STATIC CHAR8 *FstabSuffixDefault = "default";
 
+#define MAX_DDR_SIZE_STR 64
+STATIC CHAR8 *AndroidBootDdrSize = " androidboot.ddr_size=";
+
 /* Memory offline arguments */
 STATIC CHAR8 *MemOff = " mem=";
 STATIC CONST CHAR8 *MemHpState = " memhp_default_state=online";
@@ -247,7 +251,7 @@ TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
   }
 
   /* The new protocol are supported on future chipsets */
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION) {
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10003) {
     Status = ChgDetectProtocol->IsOffModeCharging (BatteryStatus);
     if (EFI_ERROR (Status))
       DEBUG (
@@ -384,7 +388,7 @@ TargetBatterySocOk (UINT32 *BatteryVoltage)
   }
 
   /* The new protocol are supported on future chipsets */
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION) {
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10003) {
     Status = ChgDetectProtocol->IsPowerOk (
         EFI_CHARGER_EX_POWER_FLASH_BATTERY_VOLTAGE_TYPE, &FlashInfo);
     if (EFI_ERROR (Status)) {
@@ -541,10 +545,8 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
                 CHAR16 *ReqPartition, CHAR8 *Key, BOOLEAN FlashlessBoot)
 {
   INT32 Index;
-  UINT32 Lun;
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
   Slot CurSlot = GetCurrentSlotSuffix ();
-  CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
 
   *SysPath = AllocateZeroPool (sizeof (CHAR8) * MAX_PATH_SIZE);
@@ -591,7 +593,6 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
     return 0;
   }
 
-  Lun = GetPartitionLunFromIndex (Index);
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrCmp ("Unknown", RootDevStr)) {
     FreePool (*SysPath);
@@ -626,10 +627,17 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
           (Index - 1));
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
+#ifdef ROOT_PARTLABEL_SUPPORT
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=PARTLABEL=%s", Key, PartitionName);
+#else
+    UINT32 Lun;
+    Lun = GetPartitionLunFromIndex (Index);
+    CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/sd%c%d",
                  Key,
                  LunCharMapping[Lun],
                  GetPartitionIdxInLun (PartitionName, Lun));
+#endif
   } else if (!AsciiStrCmp ("NVME", RootDevStr)) {
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/nvme0n1p%d", Key, Index);
   } else if (!AsciiStrCmp ("VBLK", RootDevStr)) {
@@ -752,6 +760,32 @@ GetSystemPathByPname (CHAR8 **SysPath, BOOLEAN MultiSlotBoot,
   DEBUG ((EFI_D_ERROR, "GetSystemPathByPname: System Path - %a \n", *SysPath));
 
   return AsciiStrLen (*SysPath);
+}
+
+STATIC
+EFI_STATUS
+GetCompleteDdrSize (UINT64 *DdrSizeRet)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  struct ddr_regions_data_info *DdrRegionsInfo = NULL;
+
+  DdrRegionsInfo = AllocateZeroPool (sizeof (struct ddr_regions_data_info));
+  if (DdrRegionsInfo == NULL)
+    return EFI_OUT_OF_RESOURCES;
+
+  Status = GetDDrRegionsInfo (DdrRegionsInfo);
+  if ((EFI_SUCCESS != Status) ||
+      (NULL == DdrRegionsInfo)) {
+    FreePool (DdrRegionsInfo);
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  *DdrSizeRet = DdrRegionsInfo->ddr_rank0_size +
+                DdrRegionsInfo->ddr_rank1_size;
+
+  FreePool(DdrRegionsInfo);
+
+  return Status;
 }
 
 STATIC
@@ -1416,6 +1450,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 MemOffAmt[MEM_OFF_SIZE];
   BOOLEAN BootConfigFlag = FALSE;
   CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
+  CHAR8 DdrSizeStr[MAX_DDR_SIZE_STR] = "\0";
+  UINT64 FullDdrSize = 0;
 
   CONST CHAR8 *CmdLine = BootParamlistPtr->CmdLine;
   CHAR8 **FinalCmdLine = &BootParamlistPtr->FinalCmdLine;
@@ -1828,6 +1864,19 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (Param.FstabSuffix),
                  CmdLineLen,
                  BootConfigLen);
+
+  Status = GetCompleteDdrSize(&FullDdrSize);
+  if (Status == EFI_SUCCESS) {
+    AsciiSPrint (DdrSizeStr, sizeof(DdrSizeStr),
+                 "%a%dMB", AndroidBootDdrSize, FullDdrSize);
+    ParamLen = AsciiStrLen (DdrSizeStr);
+    BootConfigFlag = IsAndroidBootParam (DdrSizeStr, ParamLen,
+                                         HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                   CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, DdrSizeStr, NULL,
+                         BootConfigListHead, ParamLen, 0);
+  }
 
   Status = GetMemoryLimit (fdt, MemOffAmt);
   /* Don't override "mem" argument if coded into boot image */
