@@ -706,6 +706,11 @@ LoadImageNoAuthWrapper (BootInfo *Info)
   GUARD (VBAllocateCmdLine (Info));
   GUARD (LoadImageNoAuth (Info));
 
+  if (IsSdCardPresent ()) {
+    GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
+    return Status;
+  }
+
    if (!IsDynamicPartitionSupport () &&
         !IsRootCmdLineUpdated (Info)) {
     SystemPathLen = GetSystemPath (&SystemPath,
@@ -776,6 +781,11 @@ LoadImageAndAuthVB1 (BootInfo *Info)
   Status = Info->VbIntf->VBSendRot (Info->VbIntf);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Error sending Rot : %r\n", Status));
+    return Status;
+  }
+
+  if (IsSdCardPresent ()) {
+    GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
     return Status;
   }
 
@@ -2319,6 +2329,11 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     }
 
 skip_verification:
+    if (IsSdCardPresent()) {
+      GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
+      return Status;
+    }
+
     if (!IsRootCmdLineUpdated (Info)) {
         SystemPathLen = GetSystemPath (&SystemPath,
                                        Info->MultiSlotBoot,
