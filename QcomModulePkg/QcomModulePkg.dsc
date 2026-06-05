@@ -127,6 +127,9 @@
   !if $(SUPPORT_AB_BOOT_LXC)
       GCC:*_*_*_CC_FLAGS = -DSUPPORT_AB_BOOT_LXC
   !endif
+  !if $(ROOT_PARTLABEL_SUPPORT)
+      GCC:*_*_*_CC_FLAGS = -DROOT_PARTLABEL_SUPPORT
+  !endif
   !if $(EARLY_ETH_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED
   !endif
