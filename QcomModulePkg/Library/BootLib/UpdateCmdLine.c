@@ -390,6 +390,7 @@ STATIC VOID GetDisplayCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"DisplayPanelConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &DisplayCmdLineLen,
                              DisplayCmdLine);
+  DisplayCmdLineLen = sizeof (DisplayCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get Panel Config, %r\n", Status));
   }
@@ -402,6 +403,7 @@ STATIC VOID GetHwFenceCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"HwFenceConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &HwFenceCmdLineLen,
                              HwFenceCmdLine);
+  HwFenceCmdLineLen = sizeof (HwFenceCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get hw fence Config, %r\n", Status));
   }
@@ -414,6 +416,7 @@ STATIC EFI_STATUS GetGpuCmdline (VOID)
   Status = gRT->GetVariable ((CHAR16 *)L"GpuConfiguration",
                              &gQcomTokenSpaceGuid, NULL, &GpuCmdLineLen,
                              GpuCmdLine);
+  GpuCmdLineLen = sizeof (GpuCmdLine);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Unable to get GPU Preempt Config, %r\n", Status));
   }
