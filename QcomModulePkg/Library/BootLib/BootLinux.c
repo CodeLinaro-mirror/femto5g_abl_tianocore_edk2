@@ -96,6 +96,8 @@ RamPartitionEntry UpdatedRamPartitions[NUM_NOMAP_REGIONS];
 UINT32 NumUpdPartitions;
 BOOLEAN UpdRamPartitionsAvail = FALSE;
 
+STATIC BOOLEAN DtRelocateToHighMem = FALSE;
+
 STATIC VOID
 SetLinuxBootCpu (UINT32 BootCpu)
 {
@@ -961,9 +963,11 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                                         (LOCAL_ROUND_TO_PAGE (TotalRamdiskSize,
                                         BootParamlistPtr->PageSize) +
                                         BootParamlistPtr->PageSize);
+    DtRelocateToHighMem = TRUE;
     DEBUG ((EFI_D_VERBOSE, "Update Ramdisk Load Address: 0x%x\n",
                                        BootParamlistPtr->RamdiskLoadAddr));
   }
+
   RamdiskLoadAddr = BootParamlistPtr->RamdiskLoadAddr;
 
   if (RamdiskEndAddr - RamdiskLoadAddr < TotalRamdiskSize) {
@@ -1060,6 +1064,7 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
       TotalRamdiskSize += BootParamlistPtr->VendorBootconfigSize;
     }
   }
+
   Status = UpdateDeviceTree ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
                              BootParamlistPtr->FinalCmdLine,
                              (VOID *)RamdiskLoadAddrCopy, TotalRamdiskSize,
@@ -1067,6 +1072,34 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
     return Status;
+  }
+
+  if (DtRelocateToHighMem) {
+    UINT64 NewDtAddr;
+    UINT32 FinalDtSize;
+
+    FinalDtSize = fdt_totalsize (
+                    (VOID *)BootParamlistPtr->DeviceTreeLoadAddr);
+
+    NewDtAddr = BootParamlistPtr->RamdiskLoadAddr -
+                (LOCAL_ROUND_TO_PAGE (FinalDtSize,
+                BootParamlistPtr->PageSize) +
+                BootParamlistPtr->PageSize);
+
+    if (NewDtAddr >= BootParamlistPtr->RamdiskLoadAddr) {
+      DEBUG ((EFI_D_ERROR, "Invalid DT relocation address\n"));
+      return EFI_BAD_BUFFER_SIZE;
+    }
+
+    gBS->CopyMem ((VOID *)NewDtAddr,
+                  (VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
+                  FinalDtSize);
+
+    BootParamlistPtr->DeviceTreeLoadAddr = NewDtAddr;
+
+    DEBUG ((EFI_D_INFO, "Relocated DTB to high memory: 0x%lx (size 0x%x)\n",
+            BootParamlistPtr->DeviceTreeLoadAddr,
+            FinalDtSize));
   }
 
   return EFI_SUCCESS;
