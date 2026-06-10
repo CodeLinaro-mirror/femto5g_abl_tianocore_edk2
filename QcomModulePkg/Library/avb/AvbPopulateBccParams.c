@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2022, 2025 Qualcomm Innovation Center, Inc.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -10,8 +11,10 @@
 STATIC void
 SetDummyBccParams (BccParams_t *bcc_params)
 {
+#ifndef USE_OPENDICE_UDS_DERIVATION
     avb_memset ((void *)bcc_params, 0, sizeof (*bcc_params));
     DEBUG ((EFI_D_INFO, "VB: Setting Dummy DICE params\n"));
+#endif
     /* AVF debug policy requires mode to be in debug */
     if (IsUnlocked ()) {
          bcc_params->Mode = kDiceModeDebug;
