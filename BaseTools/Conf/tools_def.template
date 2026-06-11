@@ -272,6 +272,13 @@ DEFINE DTC_BIN                 = ENV(DTC_PREFIX)dtc
 #                             Required to build platforms or ACPI tables:
 #                               Intel(r) ACPI Compiler from
 #                               https://acpica.org/downloads
+#   GCC11        -Linux,Windows-  Requires:
+#                                      GCC 11 with LTO support, targeting x86_64-linux-gnu, aarch64-linux-gnu, or arm-linux-gnueabi
+#                           Optional:
+#                                Required to build platforms or ACPI tables:
+#                                  Intel(r) ACPI Compiler from
+#                                  https://acpica.org/downloads
+#
 #   GCC13        -Linux,Windows-  Requires:
 #                                   GCC 13 with LTO support, targeting x86_64-linux-gnu, aarch64-linux-gnu, or arm-linux-gnueabi
 #                        Optional:
@@ -2027,6 +2034,21 @@ DEFINE GCC5_ARM_ASLDLINK_FLAGS       = DEF(GCC49_ARM_ASLDLINK_FLAGS)
 DEFINE GCC5_AARCH64_ASLDLINK_FLAGS   = DEF(GCC49_AARCH64_ASLDLINK_FLAGS)
 DEFINE GCC5_ASLCC_FLAGS              = DEF(GCC49_ASLCC_FLAGS) -fno-lto
 
+DEFINE GCC11_ASM_FLAGS                = DEF(GCC49_ASM_FLAGS)
+DEFINE GCC11_ARM_ASM_FLAGS            = DEF(GCC49_ARM_ASM_FLAGS)
+DEFINE GCC11_AARCH64_ASM_FLAGS        = DEF(GCC49_AARCH64_ASM_FLAGS)
+DEFINE GCC11_ARM_CC_FLAGS             = DEF(GCC49_ARM_CC_FLAGS)
+DEFINE GCC11_ARM_CC_XIPFLAGS          = DEF(GCC49_ARM_CC_XIPFLAGS)
+DEFINE GCC11_AARCH64_CC_FLAGS         = DEF(GCC49_AARCH64_CC_FLAGS) -O1 -Wno-error=attributes -Wno-error=unused-function -Wno-error=address-of-packed-member -Wno-error=multistatement-macros -Wno-error=unused-variable
+DEFINE GCC11_AARCH64_CC_XIPFLAGS      = DEF(GCC49_AARCH64_CC_XIPFLAGS)
+DEFINE GCC11_ARM_DLINK_FLAGS          = DEF(GCC49_ARM_DLINK_FLAGS)
+DEFINE GCC11_ARM_DLINK2_FLAGS         = DEF(GCC49_ARM_DLINK2_FLAGS) -Wno-error
+DEFINE GCC11_AARCH64_DLINK_FLAGS      = DEF(GCC49_AARCH64_DLINK_FLAGS)
+DEFINE GCC11_AARCH64_DLINK2_FLAGS     = DEF(GCC49_AARCH64_DLINK2_FLAGS) -Wno-error
+DEFINE GCC11_ARM_ASLDLINK_FLAGS       = DEF(GCC49_ARM_ASLDLINK_FLAGS)
+DEFINE GCC11_AARCH64_ASLDLINK_FLAGS   = DEF(GCC49_AARCH64_ASLDLINK_FLAGS)
+DEFINE GCC11_ASLCC_FLAGS              = DEF(GCC49_ASLCC_FLAGS) -fno-lto
+
 DEFINE GCC13_ASM_FLAGS                = DEF(GCC49_ASM_FLAGS)
 DEFINE GCC13_ARM_ASM_FLAGS            = DEF(GCC49_ARM_ASM_FLAGS)
 DEFINE GCC13_AARCH64_ASM_FLAGS        = DEF(GCC49_AARCH64_ASM_FLAGS)
@@ -2488,6 +2510,66 @@ RELEASE_GCC5_AARCH64_DLINK_XIPFLAGS = -z common-page-size=0x20
 
 ####################################################################################
 #
+# GCC 11 - This configuration is used to compile under Linux to produce
+#         PE/COFF binaries using GCC 11
+#
+####################################################################################
+
+*_GCC11_*_*_FAMILY                = GCC
+
+*_GCC11_*_MAKE_PATH               = DEF(GCC_HOST_PREFIX)make
+*_GCC11_*_*_DLL                   = ENV(GCC5_DLL)
+*_GCC11_*_ASL_PATH                = DEF(UNIX_IASL_BIN)
+
+*_GCC11_*_PP_FLAGS                = DEF(GCC_PP_FLAGS)
+*_GCC11_*_ASLPP_FLAGS             = DEF(GCC_ASLPP_FLAGS)
+*_GCC11_*_ASLCC_FLAGS             = DEF(GCC_ASLCC_FLAGS)
+*_GCC11_*_VFRPP_FLAGS             = DEF(GCC_VFRPP_FLAGS)
+*_GCC11_*_APP_FLAGS               =
+*_GCC11_*_ASL_FLAGS               = DEF(IASL_FLAGS)
+*_GCC11_*_ASL_OUTFLAGS            = DEF(IASL_OUTFLAGS)
+*_GCC11_*_DEPS_FLAGS              = DEF(GCC_DEPS_FLAGS)
+
+##################
+## GCC11 AARCH64 definitions
+####################
+
+*_GCC11_AARCH64_CC_PATH           = ENV(GCC11_AARCH64_PREFIX)gcc
+*_GCC11_AARCH64_SLINK_PATH        = ENV(GCC11_AARCH64_PREFIX)gcc-ar
+*_GCC11_AARCH64_DLINK_PATH        = ENV(GCC11_AARCH64_PREFIX)gcc
+*_GCC11_AARCH64_ASLDLINK_PATH     = ENV(GCC11_AARCH64_PREFIX)gcc
+*_GCC11_AARCH64_ASM_PATH          = ENV(GCC11_AARCH64_PREFIX)gcc
+*_GCC11_AARCH64_PP_PATH           = ENV(GCC11_AARCH64_PREFIX)gcc
+*_GCC11_AARCH64_VFRPP_PATH        = ENV(GCC11_AARCH64_PREFIX)gcc
+*_GCC11_AARCH64_ASLCC_PATH        = ENV(GCC11_AARCH64_PREFIX)gcc
+*_GCC11_AARCH64_ASLPP_PATH        = ENV(GCC11_AARCH64_PREFIX)gcc
+*_GCC11_AARCH64_RC_PATH           = ENV(GCC11_AARCH64_PREFIX)objcopy
+
+*_GCC11_AARCH64_ASLCC_FLAGS       = DEF(GCC11_ASLCC_FLAGS)
+*_GCC11_AARCH64_ASLDLINK_FLAGS    = DEF(GCC11_AARCH64_ASLDLINK_FLAGS)
+*_GCC11_AARCH64_ASM_FLAGS         = DEF(GCC11_AARCH64_ASM_FLAGS)
+*_GCC11_AARCH64_DLINK2_FLAGS      = DEF(GCC11_AARCH64_DLINK2_FLAGS)
+*_GCC11_AARCH64_DTCPP_FLAGS       = DEF(GCC_DTCPP_FLAGS)
+*_GCC11_AARCH64_PLATFORM_FLAGS    =
+*_GCC11_AARCH64_PP_FLAGS          = $(ARCHCC_FLAGS) $(PLATFORM_FLAGS) DEF(GCC_PP_FLAGS)
+*_GCC11_AARCH64_RC_FLAGS          = DEF(GCC_AARCH64_RC_FLAGS)
+*_GCC11_AARCH64_VFRPP_FLAGS       = $(ARCHCC_FLAGS) $(PLATFORM_FLAGS) DEF(GCC_VFRPP_FLAGS)
+*_GCC11_AARCH64_CC_XIPFLAGS       = DEF(GCC11_AARCH64_CC_XIPFLAGS)
+
+  DEBUG_GCC11_AARCH64_CC_FLAGS    = DEF(GCC11_AARCH64_CC_FLAGS) -flto -Wno-unused-but-set-variable -Wno-unused-const-variable
+  DEBUG_GCC11_AARCH64_DLINK_FLAGS = DEF(GCC11_AARCH64_DLINK_FLAGS) -flto -Os -L$(WORKSPACE)/ArmPkg/Library/GccLto -llto-aarch64 -Wl,-plugin-opt=-pass-through=-llto-aarch64 -Wno-lto-type-mismatch
+  DEBUG_GCC11_AARCH64_DLINK_XIPFLAGS = -z common-page-size=0x20
+
+RELEASE_GCC11_AARCH64_CC_FLAGS    = DEF(GCC11_AARCH64_CC_FLAGS) -flto -Wno-unused-but-set-variable -Wno-unused-const-variable
+RELEASE_GCC11_AARCH64_DLINK_FLAGS = DEF(GCC11_AARCH64_DLINK_FLAGS) -flto -Os -L$(WORKSPACE)/ArmPkg/Library/GccLto -llto-aarch64 -Wl,-plugin-opt=-pass-through=-llto-aarch64 -Wno-lto-type-mismatch
+RELEASE_GCC11_AARCH64_DLINK_XIPFLAGS = -z common-page-size=0x20
+
+  NOOPT_GCC11_AARCH64_CC_FLAGS    = DEF(GCC11_AARCH64_CC_FLAGS) -O0
+  NOOPT_GCC11_AARCH64_DLINK_FLAGS = DEF(GCC11_AARCH64_DLINK_FLAGS) -O0
+  NOOPT_GCC11_AARCH64_DLINK_XIPFLAGS = -z common-page-size=0x20 -O0
+
+####################################################################################
+#
 # GCC 13 - This configuration is used to compile under Linux to produce
 #         PE/COFF binaries using GCC 13
 #
@@ -2509,7 +2591,7 @@ RELEASE_GCC5_AARCH64_DLINK_XIPFLAGS = -z common-page-size=0x20
 *_GCC13_*_DEPS_FLAGS              = DEF(GCC_DEPS_FLAGS)
 
 ##################
-# GCC5 AARCH64 definitions
+# GCC13 AARCH64 definitions
 ###################
 
 *_GCC13_AARCH64_CC_PATH           = ENV(GCC13_AARCH64_PREFIX)gcc
