@@ -545,10 +545,8 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
                 CHAR16 *ReqPartition, CHAR8 *Key, BOOLEAN FlashlessBoot)
 {
   INT32 Index;
-  UINT32 Lun;
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
   Slot CurSlot = GetCurrentSlotSuffix ();
-  CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
 
   *SysPath = AllocateZeroPool (sizeof (CHAR8) * MAX_PATH_SIZE);
@@ -595,7 +593,6 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
     return 0;
   }
 
-  Lun = GetPartitionLunFromIndex (Index);
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrCmp ("Unknown", RootDevStr)) {
     FreePool (*SysPath);
@@ -630,10 +627,17 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
           (Index - 1));
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
+#ifdef ROOT_PARTLABEL_SUPPORT
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=PARTLABEL=%s", Key, PartitionName);
+#else
+    UINT32 Lun;
+    Lun = GetPartitionLunFromIndex (Index);
+    CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/sd%c%d",
                  Key,
                  LunCharMapping[Lun],
                  GetPartitionIdxInLun (PartitionName, Lun));
+#endif
   } else if (!AsciiStrCmp ("NVME", RootDevStr)) {
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/nvme0n1p%d", Key, Index);
   } else if (!AsciiStrCmp ("VBLK", RootDevStr)) {
