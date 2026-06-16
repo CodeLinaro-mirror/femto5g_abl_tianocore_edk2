@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -76,6 +76,9 @@ BOOLEAN IsRecoveryInfo ()
       DEBUG (( EFI_D_ERROR,  "GetRecoveryState failed\n"));
       HasRecoveryInfo = 0;
     } else {
+       DEBUG (( EFI_D_VERBOSE,  "RecoveryInfo is enabled\n"));
+       HasRecoveryInfo = 1;
+
        if (RecoveryState == RECOVERY_INFO_PARTITION_FAIL) {
          DEBUG (( EFI_D_ERROR,  "recoveryinfo partition not found\n"));
          HasRecoveryInfo = 0;
@@ -85,8 +88,6 @@ BOOLEAN IsRecoveryInfo ()
        } else {
          HasGpioControl = 0;
        }
-       DEBUG (( EFI_D_VERBOSE,  "RecoveryInfo is enabled\n"));
-       HasRecoveryInfo = 1;
      }
   }
 

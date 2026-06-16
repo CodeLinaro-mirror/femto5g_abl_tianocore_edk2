@@ -145,6 +145,9 @@
   !if $(FORCE_NO_PIE)
       GCC:*_*_*_CC_FLAGS = -DFORCE_NO_PIE
   !endif
+  !if $(ROOT_PARTLABEL_SUPPORT)
+      GCC:*_*_*_CC_FLAGS = -DROOT_PARTLABEL_SUPPORT
+  !endif
   !if $(SUPPORT_AB_BOOT_LXC)
       GCC:*_*_*_CC_FLAGS = -DSUPPORT_AB_BOOT_LXC
   !endif
