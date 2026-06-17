@@ -1349,9 +1349,12 @@ BOOLEAN IsCurrentSlotBootable (VOID)
   }
 
   Msg = (struct RecoveryMessage *) PartitionData;
-  if (Msg->Reserved[3] == 'y') {
-    Ret = TRUE;
-  } else if (Msg->Reserved[5] == 'y') {
+  /* Msg->Reserved[1]: target slot
+   * Msg->Reserved[3]: slot 0 mark boot successful status
+   * Msg->Reserved[5]: slot 1 mark boot successful status
+   */
+  if (((Msg->Reserved[1] == 'a') && (Msg->Reserved[3] == 'y')) ||
+      ((Msg->Reserved[1] == 'b') && (Msg->Reserved[5] == 'y'))) {
     Ret = TRUE;
   }
 
