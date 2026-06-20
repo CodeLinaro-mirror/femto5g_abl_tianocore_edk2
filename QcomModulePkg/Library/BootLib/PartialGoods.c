@@ -100,6 +100,8 @@ STATIC struct PartialGoods *PartialGoodsCpuType[MAX_CPU_CLUSTER] = {
     PartialGoodsCpuType2, PartialGoodsCpuType3
 };
 
+static UINT32 PartialGoodsMMValue = 0;
+
 /* Look up table for multimedia partial goods */
 static struct PartialGoods PartialGoodsMmType[] = {
     {BIT (EFICHIPINFO_PART_GPU),
@@ -594,6 +596,13 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {"video_cc_mvs1c_gdsc", "status", "no"}},
 };
 
+static struct PartialGoodsDelNode PartialGoodsReservedMemDelete[] = {
+    {BIT (EFICHIPINFO_PART_COMP) | BIT (EFICHIPINFO_PART_NSP),
+     "/reserved-memory/cdsp_region"},
+    {BIT (EFICHIPINFO_PART_COMP) | BIT (EFICHIPINFO_PART_NSP),
+     "/reserved-memory/q6_cdsp_dtb_region"},
+};
+
 STATIC EFI_STATUS
 CheckCPUType (VOID *fdt,
               UINT32 TableSz,
@@ -823,6 +832,87 @@ FindLabelAndUpdateProperty (VOID *fdt,
   }
 }
 
+STATIC VOID
+FindNodeAndDelete (VOID *fdt,
+                   UINT32 TableSz,
+                   struct PartialGoodsDelNode *Table,
+                   UINT32 Value)
+{
+  INT32  NodeOffset = 0;
+  INT32  Ret        = 0;
+  UINT32 i          = 0;
+
+  for (i = 0; i < TableSz; i++, Table++) {
+    if (!(Value & Table->Val))
+      continue;
+
+    NodeOffset = FdtPathOffset (fdt, Table->NodePath);
+    if (NodeOffset < 0) {
+      DEBUG ((EFI_D_ERROR,
+              "Fail to find node %a, skipping\n",
+              Table->NodePath));
+      continue;
+    }
+
+    Ret = fdt_del_node (fdt, NodeOffset);
+    if (!Ret) {
+      DEBUG ((EFI_D_INFO,
+              "Successfully deleted node: %a\n",
+              Table->NodePath));
+    } else {
+      DEBUG ((EFI_D_ERROR,
+              "Failed to delete node: %a, ret = %d\n",
+              Table->NodePath, Ret));
+    }
+  }
+}
+
+EFI_STATUS
+GetPartialGoodsMMValue (VOID)
+{
+  EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol = NULL;
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = gBS->LocateProtocol (&gEfiChipInfoProtocolGuid, NULL,
+                                (VOID **)&pChipInfoProtocol);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR,
+            "Failed to get the protocol: %r\n", Status));
+    return Status;
+  }
+
+  Status = ReadMMPartialGoods (pChipInfoProtocol, &PartialGoodsMMValue);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_INFO,
+            "No mm partial goods found: %r\n",
+            Status));
+    return Status;
+  }
+
+  DEBUG ((EFI_D_INFO,
+          "PartialGoods for Multimedia: 0x%x\n",
+          PartialGoodsMMValue));
+  return EFI_SUCCESS;
+}
+
+BOOLEAN
+IsNodeMarkedForDeletion (CONST CHAR8 *NodePath)
+{
+  UINT32 i = 0;
+
+  if (!PartialGoodsMMValue)
+    return FALSE;
+
+  for (i = 0; i < ARRAY_SIZE (PartialGoodsReservedMemDelete); i++) {
+    if (AsciiStrCmp (NodePath,
+                     PartialGoodsReservedMemDelete[i].NodePath) == 0 &&
+        (PartialGoodsMMValue & PartialGoodsReservedMemDelete[i].Val)) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 STATIC EFI_STATUS
 ReadCpuPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value)
 {
@@ -968,7 +1058,6 @@ EFI_STATUS
 UpdatePartialGoodsNode (VOID *fdt)
 {
   UINT32 i;
-  UINT32 PartialGoodsMMValue = 0;
   UINT32 SlcValue = 0;
   UINT32 PartialGoodsCpuValue;
   UINT32 PartialGoodsCPUTypeValue = 0;
@@ -986,14 +1075,8 @@ UpdatePartialGoodsNode (VOID *fdt)
     return Status;
   }
 
-  /* Read and update Multimedia Partial Goods Nodes */
-  Status = ReadMMPartialGoods (pChipInfoProtocol, &PartialGoodsMMValue);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_INFO, "No mm partial goods found.\n"));
-  }
-
   if (PartialGoodsMMValue) {
-    DEBUG ((EFI_D_INFO, "PartialGoods for Multimedia: 0x%x\n",
+    DEBUG ((EFI_D_VERBOSE, "PartialGoods for Multimedia: 0x%x\n",
             PartialGoodsMMValue));
 
     FindNodeAndUpdateProperty (fdt, ARRAY_SIZE (PartialGoodsMmType),
@@ -1003,6 +1086,9 @@ UpdatePartialGoodsNode (VOID *fdt)
                                &PartialGoodsMmTypeWithLabel[0],
                                PartialGoodsMMValue);
 
+    FindNodeAndDelete (fdt, ARRAY_SIZE (PartialGoodsReservedMemDelete),
+                       &PartialGoodsReservedMemDelete[0],
+                       PartialGoodsMMValue);
   }
 
   Status = ReadSlcInformation(pChipInfoProtocol, &SlcValue);
