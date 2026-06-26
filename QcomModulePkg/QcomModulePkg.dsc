@@ -115,6 +115,9 @@
   !if $(VERIFIED_BOOT_LE)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE
   !endif
+  !if $(SEND_MILESTONE_CALL_LE)
+      GCC:*_*_*_CC_FLAGS = -DSEND_MILESTONE_CALL_LE
+  !endif
 
   !ifdef $(FORCE_NO_PIE)
   GCC:*_*_*_ARCHCC_FLAGS  =  -fno-PIE
