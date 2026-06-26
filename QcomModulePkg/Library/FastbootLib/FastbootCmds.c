@@ -160,6 +160,8 @@ STATIC CHAR8 CurrentSlotFB[MAX_SLOT_SUFFIX_SZ];
   } while (0);
 
 #define MAX_DISPLAY_PANEL_OVERRIDE 256
+#define MAX_FASTBOOT_OEM_ARG_SCAN  (MAX_DISPLAY_PANEL_OVERRIDE)
+#define MAX_CMDLINE_OEM_ARG_SCAN   (MAX_DISPLAY_CMDLINE_LEN)
 
 /*This variable is used to skip populating the FastbootVar
  * When PopulateMultiSlotInfo called while flashing each Lun
@@ -3150,26 +3152,12 @@ DisplayGetVariable (CHAR16 *VariableName, VOID *VariableValue, UINTN *DataSize)
   return Status;
 }
 
-STATIC VOID
-CmdOemDisplayCommandLine (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
-{
-  EFI_STATUS Status;
-
-  Status = StoreDisplayCmdLine (Arg, AsciiStrLen (Arg));
-  if (Status != EFI_SUCCESS) {
-    FastbootFail ("Failed to store display command line");
-  } else {
-    FastbootOkay ("");
-  }
-}
-
 /*
  * Input validation helpers for display panel override fastboot OEM command.
  * These are intentionally permissive enough to support real panel naming
  * conventions (e.g., prim:<panel>, :sec:<panel>, :sec0:<panel>) while blocking
  * whitespace/control characters and common command-injection primitives.
 */
-#define MAX_FASTBOOT_OEM_ARG_SCAN  (MAX_DISPLAY_PANEL_OVERRIDE)
 
 STATIC UINTN
 AsciiStrnLenSafe (IN CONST CHAR8 *Str,
@@ -3199,7 +3187,7 @@ IsValidPanelChar (IN CHAR8 c)
     return TRUE;
   }
 
-  // Allow separators used in existing panel strings.
+  /* Allow separators used in existing panel strings. */
   switch (c) {
     case '_':
     case '-':
@@ -3226,7 +3214,7 @@ IsValidPanelString (IN CONST CHAR8 *Str,
   }
 
   for (i = 0; i < Len; i++) {
-    // Reject whitespace and control characters outright.
+    /* Reject whitespace and control characters outright. */
     if ((Str[i] <= 0x20) || (Str[i] == 0x7F)) {
       return FALSE;
     }
@@ -3237,6 +3225,50 @@ IsValidPanelString (IN CONST CHAR8 *Str,
   }
 
   return TRUE;
+}
+
+STATIC VOID
+CmdOemDisplayCommandLine (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_STATUS Status;
+  CONST CHAR8 *ArgTrim = NULL;
+  UINTN ArgTrimLen = 0;
+
+  if (Arg == NULL || Arg[0] == '\0') {
+    FastbootFail ("Invalid display panel command");
+    return;
+  }
+
+  ArgTrim = Arg;
+  while (*ArgTrim == ' ') {
+    ArgTrim++;
+  }
+
+  ArgTrimLen = AsciiStrnLenSafe (ArgTrim, MAX_CMDLINE_OEM_ARG_SCAN);
+
+  if (ArgTrimLen == 0) {
+    FastbootFail ("Empty display panel command");
+    return;
+  }
+
+  if (ArgTrimLen >= MAX_CMDLINE_OEM_ARG_SCAN) {
+    FastbootFail ("Invalid command length");
+    return;
+  }
+
+  /* Validate content: allow-list characters, reject whitespace/control chars */
+  if (!IsValidPanelString (ArgTrim, ArgTrimLen)) {
+    FastbootFail ("Invalid display panel command");
+    return;
+  }
+
+  Status = StoreDisplayCmdLine (ArgTrim, (UINT32)ArgTrimLen);
+
+  if (Status != EFI_SUCCESS) {
+    FastbootFail ("Failed to store display command line");
+  } else {
+    FastbootOkay ("");
+  }
 }
 
 STATIC VOID
@@ -3253,20 +3285,20 @@ CmdOemSelectDisplayPanel (CONST CHAR8 *arg, VOID *data, UINT32 sz)
   UINTN TotalStrLen = 0;
   BOOLEAN Append = FALSE;
 
-  // Basic input validation
+  /* Basic input validation */
   if (arg == NULL) {
     AsciiStrnCatS (resp, sizeof (resp), ": invalid args", AsciiStrLen (": invalid args"));
     FastbootFail (resp);
     return;
   }
 
-  // Trim leading spaces only (preserve a leading ':' used for append semantics)
+  /* Trim leading spaces only (preserve a leading ':' used for append semantics) */
   ArgTrim = arg;
   while (*ArgTrim == ' ') {
     ArgTrim++;
   }
 
-  // Enforce bounded length and NUL termination within scan limit
+  /* Enforce bounded length and NUL termination within scan limit */
   ArgTrimLen = AsciiStrnLenSafe (ArgTrim, MAX_FASTBOOT_OEM_ARG_SCAN);
   if (ArgTrimLen == 0 || ArgTrimLen >= MAX_FASTBOOT_OEM_ARG_SCAN) {
     AsciiStrnCatS (resp, sizeof (resp), ": invalid/too long", AsciiStrLen (": invalid/too long"));
@@ -3274,7 +3306,7 @@ CmdOemSelectDisplayPanel (CONST CHAR8 *arg, VOID *data, UINT32 sz)
     return;
   }
 
-  // Validate content: allow-list characters, reject whitespace/control chars
+  /* Validate content: allow-list characters, reject whitespace/control chars */
   if (!IsValidPanelString (ArgTrim, ArgTrimLen)) {
     AsciiStrnCatS (resp, sizeof (resp), ": invalid panel", AsciiStrLen (": invalid panel"));
     FastbootFail (resp);
