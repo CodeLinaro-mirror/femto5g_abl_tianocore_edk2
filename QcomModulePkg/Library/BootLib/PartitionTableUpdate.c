@@ -1345,6 +1345,7 @@ BOOLEAN IsCurrentSlotBootable (VOID)
     return FALSE;
   }
 
+  Msg = (struct RecoveryMessage *) PartitionData;
   /* Msg->Reserved[1]: target slot
    * Msg->Reserved[3]: slot 0 mark boot successful status
    * Msg->Reserved[5]: slot 1 mark boot successful status
