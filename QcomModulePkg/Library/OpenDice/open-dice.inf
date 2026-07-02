@@ -37,4 +37,5 @@
 
 [Packages]
   MdePkg/MdePkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
   QcomModulePkg/QcomModulePkg.dec

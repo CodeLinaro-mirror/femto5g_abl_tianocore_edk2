@@ -1920,9 +1920,9 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   }
 
 #ifndef USE_DUMMY_BCC
-  if (Info->HasPvmFw) {
+  if (Info->HasPvmFw || Info->HasSdvDiceEnabled) {
     EFI_STATUS BccStatus = PopulateBccParams (SlotData,
-                                              Info->BootIntoRecovery,
+                                              Info,
                                               BccParams);
     if (BccStatus != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "VB2: PopulateBccParams failed with Status: %r\n",
@@ -2396,6 +2396,15 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
 
   Info->HasPvmFw = false;
   Info->PvmFwRawSize = 0;
+
+  Info->HasSdvDiceEnabled = false;
+  Info->SdvDiceLeaf = false;
+#ifdef SDV_DICE_ENABLED
+  Info->HasSdvDiceEnabled = true;
+#endif
+#ifdef AUTO_VIRT_ABL
+  Info->SdvDiceLeaf = true;
+#endif
 
 #ifdef PVMFW_BCC
   /* Check for pvmfw partition */

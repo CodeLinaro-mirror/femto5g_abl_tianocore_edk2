@@ -223,6 +223,9 @@
   !if $(BASE_ADDRESS)
       GCC:*_*_*_CC_FLAGS = -DBASE_ADDRESS=$(BASE_ADDRESS)
   !endif
+  !if $(SDV_DICE_ENABLED)
+      GCC:*_*_*_CC_FLAGS = -DSDV_DICE_ENABLED
+  !endif
   !if $(TARGET_LINUX_BOOT_CPU_ID)
       GCC:*_*_*_CC_FLAGS = -DTARGET_LINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID)
   !endif
