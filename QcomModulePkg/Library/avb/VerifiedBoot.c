@@ -52,7 +52,7 @@ STATIC CONST CHAR8 *DmVerityCmd = " root=/dev/dm-0 dm=\"system none ro,0 1 "
 STATIC CONST CHAR8 *Space = " ";
 extern UINT64 FlashlessBootImageAddr;
 
-STATIC BOOLEAN KeymasterEnabled = TRUE;
+STATIC BOOLEAN KeymasterEnabled = FALSE;
 
 #define MAX_NUM_REQ_PARTITION    9
 #define MAX_PROPERTY_SIZE        10
@@ -2250,12 +2250,19 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     }
     DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
 
-    Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
-                                                  &KeymasterEnabled);
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n",
-                                                                  Status));
-      return Status;
+    /* Check if VBIsKeymasterEnabled is valid.*/
+    if (Info->VbIntf->VBIsKeymasterEnabled != NULL) {
+      Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                    &KeymasterEnabled);
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n",
+                                                                    Status));
+        return Status;
+      }
+    } else {
+      DEBUG ((EFI_D_WARN,
+        "VB: Keymaster interfaces are not supported on this firmware, "
+        "Avoid loading Keymaster TA from UEFI since RoT data will not be set in the TA\n"));
     }
 
     if (KeymasterEnabled) {
@@ -2278,6 +2285,8 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
           return Status;
         }
       }
+    } else {
+      DEBUG ((EFI_D_INFO, "VB: Keymaster is not enabled\n"));
     }
 
 skip_verification:
