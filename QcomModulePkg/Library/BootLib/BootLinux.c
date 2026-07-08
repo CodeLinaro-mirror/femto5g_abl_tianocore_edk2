@@ -59,6 +59,7 @@
 #include "Bootconfig.h"
 #include <ufdt_overlay.h>
 #include <Secretkeeper.h>
+#include <Library/PartialGoods.h>
 
 #ifndef DISABLE_KERNEL_PROTOCOL
 #include <Protocol/EFIKernelInterface.h>
@@ -2061,6 +2062,8 @@ BootLinux (BootInfo *Info)
       DEBUG ((EFI_D_ERROR, "Failed to update RAM Partitions Status:%r\r\n",
               Status));
     }
+  } else {
+    GetPartialGoodsMMValue ();
   }
 
   /* Updates the command line from boot image, appends device serial no.,
