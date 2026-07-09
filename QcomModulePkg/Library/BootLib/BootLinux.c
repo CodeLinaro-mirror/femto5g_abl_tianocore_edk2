@@ -59,6 +59,7 @@
 #include "Bootconfig.h"
 #include <ufdt_overlay.h>
 #include <Secretkeeper.h>
+#include <Library/PartialGoods.h>
 
 #ifndef DISABLE_KERNEL_PROTOCOL
 #include <Protocol/EFIKernelInterface.h>
@@ -2061,6 +2062,8 @@ BootLinux (BootInfo *Info)
       DEBUG ((EFI_D_ERROR, "Failed to update RAM Partitions Status:%r\r\n",
               Status));
     }
+  } else {
+    GetPartialGoodsMMValue ();
   }
 
   /* Updates the command line from boot image, appends device serial no.,
@@ -2093,7 +2096,18 @@ BootLinux (BootInfo *Info)
   /* Sends Milestone Call to Keymaster */
   UINT32  AVBVersion = GetAVBVersion ();
   if (AVBVersion != NO_AVB) {
-    if (AVBVersion != AVB_LE) {
+    BOOLEAN SendMilestone = (AVBVersion != AVB_LE);
+#ifdef SEND_MILESTONE_CALL_LE
+    if (AVBVersion == AVB_LE) {
+      BOOLEAN KeymasterEnabled = FALSE;
+      Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                   &KeymasterEnabled);
+      if (Status == EFI_SUCCESS && KeymasterEnabled) {
+        SendMilestone = TRUE;
+      }
+    }
+#endif
+    if (SendMilestone) {
       DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
       Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
       if (Status != EFI_SUCCESS) {
