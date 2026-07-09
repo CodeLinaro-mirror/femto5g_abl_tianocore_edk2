@@ -541,8 +541,15 @@ out:
                 FinalDtbHdr,
                 fdt_totalsize (FinalDtbHdr));
   post_overlay_free ();
-  DEBUG ((EFI_D_INFO, "Apply Overlay total time: %lu ms \n",
-        GetTimerCountms () - ApplyDTStartTime));
+  if (FinalDtbHdr == AppendedDtHdr) {
+    /* No overlay was applied (DtsList was empty, e.g. DISABLE_DTBO_PARTITION):
+     * this path only relocates the DTB, it does not apply any dtbo. */
+    DEBUG ((EFI_D_INFO, "DTB relocate (no dtbo overlay) time: %lu ms \n",
+          GetTimerCountms () - ApplyDTStartTime));
+  } else {
+    DEBUG ((EFI_D_INFO, "Apply Overlay total time: %lu ms \n",
+          GetTimerCountms () - ApplyDTStartTime));
+  }
   return EFI_SUCCESS;
 }
 
@@ -638,7 +645,15 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
           ImageBuffer = BootParamlistPtr->VendorImageBuffer;
         }
   }
+#ifdef DISABLE_DTBO_PARTITION
+  /* dtbo partition is intentionally skipped in this mode; do not attempt to
+   * load/validate it (which would fail in GetImage and log a spurious error).
+   * Set DtboImgInvalid=FALSE to take the appended-DTB path and use the
+   * pre-merged DTB from the boot image via the normal ApplyOverlay flow. */
+  DtboImgInvalid = FALSE;
+#else
   DtboImgInvalid = LoadAndValidateDtboImg (Info, BootParamlistPtr);
+#endif
   if (!DtboImgInvalid) {
 #ifdef AUTO_VIRT_ABL
     /* For AUTO GVM，there is no device tree to be appended,
