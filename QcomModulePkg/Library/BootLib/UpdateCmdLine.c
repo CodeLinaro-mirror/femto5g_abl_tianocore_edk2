@@ -161,6 +161,7 @@ CHAR8 BootForceNormalBoot = '0';
 STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
+STATIC CHAR8 *FstabSuffixNvme = "nvme";
 STATIC CHAR8 *FstabSuffixDefault = "default";
 
 #define MAX_DDR_SIZE_STR 64
@@ -1853,6 +1854,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) {
     Param.FstabSuffix = FstabSuffixEmmc;
+  } else if (!AsciiStriCmp (FstabSuffixNvme, RootDevStr)) {
+    Param.FstabSuffix = FstabSuffixNvme;
   } else {
     Param.FstabSuffix = FstabSuffixDefault;
   }
