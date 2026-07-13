@@ -66,6 +66,11 @@ struct PartialGoodsWithLabel {
   struct LabelStruct LabelRef; /* Labels list */
 };
 
+struct PartialGoodsDelNode {
+  UINT32      Val;       /* Value for the subset */
+  CONST CHAR8 *NodePath; /* Full absolute path of node to delete */
+};
+
  STATIC CONST char *ChipInfoPartTypeStr[] = {
   [EFICHIPINFO_PART_UNKNOWN]   = "unknown",
   [EFICHIPINFO_PART_GPU]       = "gpu",
@@ -92,6 +97,12 @@ struct PartialGoodsWithLabel {
 
 EFI_STATUS
 UpdatePartialGoodsNode (VOID *fdt);
+
+EFI_STATUS
+GetPartialGoodsMMValue (VOID);
+
+BOOLEAN
+IsNodeMarkedForDeletion (CONST CHAR8 *NodePath);
 
 EFI_STATUS
 ReadMMPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value);
