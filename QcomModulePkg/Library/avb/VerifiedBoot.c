@@ -1110,7 +1110,7 @@ static BOOLEAN GetHeaderVersion (AvbSlotVerifyData *SlotData)
   UINTN LoadedIndex = 0;
   for (LoadedIndex = 0; LoadedIndex < SlotData->num_loaded_partitions;
          LoadedIndex++) {
-    if ((!SlotData->loaded_partitions[LoadedIndex].partition_name) && 
+    if ((!SlotData->loaded_partitions[LoadedIndex].partition_name) &&
       (avb_strcmp (SlotData->loaded_partitions[LoadedIndex].partition_name,
       "recovery") == 0))
       return ( (boot_img_hdr *)
@@ -1885,7 +1885,7 @@ DisplayVerifiedBootScreen (BootInfo *Info)
   return EFI_SUCCESS;
 }
 
-STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info, 
+STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                                          BOOLEAN HibernationResume,
                                          BOOLEAN SetRotAndBootState)
 {
@@ -1989,7 +1989,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
         ImgSize = Info->Images[0].ImageSize;
         ImgHash = AllocateZeroPool (HashSize);
         if (ImgHash == NULL) {
-            DEBUG ((EFI_D_ERROR, 
+            DEBUG ((EFI_D_ERROR,
                    "kernel image hash buffer allocation failed!\n"));
             Status = EFI_OUT_OF_RESOURCES;
             return Status;
@@ -1998,20 +1998,20 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                     (UINT8 *)Info->Images[0].ImageBuffer,
                     ImgSize, ImgHash, HashSize);
         if (Status != EFI_SUCCESS) {
-            DEBUG ((EFI_D_ERROR, 
+            DEBUG ((EFI_D_ERROR,
                    "VB: Error during VBGetImageHash: %r\n", Status));
             return Status;
         }
-    
+
         SigAddr = (UINT8 *)Info->Images[0].ImageBuffer + ImgSize;
         SigSize = LE_BOOTIMG_SIG_SIZE;
         Status = LEVerifyHashWithSignature (QcomAsn1X509Protocal, ImgHash,
         HashAlgorithm, &OemCert, SigAddr, SigSize);
-    
+
         if (Status != EFI_SUCCESS) {
             DEBUG ((EFI_D_ERROR, "VB: Error during "
                           "LEVBVerifyHashWithSignature: %r\n", Status));
-    
+
             /* There are build variants where boot image is not signed.
              * Below check allows the device to bootup even if the
              * authentication fails on a Non-secure device.
@@ -2022,19 +2022,20 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                 if (!TargetBuildVariantUser () ) {
                     DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
                                                         "debug builds\n"));
+                    Status = EFI_SUCCESS;
                     if (!SetRotAndBootState) {
                         if (KeymasterEnabled) {
                             Data.PublicKeyModLength = DUMMY_PUBLIC_KEY_MOD_LEN;
-                            Data.PublicKeyMod = 
+                            Data.PublicKeyMod =
                                 avb_calloc (DUMMY_PUBLIC_KEY_MOD_LEN);
                             Data.PublicKeyExpLength = DUMMY_PUBLIC_KEY_EXP_LEN;
-                            Data.PublicKeyExp = 
+                            Data.PublicKeyExp =
                                 avb_calloc (DUMMY_PUBLIC_KEY_EXP_LEN);
                             if (Data.PublicKeyMod != NULL &&
                                     Data.PublicKeyExp != NULL) {
                               Status = KeyMasterSetRotForLE (&Data);
                               if (Status != EFI_SUCCESS) {
-                                DEBUG ((EFI_D_ERROR, 
+                                DEBUG ((EFI_D_ERROR,
                                         "KeyMasterSetRotForLE failed %r\n",
                                         Status));
                                 return Status;
@@ -2065,7 +2066,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                 Data.PublicKeyExpLength = PublicExp.Len;
                 Status = KeyMasterSetRotForLE (&Data);
                 if (Status != EFI_SUCCESS) {
-                  DEBUG ((EFI_D_ERROR, 
+                  DEBUG ((EFI_D_ERROR,
                          "KeyMasterSetRotForLE failed %r\n", Status));
                   return Status;
                 }
@@ -2075,7 +2076,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
     }
     else
     {
-        DEBUG ((EFI_D_INFO, 
+        DEBUG ((EFI_D_INFO,
                 "VB: LoadImageAndAuthForLE for Hibernate complete!\n"));
     }
 
@@ -2218,7 +2219,7 @@ get_ptn_name:
     /* For RecoveryInfo skip _a suffix */
     if (IsRecoveryInfo () &&
         (!IsRecoveryInfoWithSlotA ()) &&
-        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) { 
+        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) {
       GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"boot",
                          StrLen (L"boot")));
     }
@@ -2257,8 +2258,8 @@ get_ptn_name:
     Status = LoadImageAndAuthVB2 (Info, HibernationResume, SetRotAndBootState);
     break;
   case AVB_LE:
-    Status = LoadImageAndAuthForLE (Info, 
-                                    HibernationResume, 
+    Status = LoadImageAndAuthForLE (Info,
+                                    HibernationResume,
                                     SetRotAndBootState);
     break;
   default:

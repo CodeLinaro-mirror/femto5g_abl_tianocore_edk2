@@ -1,5 +1,7 @@
 ################################################################################
 MSM_ARCH=sdxkova-cpe-tarang
 EARLY_ETH_ENABLED=1
+VERITY_LE=1
+VERITY_LE_ROOTHASH_SIGNED=1
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxkova.common
