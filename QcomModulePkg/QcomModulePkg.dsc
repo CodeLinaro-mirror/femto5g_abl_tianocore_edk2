@@ -118,6 +118,12 @@
   !if $(SEND_MILESTONE_CALL_LE)
       GCC:*_*_*_CC_FLAGS = -DSEND_MILESTONE_CALL_LE
   !endif
+  !if $(VERIFIED_BOOT_LE_ARB)
+      GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE_ARB
+  !endif
+  !if $(VB_LE_DTBO_AUTH)
+      GCC:*_*_*_CC_FLAGS = -DVB_LE_DTBO_AUTH
+  !endif
 
   !ifdef $(FORCE_NO_PIE)
   GCC:*_*_*_ARCHCC_FLAGS  =  -fno-PIE
