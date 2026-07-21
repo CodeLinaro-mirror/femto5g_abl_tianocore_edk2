@@ -2093,7 +2093,18 @@ BootLinux (BootInfo *Info)
   /* Sends Milestone Call to Keymaster */
   UINT32  AVBVersion = GetAVBVersion ();
   if (AVBVersion != NO_AVB) {
-    if (AVBVersion != AVB_LE) {
+    BOOLEAN SendMilestone = (AVBVersion != AVB_LE);
+#ifdef SEND_MILESTONE_CALL_LE
+    if (AVBVersion == AVB_LE) {
+      BOOLEAN KeymasterEnabled = FALSE;
+      Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                   &KeymasterEnabled);
+      if (Status == EFI_SUCCESS && KeymasterEnabled) {
+        SendMilestone = TRUE;
+      }
+    }
+#endif
+    if (SendMilestone) {
       DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
       Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
       if (Status != EFI_SUCCESS) {
