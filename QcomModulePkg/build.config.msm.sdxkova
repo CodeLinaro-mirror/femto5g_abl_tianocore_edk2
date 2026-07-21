@@ -3,6 +3,5 @@ MSM_ARCH=sdxkova
 EARLY_ETH_ENABLED=1
 VERITY_LE=1
 VERITY_LE_ROOTHASH_SIGNED=1
-ENABLE_FSP_WRAP_KEY_FEATURE=1
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxkova.common
