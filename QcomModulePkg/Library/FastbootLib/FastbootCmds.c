@@ -3798,6 +3798,11 @@ CmdOemSetGpuPreemptionValue (CONST CHAR8 *arg, VOID *data, UINT32 Size)
     }
   }
 
+  if ((AsciiStrLen(arg) != 1) || (arg[0] != '0' && arg[0] != '1')) {
+	  FastbootFail("Set GPU HW Preemption: Invalid Argument, Value must be 1 or 0");
+	  return;
+  }
+
   AsciiStrnCatS (GpuPreemptionValue,
                  MAX_GPU_CONFIG_OVERRIDE,
                  arg,
