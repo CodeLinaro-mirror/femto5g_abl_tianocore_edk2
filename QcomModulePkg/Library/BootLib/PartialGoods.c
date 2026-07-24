@@ -854,7 +854,7 @@ FindNodeAndDelete (VOID *fdt,
       continue;
     }
 
-    Ret = fdt_del_node (fdt, NodeOffset);
+    Ret = FdtDelNode (fdt, NodeOffset);
     if (!Ret) {
       DEBUG ((EFI_D_INFO,
               "Successfully deleted node: %a\n",
