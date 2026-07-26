@@ -111,6 +111,7 @@
   PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
   AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
   AesLib|QcomModulePkg/Library/aes/AesLib.inf
+  FspLib|QcomModulePkg/Library/Fsp/Fsp.inf
 
 [LibraryClasses.ARM]
   ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
@@ -203,6 +204,9 @@
   !endif
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
+  !endif
+  !if $(ENABLE_FSP_WRAP_KEY_FEATURE) == 1
+      GCC:*_*_*_CC_FLAGS = -DENABLE_FSP_WRAP_KEY_FEATURE
   !endif
   !if $(PRIMARY_PMIC_INDEX_SUPPORTED) == 1
       GCC:*_*_*_CC_FLAGS = -DPRIMARY_PMIC_INDEX_SUPPORTED
