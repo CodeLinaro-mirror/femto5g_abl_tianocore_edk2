@@ -56,6 +56,9 @@
 #include <Protocol/EFIClock.h>
 #include <Protocol/EFIPmicSdam.h>
 #include "RecoveryInfo.h"
+#if BOOT_IMG_DECRYPT
+#include <Library/BootImgDecrypt.h>
+#endif
 
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
@@ -475,9 +478,35 @@ flashless_boot:
       RI_HandleFailedSlot (CurrentSlot);
       /*No return*/
     }
+#if BOOT_IMG_DECRYPT
+    /*
+     * If the boot partition is AES-256-GCM encrypted, load and decrypt it
+     * here so that LoadImageAndAuth() always receives a plain ANDROID! image
+     * for signature/hash verification.  VerifiedBoot.c is not modified.
+     * When the image is plain this call is a no-op.
+     */
+    Status = LoadAndDecryptBootImage (&Info);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_ERROR,
+              "Boot image decryption failed: %r\n", Status));
+      if (Status == EFI_SECURITY_VIOLATION &&
+          Info.MultiSlotBoot &&
+          IsRecoveryInfo ()) {
+        Slot CurrentSlot;
+        CurrentSlot = GetCurrentSlotSuffix ();
+        RI_HandleFailedSlot (CurrentSlot);
+        /*No return*/
+      }
+      goto fastboot;
+    }
+#endif
+
     Status = LoadImageAndAuth (&Info, FALSE, SetRotAndBootState);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
+#if BOOT_IMG_DECRYPT
+      FreeDecryptedBootImage (&Info);
+#endif
       if (IsRecoveryInfo ()) {
         Slot CurrentSlot ;
         CurrentSlot = GetCurrentSlotSuffix ();
