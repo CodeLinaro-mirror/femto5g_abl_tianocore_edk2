@@ -163,6 +163,17 @@ fail:
 static int cmdline_append_option(AvbSlotVerifyData* slot_data,
                                  const char* key,
                                  const char* value) {
+#ifdef ENABLE_LE_VARIANT
+  /* LE: Skip per-partition vbmeta digest params to avoid cmdline overflow.
+  * e.g. androidboot.vbmeta.boot.hash_alg  -> skip
+  *      androidboot.vbmeta.hash_alg        -> keep
+  */
+  if (avb_strstr(key, "androidboot.vbmeta.") &&
+      avb_strstr(key + avb_strlen("androidboot.vbmeta."), ".")) {
+    return 1;
+  }
+#endif
+
   size_t offset, key_len, value_len;
   char* new_cmdline;
 
