@@ -10,8 +10,10 @@
 STATIC void
 SetDummyBccParams (BccParams_t *bcc_params)
 {
+#ifndef USE_RKP_ALIGNED_UDS_DERIVATION
     avb_memset ((void *)bcc_params, 0, sizeof (*bcc_params));
     DEBUG ((EFI_D_INFO, "VB: Setting Dummy DICE params\n"));
+#endif
     /* AVF debug policy requires mode to be in debug */
     if (IsUnlocked ()) {
          bcc_params->Mode = kDiceModeDebug;

@@ -16,10 +16,9 @@
 // algorithms used are SHA512 and HKDF-SHA512.
 
 /*
- * ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
- * under the following license:
- * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc.
- * All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifdef ENABLE_C_HEADER
@@ -52,3 +51,23 @@ DiceResult DiceKdf(void* context_not_used, size_t length, const uint8_t* ikm,
   }
   return kDiceResultOk;
 }
+
+#ifdef USE_RKP_ALIGNED_UDS_DERIVATION
+/*
+ * DiceKdfSha256 - HKDF-SHA256 used only for DiceDeriveCdiPrivateKeySeed
+ * when USE_RKP_ALIGNED_UDS_DERIVATION is defined, to mirror the TA's
+ * X25519_generate_hkdf() (HKDF-SHA256). Must NOT be used for CDI derivation.
+ */
+DiceResult DiceKdfSha256(void* context_not_used, size_t length,
+                          const uint8_t* ikm, size_t ikm_size,
+                          const uint8_t* salt, size_t salt_size,
+                          const uint8_t* info, size_t info_size,
+                          uint8_t* output) {
+  (void)context_not_used;
+  if (!HKDF(output, length, EVP_sha256(), ikm, ikm_size, salt, salt_size, info,
+            info_size)) {
+    return kDiceResultPlatformError;
+  }
+  return kDiceResultOk;
+}
+#endif /* USE_RKP_ALIGNED_UDS_DERIVATION */

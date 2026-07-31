@@ -193,6 +193,9 @@
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
   !endif
+  !if $(USE_RKP_ALIGNED_UDS_DERIVATION) == 1
+      GCC:*_*_*_CC_FLAGS = -DUSE_RKP_ALIGNED_UDS_DERIVATION
+  !endif
   !if $(WEAR_OS)
       GCC:*_*_*_CC_FLAGS = -DWEAR_OS
   !endif
