@@ -115,6 +115,9 @@
   !if $(VERIFIED_BOOT_LE)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE
   !endif
+  !if $(SEND_MILESTONE_CALL_LE)
+      GCC:*_*_*_CC_FLAGS = -DSEND_MILESTONE_CALL_LE
+  !endif
 
   !ifdef $(FORCE_NO_PIE)
   GCC:*_*_*_ARCHCC_FLAGS  =  -fno-PIE
@@ -126,6 +129,9 @@
   !endif
   !if $(SUPPORT_AB_BOOT_LXC)
       GCC:*_*_*_CC_FLAGS = -DSUPPORT_AB_BOOT_LXC
+  !endif
+  !if $(ROOT_PARTLABEL_SUPPORT)
+      GCC:*_*_*_CC_FLAGS = -DROOT_PARTLABEL_SUPPORT
   !endif
   !if $(EARLY_ETH_ENABLED)
       GCC:*_*_*_CC_FLAGS = -DEARLY_ETH_ENABLED
@@ -186,6 +192,9 @@
   !endif
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
+  !endif
+  !if $(USE_RKP_ALIGNED_UDS_DERIVATION) == 1
+      GCC:*_*_*_CC_FLAGS = -DUSE_RKP_ALIGNED_UDS_DERIVATION
   !endif
   !if $(WEAR_OS)
       GCC:*_*_*_CC_FLAGS = -DWEAR_OS

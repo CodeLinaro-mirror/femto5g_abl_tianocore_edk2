@@ -93,6 +93,13 @@ typedef enum {
   EFI_PLATFORMINFO_TYPE_CRD  = 0x28,   /**< CRD device   */
   EFI_PLATFORMINFO_TYPE_QQVP = 0x29,   /**< Qualcomm QEMU Virtual Platform  */
   EFI_PLATFORMINFO_TYPE_WRD = 0x2D,  /**< WRD device. */
+  EFI_PLATFORMINFO_TYPE_COME = 0x2E,  /**< "COM Express" is a popular standard defined for Industrial PCs. */
+  EFI_PLATFORMINFO_TYPE_EVK = 0x2F,  /**< Evaluation Kit platform. Generic. */
+  EFI_PLATFORMINFO_TYPE_TDP = 0x30,  /**< Telematics Development Platform */
+  EFI_PLATFORMINFO_TYPE_OMTP = 0x31,  /**< Open MTP */
+  EFI_PLATFORMINFO_TYPE_ITPS = 0x32,  /**< IOT Test Platform Socketed */
+  EFI_PLATFORMINFO_TYPE_ITP = 0x33,  /**< IOT Test Platform - Open Platform */
+  EFI_PLATFORMINFO_TYPE_EITP = 0x34,  /**< enclosed IOT Test Platform */
 
   EFI_PLATFORMINFO_NUM_TYPES, /**< Number of known targets
                                                  (including unknown). @newpage

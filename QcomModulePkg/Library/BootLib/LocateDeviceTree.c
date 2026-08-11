@@ -811,6 +811,10 @@ STATIC EFI_STATUS GetBoardMatchDtb (DtInfo *CurDtbInfo,
 STATIC EFI_STATUS GetSoftSkuMatchDtb (DtInfo *CurDtbInfo,
                           CONST CHAR8 *SoftSkuProp, INT32 LenSoftSkuId)
 {
+  UINT32 SkuCount;
+  UINT32 Idx;
+  UINT32 SkuId;
+
   if (CurDtbInfo == NULL) {
     DEBUG ((EFI_D_VERBOSE, "Input parameters null\n"));
     return EFI_INVALID_PARAMETER;
@@ -820,6 +824,16 @@ STATIC EFI_STATUS GetSoftSkuMatchDtb (DtInfo *CurDtbInfo,
       (LenSoftSkuId >= 0)) {
     CurDtbInfo->DtSoftSkuId =
            fdt32_to_cpu (((struct softsku_id *)SoftSkuProp)->SkuId);
+    SkuCount = LenSoftSkuId / sizeof (struct softsku_id);
+    for (Idx = 0; Idx < SkuCount; Idx++) {
+      SkuId = fdt32_to_cpu (((struct softsku_id *)SoftSkuProp)->SkuId);
+      if (SkuId == BoardSoftSkuId ()) {
+        CurDtbInfo->DtSoftSkuId = SkuId;
+        CurDtbInfo->DtMatchVal |= BIT (SOFTSKU_EXACT_MATCH);
+        break;
+      }
+      SoftSkuProp += sizeof (struct softsku_id);
+    }
   } else {
     CurDtbInfo->DtSoftSkuId = 0;
   }
@@ -827,9 +841,7 @@ STATIC EFI_STATUS GetSoftSkuMatchDtb (DtInfo *CurDtbInfo,
   DEBUG ((EFI_D_VERBOSE, "BoardSoftSkuId = %x, DtSoftSkuId = %x\n",
                    BoardSoftSkuId (), CurDtbInfo->DtSoftSkuId));
 
-  if (CurDtbInfo->DtSoftSkuId == BoardSoftSkuId ()) {
-    CurDtbInfo->DtMatchVal |= BIT (SOFTSKU_EXACT_MATCH);
-  } else {
+  if (!(CurDtbInfo->DtMatchVal & BIT (SOFTSKU_EXACT_MATCH))) {
     DEBUG ((EFI_D_VERBOSE, "qcom,softsku-id does not match\n"));
   }
 

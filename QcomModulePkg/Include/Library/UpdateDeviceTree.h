@@ -28,9 +28,8 @@
 */
 
 /*
- * Changes from Qualcomm Innovation Center, Inc. are provided under the
- * following license:
- * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -46,6 +45,7 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
+#include <Protocol/DDRDetails.h>
 #include <Protocol/EFILimits.h>
 #include <Protocol/EFIRamPartition.h>
 #include <Uefi.h>
@@ -123,6 +123,9 @@ dev_tree_add_mem_info (VOID *fdt, UINT32 offset, UINT32 addr, UINT32 size);
 
 INT32
 dev_tree_add_mem_infoV64 (VOID *fdt, UINT32 offset, UINT64 addr, UINT64 size);
+
+EFI_STATUS
+GetDDrRegionsInfo (struct ddr_regions_data_info *DdrRegionsInfo);
 
 EFI_STATUS
 UpdateDeviceTree (VOID *DeviceTreeLoadAddr,

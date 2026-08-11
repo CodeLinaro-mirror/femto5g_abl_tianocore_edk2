@@ -93,6 +93,11 @@ GetRkpBCCSize (VOID)
     return Status;
   }
 
+  if (pQcomScmProtocol->ScmGetClientEnv == NULL) {
+    DEBUG ((EFI_D_ERROR, "GetRkpBCCSize: ScmGetClientEnv is NULL"));
+    return EFI_NOT_FOUND;
+  }
+
   Status = pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
   if (Object_isERROR (Status) ||
       Object_isNull (ClientEnvObj)) {
@@ -152,6 +157,10 @@ GetRkpBCC (UINT8 *bcc, size_t *bccValidSize)
   }
 
   if (Object_isNull (ClientEnvObj)) {
+    if (pQcomScmProtocol->ScmGetClientEnv == NULL) {
+      DEBUG ((EFI_D_ERROR, "GetRkpBCC: ScmGetClientEnv is NULL"));
+      return EFI_NOT_FOUND;
+    }
     Status =
         pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
     if (Object_isERROR (Status) ||
@@ -258,7 +267,6 @@ GetSWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
   UINT8 NextBccEncodedCDIs[BCC_ARTIFACTS_WO_BCC_TOTAL_SIZE] = {0};
   size_t BccEncodedConfigDescValidSize = 0;
   size_t NextBccEncodedCDIsValidSize = 0;
-  BCCArtifacts_t BccCDIsOnly = {{0}};
   DiceInputValues BccInputValues = {{0}};
   struct CborOut Out = {NULL, 0, 0};
   DiceResult Result = kDiceResultOk;
@@ -371,9 +379,11 @@ GetSWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
   BccInputValues.config_descriptor_size = BccEncodedConfigDescValidSize;
   BccInputValues.mode = BccRoot.Mode;
 
+#ifndef USE_RKP_ALIGNED_UDS_DERIVATION
   //---------------------------------------------------------------------
-  // Generate Dice Artifacts Without BCC (CDI-Attest, CDI-Sealing only)
+  // Non-degenerate DICE: derive NextCDIAttest from UDS + BccInputValues
   //---------------------------------------------------------------------
+  BCCArtifacts_t BccCDIsOnly = {{0}};
   Result =
       DiceMainFlow (NULL, BccRoot.Uds, BccRoot.Uds, &BccInputValues, 0, NULL,
                     NULL, BccCDIsOnly.NextCDIAttest, BccCDIsOnly.NextCDISeal);
@@ -382,6 +392,7 @@ GetSWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
     return Result;
   }
 
+#endif
   //---------------------------------------------------------------------
   // CBOR Encode Dice Artifacts (Without BCC) CDI-Attest/CDI-Sealing
   //---------------------------------------------------------------------
@@ -390,10 +401,18 @@ GetSWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
   CborWriteMap (2, &Out);
 
   CborWriteInt (KCdiAttestLabel, &Out);
+#ifdef USE_RKP_ALIGNED_UDS_DERIVATION
+  CborWriteBstr (DICE_CDI_SIZE, BccRoot.Uds, &Out);  /* degenerate: UDS as CDI_Attest */
+#else
   CborWriteBstr (DICE_CDI_SIZE, BccCDIsOnly.NextCDIAttest, &Out);
+#endif
 
   CborWriteInt (KCdiSealLabel, &Out);
+#ifdef USE_RKP_ALIGNED_UDS_DERIVATION
+  CborWriteBstr (DICE_CDI_SIZE, BccRoot.Uds, &Out);  /* degenerate: UDS as CDI_Seal */
+#else
   CborWriteBstr (DICE_CDI_SIZE, BccCDIsOnly.NextCDISeal, &Out);
+#endif
 
   assert (!CborOutOverflowed (&Out));
   NextBccEncodedCDIsValidSize = CborOutSize (&Out);
@@ -449,6 +468,7 @@ GetHWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
     case IOpener_ERROR_NOT_FOUND:
     case IOpener_ERROR_PRIVILEGE:
     case IOpener_ERROR_NOT_SUPPORTED:
+    case EFI_NOT_FOUND:
       return kDiceResultNotSupported;
 
     default:

@@ -95,10 +95,16 @@ static struct PartialGoods PartialGoodsCpuType3[] = {
 #define NUM_OF_CPUS (ARRAY_SIZE(PartialGoodsCpuType0))
 #define SLC_SUBPART_COUNT 2
 
+/* Bound for the on-stack Hits[]: the largest table passed to
+ * FindNodeAndUpdateProperty(). Derived from the tables so it stays exact. */
+#define PG_MAX_HITS  MAX (ARRAY_SIZE (PartialGoodsMmType), NUM_OF_CPUS)
+
 STATIC struct PartialGoods *PartialGoodsCpuType[MAX_CPU_CLUSTER] = {
     PartialGoodsCpuType0, PartialGoodsCpuType1,
     PartialGoodsCpuType2, PartialGoodsCpuType3
 };
+
+static UINT32 PartialGoodsMMValue = 0;
 
 /* Look up table for multimedia partial goods */
 static struct PartialGoods PartialGoodsMmType[] = {
@@ -594,6 +600,13 @@ static struct PartialGoodsWithLabel PartialGoodsMmTypeWithLabel[] = {
     {"video_cc_mvs1c_gdsc", "status", "no"}},
 };
 
+static struct PartialGoodsDelNode PartialGoodsReservedMemDelete[] = {
+    {BIT (EFICHIPINFO_PART_COMP) | BIT (EFICHIPINFO_PART_NSP),
+     "/reserved-memory/cdsp_region"},
+    {BIT (EFICHIPINFO_PART_COMP) | BIT (EFICHIPINFO_PART_NSP),
+     "/reserved-memory/q6_cdsp_dtb_region"},
+};
+
 STATIC EFI_STATUS
 CheckCPUType (VOID *fdt,
               UINT32 TableSz,
@@ -627,81 +640,183 @@ CheckCPUType (VOID *fdt,
   return EFI_SUCCESS;
 }
 
+/*
+ * FindNodeAndUpdateProperty - disable the partial-goods nodes named in Table.
+ *
+ * All entries of a table share one parent ("/soc" or "/cpus"). Phase 0 filters
+ * the table to the entries this part needs; phase 1 walks the parent's direct
+ * children once to resolve their offsets; phase 3 writes back-to-front.
+ *
+ * Back-to-front matters: fdt_setprop() only shifts the blob *after* the node
+ * it writes, so writing the highest offset first leaves every remaining
+ * (lower) offset valid. Per-entry writes are independent, so the result is
+ * the same as writing in table order.
+ */
 STATIC VOID
 FindNodeAndUpdateProperty (VOID *fdt,
                            UINT32 TableSz,
                            struct PartialGoods *Table,
                            UINT32 Value)
 {
-  struct SubNodeListNew *SNode = NULL;
-  INT32 SubNodeOffset = 0;
+  struct PgHit Hits[PG_MAX_HITS];
+  UINT32 HitCount = 0;
   INT32 ParentOffset = 0;
+  INT32 SubOffset = 0;
   INT32 Ret = 0;
-  UINT32 i;
-  CONST struct fdt_property *Prop = NULL;
   INT32 PropLen = 0;
+  UINT32 i = 0;
+  INT32 w = 0;
+  BOOLEAN IsCpu = FALSE;
+  CONST CHAR8 *ParentPath = NULL;
+  CONST CHAR8 *SubNodeName = NULL;
+  CONST CHAR8 *BaseNodeName = NULL;
+  UINTN Len = 0;
+  CONST struct fdt_property *Prop = NULL;
+  struct PgHit Key;
 
-  for (i = 0; i < TableSz; i++, Table++) {
-    if (!(Value & Table->Val))
+  /* Phase 0: filter the table down to entries this defective part needs. */
+  for (i = 0; i < TableSz; i++) {
+    if (!(Value & Table[i].Val)) {
       continue;
+    }
 
-    /* Find the parent node */
-    ParentOffset = FdtPathOffset (fdt, Table->ParentNode);
+    if (HitCount >= PG_MAX_HITS) {
+      DEBUG ((EFI_D_ERROR,
+              "PartialGoods: hit list full (%d), %a not recorded\n",
+              PG_MAX_HITS, Table[i].SubNode.SubNodeName));
+      continue;
+    }
+
+    Hits[HitCount].ParentPath = Table[i].ParentNode;
+    Hits[HitCount].NodeName = Table[i].SubNode.SubNodeName;
+    Hits[HitCount].PropName = Table[i].SubNode.PropertyName;
+    Hits[HitCount].Val      = Table[i].SubNode.ReplaceStr;
+    Hits[HitCount].TableVal = Table[i].Val;
+    Hits[HitCount].Offset   = -1;
+    HitCount++;
+  }
+
+  if (HitCount == 0) {
+    return;                            /* good part: no device-tree work */
+  }
+
+  /* Phase 1: resolve offsets, walking each distinct parent's direct children
+   * exactly once. The outer loop is driven by the first occurrence of each
+   * distinct parent (not by "unresolved"), so absent nodes do not trigger
+   * repeated subtree walks. A table may list the same node name more than once
+   * (e.g. "remoteproc-cdsp" for both COMP and NSP), so the inner loop resolves
+   * every matching hit. */
+  for (i = 0; i < HitCount; i++) {
+    ParentPath = Hits[i].ParentPath;
+
+    /* Skip if this parent was already walked at an earlier hit. */
+    for (w = 0; w < (INT32)i; w++) {
+      if (AsciiStrCmp (Hits[w].ParentPath, ParentPath) == 0) {
+        break;
+      }
+    }
+    if (w < (INT32)i) {
+      continue;                        /* parent already processed */
+    }
+
+    ParentOffset = FdtPathOffset (fdt, ParentPath);
     if (ParentOffset < 0) {
       DEBUG ((EFI_D_ERROR, "Failed to Get parent node: %a\terror: %d\n",
-              Table->ParentNode, ParentOffset));
+              ParentPath, ParentOffset));
       continue;
     }
 
-    /* Find the subnode */
-    SNode = &(Table->SubNode);
-    SubNodeOffset = fdt_subnode_offset (fdt, ParentOffset,
-                                      SNode->SubNodeName);
-    if (SubNodeOffset < 0) {
-      DEBUG ((EFI_D_INFO, "Subnode: %a is not present, ignore\n",
-              SNode->SubNodeName));
-      continue;
-    }
+    for (SubOffset = fdt_first_subnode (fdt, ParentOffset);
+         SubOffset >= 0;
+         SubOffset = fdt_next_subnode (fdt, SubOffset)) {
 
-    if (Table->Val == (BIT (EFICHIPINFO_PART_MODEM) |
-                       BIT (EFICHIPINFO_PART_WLAN) |
-                       BIT (EFICHIPINFO_PART_NAV))) {
-      Prop = fdt_get_property (fdt, SubNodeOffset, "legacy-wlan", &PropLen);
+      SubNodeName = fdt_get_name (fdt, SubOffset, NULL);
+      if (SubNodeName == NULL) {
+        continue;
+      }
+
+      for (w = (INT32)i; w < (INT32)HitCount; w++) {
+        if (Hits[w].Offset >= 0) {
+          continue;
+        }
+        if (AsciiStrCmp (Hits[w].ParentPath, ParentPath) != 0) {
+          continue;
+        }
+
+        BaseNodeName = Hits[w].NodeName;
+        Len = AsciiStrLen (BaseNodeName);
+        if (!AsciiStrnCmp (SubNodeName, BaseNodeName, Len) &&
+            (SubNodeName[Len] == '\0' || SubNodeName[Len] == '@')) {
+          Hits[w].Offset = SubOffset;
+        }
+      }
+    }
+  }
+
+  /* The MODEM|WLAN|NAV entry is conditional on whether the node advertises
+   * "legacy-wlan"; drop it from the hit list when the condition is not met. */
+  for (i = 0; i < HitCount; i++) {
+    if (Hits[i].Offset >= 0 &&
+        Hits[i].TableVal == (BIT (EFICHIPINFO_PART_MODEM) |
+                             BIT (EFICHIPINFO_PART_WLAN) |
+                             BIT (EFICHIPINFO_PART_NAV))) {
+      Prop = fdt_get_property (fdt, Hits[i].Offset, "legacy-wlan", &PropLen);
       if (Prop) {
         if (!((Value & BIT (EFICHIPINFO_PART_MODEM)) &&
               (Value & BIT (EFICHIPINFO_PART_WLAN)) &&
-              (Value & BIT (EFICHIPINFO_PART_NAV))))
-          continue;
+              (Value & BIT (EFICHIPINFO_PART_NAV)))) {
+          Hits[i].Offset = -1;
+        }
       } else {
         if (!((Value & BIT (EFICHIPINFO_PART_MODEM)) &&
-             (Value & BIT (EFICHIPINFO_PART_NAV))))
-          continue;
+              (Value & BIT (EFICHIPINFO_PART_NAV)))) {
+          Hits[i].Offset = -1;
+        }
       }
     }
+  }
 
-     /* Add/Replace the property with Replace string value */
-    Ret = FdtSetProp (fdt, SubNodeOffset, SNode->PropertyName,
-                      (CONST VOID *)SNode->ReplaceStr,
-                      AsciiStrLen (SNode->ReplaceStr) + 1);
-    if (!Ret) {
-      DEBUG ((EFI_D_INFO, "Partial goods (%a) %a property disabled\n",
-              SNode->SubNodeName, SNode->PropertyName));
-    } else {
-      DEBUG ((EFI_D_ERROR, "Failed to update property: %a, ret =%d \n",
-              SNode->PropertyName, Ret));
+  /* Phase 2: sort by descending offset; unresolved entries (-1) sink last. */
+  for (i = 1; i < HitCount; i++) {
+    Key = Hits[i];
+    w = (INT32)i - 1;
+    while (w >= 0 && Hits[w].Offset < Key.Offset) {
+      Hits[w + 1] = Hits[w];
+      w--;
+    }
+    Hits[w + 1] = Key;
+  }
+
+  /* Phase 3: write in descending-offset order. */
+  for (w = 0; w < (INT32)HitCount; w++) {
+    if (Hits[w].Offset < 0) {
+      DEBUG ((EFI_D_INFO, "Subnode: %a is not present, ignore\n",
+              Hits[w].NodeName));
+      continue;
     }
 
-    if (!AsciiStrCmp (Table->ParentNode, "/cpus")) {
-      /* Add/Replace the status property to fail */
-      Ret = FdtSetProp (fdt, SubNodeOffset, "status",
+    Ret = FdtSetProp (fdt, Hits[w].Offset, Hits[w].PropName,
+                      (CONST VOID *)Hits[w].Val,
+                      AsciiStrLen (Hits[w].Val) + 1);
+    if (!Ret) {
+      DEBUG ((EFI_D_INFO, "Partial goods (%a) %a property disabled\n",
+              Hits[w].NodeName, Hits[w].PropName));
+    } else {
+      DEBUG ((EFI_D_ERROR, "Failed to update property: %a, ret =%d \n",
+              Hits[w].PropName, Ret));
+    }
+
+    IsCpu = (BOOLEAN)(AsciiStrCmp (Hits[w].ParentPath, "/cpus") == 0);
+    if (IsCpu) {
+      Ret = FdtSetProp (fdt, Hits[w].Offset, "status",
                         (CONST VOID *)"fail",
                         AsciiStrLen ("fail") + 1);
       if (!Ret) {
         DEBUG ((EFI_D_INFO, "Partial goods (%a) status property updated\n",
-                SNode->SubNodeName));
+                Hits[w].NodeName));
       } else {
         DEBUG ((EFI_D_ERROR, "Failed to update property: %a, ret =%d \n",
-                SNode->SubNodeName, Ret));
+                Hits[w].NodeName, Ret));
       }
     }
   }
@@ -821,6 +936,87 @@ FindLabelAndUpdateProperty (VOID *fdt,
               Label, Ret));
     }
   }
+}
+
+STATIC VOID
+FindNodeAndDelete (VOID *fdt,
+                   UINT32 TableSz,
+                   struct PartialGoodsDelNode *Table,
+                   UINT32 Value)
+{
+  INT32  NodeOffset = 0;
+  INT32  Ret        = 0;
+  UINT32 i          = 0;
+
+  for (i = 0; i < TableSz; i++, Table++) {
+    if (!(Value & Table->Val))
+      continue;
+
+    NodeOffset = FdtPathOffset (fdt, Table->NodePath);
+    if (NodeOffset < 0) {
+      DEBUG ((EFI_D_ERROR,
+              "Fail to find node %a, skipping\n",
+              Table->NodePath));
+      continue;
+    }
+
+    Ret = FdtDelNode (fdt, NodeOffset);
+    if (!Ret) {
+      DEBUG ((EFI_D_INFO,
+              "Successfully deleted node: %a\n",
+              Table->NodePath));
+    } else {
+      DEBUG ((EFI_D_ERROR,
+              "Failed to delete node: %a, ret = %d\n",
+              Table->NodePath, Ret));
+    }
+  }
+}
+
+EFI_STATUS
+GetPartialGoodsMMValue (VOID)
+{
+  EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol = NULL;
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = gBS->LocateProtocol (&gEfiChipInfoProtocolGuid, NULL,
+                                (VOID **)&pChipInfoProtocol);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR,
+            "Failed to get the protocol: %r\n", Status));
+    return Status;
+  }
+
+  Status = ReadMMPartialGoods (pChipInfoProtocol, &PartialGoodsMMValue);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_INFO,
+            "No mm partial goods found: %r\n",
+            Status));
+    return Status;
+  }
+
+  DEBUG ((EFI_D_INFO,
+          "PartialGoods for Multimedia: 0x%x\n",
+          PartialGoodsMMValue));
+  return EFI_SUCCESS;
+}
+
+BOOLEAN
+IsNodeMarkedForDeletion (CONST CHAR8 *NodePath)
+{
+  UINT32 i = 0;
+
+  if (!PartialGoodsMMValue)
+    return FALSE;
+
+  for (i = 0; i < ARRAY_SIZE (PartialGoodsReservedMemDelete); i++) {
+    if (AsciiStrCmp (NodePath,
+                     PartialGoodsReservedMemDelete[i].NodePath) == 0 &&
+        (PartialGoodsMMValue & PartialGoodsReservedMemDelete[i].Val)) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }
 
 STATIC EFI_STATUS
@@ -968,7 +1164,6 @@ EFI_STATUS
 UpdatePartialGoodsNode (VOID *fdt)
 {
   UINT32 i;
-  UINT32 PartialGoodsMMValue = 0;
   UINT32 SlcValue = 0;
   UINT32 PartialGoodsCpuValue;
   UINT32 PartialGoodsCPUTypeValue = 0;
@@ -986,14 +1181,8 @@ UpdatePartialGoodsNode (VOID *fdt)
     return Status;
   }
 
-  /* Read and update Multimedia Partial Goods Nodes */
-  Status = ReadMMPartialGoods (pChipInfoProtocol, &PartialGoodsMMValue);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_INFO, "No mm partial goods found.\n"));
-  }
-
   if (PartialGoodsMMValue) {
-    DEBUG ((EFI_D_INFO, "PartialGoods for Multimedia: 0x%x\n",
+    DEBUG ((EFI_D_VERBOSE, "PartialGoods for Multimedia: 0x%x\n",
             PartialGoodsMMValue));
 
     FindNodeAndUpdateProperty (fdt, ARRAY_SIZE (PartialGoodsMmType),
@@ -1003,6 +1192,9 @@ UpdatePartialGoodsNode (VOID *fdt)
                                &PartialGoodsMmTypeWithLabel[0],
                                PartialGoodsMMValue);
 
+    FindNodeAndDelete (fdt, ARRAY_SIZE (PartialGoodsReservedMemDelete),
+                       &PartialGoodsReservedMemDelete[0],
+                       PartialGoodsMMValue);
   }
 
   Status = ReadSlcInformation(pChipInfoProtocol, &SlcValue);

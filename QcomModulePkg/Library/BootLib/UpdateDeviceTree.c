@@ -736,6 +736,8 @@ GetNoMapRegions (VOID *Fdt,
   INT32 PropLen = 0;
   CONST CHAR8 *status = NULL;
 
+  GetPartialGoodsMMValue ();
+
   ResMemOffset = FdtPathOffset (Fdt, "/reserved-memory");
   if (ResMemOffset < 0) {
     DEBUG ((EFI_D_ERROR, "reserved-memory node not found in device tree\n"));
@@ -753,6 +755,19 @@ GetNoMapRegions (VOID *Fdt,
         continue;
       }
       RegProp = fdt_getprop (Fdt, SubNodeOffset, "reg", &PropLen);
+        CONST CHAR8 *SubNodeName = fdt_get_name (Fdt, SubNodeOffset, NULL);
+        CHAR8 SubNodeFullPath[128];
+        AsciiSPrint (SubNodeFullPath, sizeof (SubNodeFullPath),
+                     "/reserved-memory/%a", SubNodeName);
+        CHAR8 *AtSign = AsciiStrStr (SubNodeFullPath, "@");
+        if (AtSign) {
+          *AtSign = '\0';
+        }
+        if (IsNodeMarkedForDeletion (SubNodeFullPath)) {
+          DEBUG ((EFI_D_INFO, "Skipping no-map region %a\n",
+                  SubNodeFullPath));
+          continue;
+        }
       if (RegProp) {
         if (NumReg >= NUM_NOMAP_REGIONS) {
           return EFI_OUT_OF_RESOURCES;
@@ -1188,7 +1203,7 @@ dev_tree_add_mem_infoV64 (VOID *fdt, UINT32 offset, UINT64 addr, UINT64 size)
   return ret;
 }
 
-STATIC EFI_STATUS
+EFI_STATUS
 GetDDrRegionsInfo (struct ddr_regions_data_info *DdrRegionsInfo)
 {
   EFI_STATUS  Status = EFI_SUCCESS;

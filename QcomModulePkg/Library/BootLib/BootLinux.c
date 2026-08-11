@@ -59,6 +59,7 @@
 #include "Bootconfig.h"
 #include <ufdt_overlay.h>
 #include <Secretkeeper.h>
+#include <Library/PartialGoods.h>
 
 #ifndef DISABLE_KERNEL_PROTOCOL
 #include <Protocol/EFIKernelInterface.h>
@@ -77,6 +78,7 @@ STATIC AvfProperty SkPubKey = {"secretkeeper_public_key", NULL, 0};
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
 STATIC BOOLEAN RecoveryHasNoKernel = FALSE;
+STATIC BOOLEAN IsSdCardDetected = FALSE;
 RamPartitionEntry UpdatedRamPartitions[NUM_NOMAP_REGIONS];
 UINT32 NumUpdPartitions;
 BOOLEAN UpdRamPartitionsAvail = FALSE;
@@ -865,6 +867,10 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
       SetVmDisable ();
     }
   }
+
+  // HGY does not need qtvm_dtbo. AUTO_VIRT_ABL is only active in HGY GVM
+  // and does not affect other SPs.
+  #ifndef AUTO_VIRT_ABL
   // Loads qtvm_dtbo partition
   DtboImgInvalid = LoadAndValidateQtvmDtboImg (Info, BootParamlistPtr);
   if (DtboImgInvalid) {
@@ -874,6 +880,7 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   } else {
       DEBUG ((EFI_D_ERROR, "Error: Failed to read qtvm_dtbo partition\n\n\n"));
   }
+  #endif
 
   return EFI_SUCCESS;
 }
@@ -2056,6 +2063,8 @@ BootLinux (BootInfo *Info)
       DEBUG ((EFI_D_ERROR, "Failed to update RAM Partitions Status:%r\r\n",
               Status));
     }
+  } else {
+    GetPartialGoodsMMValue ();
   }
 
   /* Updates the command line from boot image, appends device serial no.,
@@ -2088,7 +2097,18 @@ BootLinux (BootInfo *Info)
   /* Sends Milestone Call to Keymaster */
   UINT32  AVBVersion = GetAVBVersion ();
   if (AVBVersion != NO_AVB) {
-    if (AVBVersion != AVB_LE) {
+    BOOLEAN SendMilestone = (AVBVersion != AVB_LE);
+#ifdef SEND_MILESTONE_CALL_LE
+    if (AVBVersion == AVB_LE) {
+      BOOLEAN KeymasterEnabled = FALSE;
+      Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                   &KeymasterEnabled);
+      if (Status == EFI_SUCCESS && KeymasterEnabled) {
+        SendMilestone = TRUE;
+      }
+    }
+#endif
+    if (SendMilestone) {
       DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
       Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
       if (Status != EFI_SUCCESS) {
@@ -2517,6 +2537,88 @@ CheckImageHeader (VOID *ImageHdrBuffer,
 
   return Status;
 }
+
+BOOLEAN IsSdCardPresent(VOID)
+{
+  return IsSdCardDetected;
+}
+
+VOID DisableSdCard(VOID)
+{
+  IsSdCardDetected = FALSE;
+}
+
+EFI_STATUS DetectSDCardAndMountFAT(VOID)
+{
+  EFI_STATUS Status;
+  PartiSelectFilter HandleFilter;
+  HandleInfo HandleInfoList[2];
+  UINT32 MaxHandles = 2, BlkIOAttrib = 0, detectedIndex = 0;
+  EFI_DEVICE_PATH_PROTOCOL *DevicePath;
+  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *Fs;
+
+  BlkIOAttrib = BLK_IO_SEL_PARTITIONED_MBR;
+  BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_REMOVABLE;
+  BlkIOAttrib |= BLK_IO_SEL_MATCH_ROOT_DEVICE;
+
+  HandleFilter.RootDeviceType = &gEfiSdRemovableGuid;
+
+  Status =
+      GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
+
+  if (Status == EFI_SUCCESS) {
+    if (MaxHandles == 0) {
+      DEBUG ((EFI_D_INFO, "SD card is not present\n"));
+      return EFI_NO_MEDIA;
+    }
+  } else {
+    DEBUG ((EFI_D_ERROR, "GetBlkIOHandles failed: %r\n", Status));
+    return Status;
+  }
+
+  /*
+   * GetBlkIOHandles with BLK_IO_SEL_MATCH_ROOT_DEVICE returns the root device
+   * handle directly. The root device path does NOT contain MEDIA_HARDDRIVE_DP
+   * nodes (those only appear in partition handles). Use the first returned
+   * handle directly as the SD card handle.
+   */
+  detectedIndex = 0;
+  IsSdCardDetected = TRUE;
+
+  /* Print device path for debugging */
+  Status = gBS->HandleProtocol (HandleInfoList[detectedIndex].Handle,
+                                &gEfiDevicePathProtocolGuid, (VOID **)&DevicePath);
+  if (!EFI_ERROR (Status)) {
+    CHAR16 *DevicePathStr = ConvertDevicePathToText (DevicePath, TRUE, TRUE);
+    if (DevicePathStr != NULL) {
+      DEBUG ((EFI_D_INFO, "DevicePath string for SD card is: %s\n", DevicePathStr));
+      FreePool (DevicePathStr);
+    }
+  }
+
+  /* Mount FAT FS of SD card */
+  Status = gBS->HandleProtocol(HandleInfoList[detectedIndex].Handle,
+                                &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Fs);
+  if (Status == EFI_SUCCESS)
+  {
+    DEBUG ((EFI_D_ERROR, "[DetectSDAndMount] File System Already mounted %d on :%d\n", Status, detectedIndex));
+    return Status;
+  }
+
+  if (Status != EFI_SUCCESS)
+  {
+    Status = gBS->ConnectController (HandleInfoList[detectedIndex].Handle, NULL, NULL, TRUE);
+    if (EFI_ERROR(Status))
+    {
+      DEBUG ((EFI_D_ERROR, "[MountFat] Failed to connect controller\n"));
+      IsSdCardDetected = FALSE;   // need to add mainline via Qualcomm
+      return Status;
+    }
+  }
+
+  return EFI_SUCCESS;
+}
+
 
 /**
   Load image header from partition

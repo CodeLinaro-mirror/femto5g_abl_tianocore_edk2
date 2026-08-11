@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -35,12 +35,11 @@ static Object AppObj = Object_NULL;
 
 // Load app through Qseecom
 static EFI_STATUS
-SecretkeeperLoadApp (VOID)
+SecretkeeperLoadApp (UINT32 *AppId)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
   QCOM_QSEECOM_PROTOCOL *QseeComProtocol;
-  UINT32 AppId = 0;
 
   Status = gBS->LocateProtocol (&gQcomQseecomProtocolGuid, NULL,
                                 (VOID **)&QseeComProtocol);
@@ -51,13 +50,13 @@ SecretkeeperLoadApp (VOID)
   }
 
   Status = QseeComProtocol->QseecomStartApp (
-      QseeComProtocol, "secretkeeper_a", &AppId);
+      QseeComProtocol, "secretkeeper_a", AppId);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR,
             "SecretkeeperLoadApp: Could not load form _a, status: %r\n",
            Status));
     Status = QseeComProtocol->QseecomStartApp (
-        QseeComProtocol, "secretkeeper_b", &AppId);
+        QseeComProtocol, "secretkeeper_b", AppId);
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR,
             "SecretkeeperLoadApp: Could not load form _b, status: %r\n",
@@ -69,9 +68,11 @@ SecretkeeperLoadApp (VOID)
 }
 
 EFI_STATUS
-SecretkeeperStartApp (VOID)
+SecretkeeperStartAppSmc (VOID)
 {
   EFI_STATUS Status = EFI_SUCCESS;
+  CONST CHAR8 *skAppName = "secretkeeper";
+  UINT32 AppId = 0;
 
   Object ClientEnvObj = Object_NULL;
   Object AppClientObj = Object_NULL;
@@ -80,21 +81,29 @@ SecretkeeperStartApp (VOID)
     return EFI_SUCCESS;
   }
 
-  SecretkeeperLoadApp ();
-  CONST CHAR8 *skAppName = "secretkeeper";
+  Status = SecretkeeperLoadApp (&AppId);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "%s: SecretkeeperLoadApp failed: %r\n",
+           __func__, Status));
+    return Status;
+  }
 
   // Get TA app handle through SMCInvoke
   QCOM_SCM_PROTOCOL *pQcomScmProtocol = NULL;
   // Locate QCOM_SCM_PROTOCOL.
   Status = gBS->LocateProtocol (&gQcomScmProtocolGuid, NULL,
                                 (VOID **)&pQcomScmProtocol);
-  if (Status != EFI_SUCCESS ||
-      (pQcomScmProtocol == NULL)) {
+  if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR,
             "SecretkeeperStartApp: Locate SCM Pcol failed, Status: (0x%x)\n",
             Status));
-    Status = -1;
     return Status;
+  }
+
+  if (pQcomScmProtocol == NULL || pQcomScmProtocol->ScmGetClientEnv == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "SecretkeeperStartApp: SCM Protocol or ScmGetClientEnv is NULL\n"));
+    return EFI_PROTOCOL_ERROR;
   }
 
   Status = pQcomScmProtocol->ScmGetClientEnv (pQcomScmProtocol, &ClientEnvObj);
@@ -127,7 +136,7 @@ SecretkeeperStartApp (VOID)
     goto out;
   }
 
-  DEBUG ((EFI_D_INFO, "Secretkeeper app is loaded and ready to be used\n"));
+  DEBUG ((EFI_D_INFO, "Secretkeeper app is loaded and ready to be used. AppId: %u\n", AppId));
 
   Status = EFI_SUCCESS;
   goto out_success;
@@ -237,11 +246,11 @@ SecretkeeperGetCosePublicKeySmc (UINT8 *CosePubKey, UINT32 CosePubKeyLen,
   UINT8 Request[4] = {0x00, 0x00, 0x00, 0x1};
   SizeT LenOut = 0;
 
-  Status = SecretkeeperStartApp ();
+  Status = SecretkeeperStartAppSmc ();
   if ((Status != EFI_SUCCESS) ||
         Object_isNull (AppObj)) {
     DEBUG ((EFI_D_ERROR, "App Obj is NULL, or Status = 0x%x\n", Status));
-    return EFI_NOT_FOUND;
+    return Status;
   }
 
   Status = ISecretKeeper_process_bootloader (AppObj,
@@ -277,24 +286,22 @@ SecretkeeperGetCosePublicKey (UINT8 *CosePubKey, UINT32 CosePubKeyLen,
     return EFI_INVALID_PARAMETER;
   }
 
-  /* Try QSEECOM interface first */
-  DEBUG ((EFI_D_INFO, "SecretkeeperGetCosePublicKey: Trying QSEECOM interface\n"));
-  Status = SecretkeeperGetCosePublicKeyQseecom (CosePubKey, CosePubKeyLen,
-                                                RspLenOut, Offset);
-  if (Status == EFI_SUCCESS) {
-    DEBUG ((EFI_D_INFO, "SecretkeeperGetCosePublicKey: QSEECOM method succeeded\n"));
-    return EFI_SUCCESS;
-  }
-
-  /* Fall back to SMC invoke method */
-  DEBUG ((EFI_D_INFO,
-          "SecretkeeperGetCosePublicKey: QSEECOM failed (%r), falling back to SMC\n",
-          Status));
+  /* Try SMC invoke method first */
   Status = SecretkeeperGetCosePublicKeySmc (CosePubKey, CosePubKeyLen,
                                             RspLenOut, Offset);
   if (Status == EFI_SUCCESS) {
     DEBUG ((EFI_D_INFO, "SecretkeeperGetCosePublicKey: SMC method succeeded\n"));
     return EFI_SUCCESS;
+  }
+
+  if (Status == EFI_PROTOCOL_ERROR) {
+    /* Fall back to QSEECOM method if SMC protocol is not supported */
+    Status = SecretkeeperGetCosePublicKeyQseecom (CosePubKey, CosePubKeyLen,
+                                                  RspLenOut, Offset);
+    if (Status == EFI_SUCCESS) {
+      DEBUG ((EFI_D_INFO, "SecretkeeperGetCosePublicKey: QSEECOM method succeeded\n"));
+      return EFI_SUCCESS;
+    }
   }
 
   DEBUG ((EFI_D_ERROR,

@@ -47,6 +47,7 @@
 #include <Protocol/EFICardInfo.h>
 #include <Protocol/EFIChargerEx.h>
 #include <Protocol/EFIChipInfoTypes.h>
+#include <Protocol/EFIDDRGetConfig.h>
 #include <Protocol/EFIPmicPon.h>
 #include <Protocol/Print2.h>
 #include <Library/EarlyUsbInit.h>
@@ -63,6 +64,11 @@
 #define MAX_PART_NAME_LEN 40
 STATIC CONST CHAR8 *QSPAPrefix = "androidboot.vendor.qspa.";
 #endif
+
+#if TARGET_BOARD_TYPE_AUTO
+#define DTB_BOOTCONFIG_MAX_LEN  16384
+#define DTB_BOOTCONFIG_KEY_MAX  256
+#endif/*if TARGET_BOARD_TYPE_AUTO*/
 
 #define BOOT_CPU_PARAM_LEN 13
 #define SIZE_OF_DELIM 2
@@ -160,7 +166,11 @@ CHAR8 BootForceNormalBoot = '0';
 STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
+STATIC CHAR8 *FstabSuffixNvme = "nvme";
 STATIC CHAR8 *FstabSuffixDefault = "default";
+
+#define MAX_DDR_SIZE_STR 64
+STATIC CHAR8 *AndroidBootDdrSize = " androidboot.ddr_size=";
 
 /* Memory offline arguments */
 STATIC CHAR8 *MemOff = " mem=";
@@ -247,7 +257,7 @@ TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
   }
 
   /* The new protocol are supported on future chipsets */
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION) {
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10003) {
     Status = ChgDetectProtocol->IsOffModeCharging (BatteryStatus);
     if (EFI_ERROR (Status))
       DEBUG (
@@ -384,7 +394,7 @@ TargetBatterySocOk (UINT32 *BatteryVoltage)
   }
 
   /* The new protocol are supported on future chipsets */
-  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION) {
+  if (ChgDetectProtocol->Revision >= CHARGER_EX_REVISION_10003) {
     Status = ChgDetectProtocol->IsPowerOk (
         EFI_CHARGER_EX_POWER_FLASH_BATTERY_VOLTAGE_TYPE, &FlashInfo);
     if (EFI_ERROR (Status)) {
@@ -541,10 +551,8 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
                 CHAR16 *ReqPartition, CHAR8 *Key, BOOLEAN FlashlessBoot)
 {
   INT32 Index;
-  UINT32 Lun;
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
   Slot CurSlot = GetCurrentSlotSuffix ();
-  CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
 
   *SysPath = AllocateZeroPool (sizeof (CHAR8) * MAX_PATH_SIZE);
@@ -591,7 +599,6 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
     return 0;
   }
 
-  Lun = GetPartitionLunFromIndex (Index);
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStrCmp ("Unknown", RootDevStr)) {
     FreePool (*SysPath);
@@ -626,10 +633,17 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
           (Index - 1));
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
+#ifdef ROOT_PARTLABEL_SUPPORT
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=PARTLABEL=%s", Key, PartitionName);
+#else
+    UINT32 Lun;
+    Lun = GetPartitionLunFromIndex (Index);
+    CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/sd%c%d",
                  Key,
                  LunCharMapping[Lun],
                  GetPartitionIdxInLun (PartitionName, Lun));
+#endif
   } else if (!AsciiStrCmp ("NVME", RootDevStr)) {
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/nvme0n1p%d", Key, Index);
   } else if (!AsciiStrCmp ("VBLK", RootDevStr)) {
@@ -752,6 +766,32 @@ GetSystemPathByPname (CHAR8 **SysPath, BOOLEAN MultiSlotBoot,
   DEBUG ((EFI_D_ERROR, "GetSystemPathByPname: System Path - %a \n", *SysPath));
 
   return AsciiStrLen (*SysPath);
+}
+
+STATIC
+EFI_STATUS
+GetCompleteDdrSize (UINT64 *DdrSizeRet)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  struct ddr_regions_data_info *DdrRegionsInfo = NULL;
+
+  DdrRegionsInfo = AllocateZeroPool (sizeof (struct ddr_regions_data_info));
+  if (DdrRegionsInfo == NULL)
+    return EFI_OUT_OF_RESOURCES;
+
+  Status = GetDDrRegionsInfo (DdrRegionsInfo);
+  if ((EFI_SUCCESS != Status) ||
+      (NULL == DdrRegionsInfo)) {
+    FreePool (DdrRegionsInfo);
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  *DdrSizeRet = DdrRegionsInfo->ddr_rank0_size +
+                DdrRegionsInfo->ddr_rank1_size;
+
+  FreePool(DdrRegionsInfo);
+
+  return Status;
 }
 
 STATIC
@@ -1378,6 +1418,329 @@ Update_PartialGoods_Bootconfig (UINT32 HeaderVersion,
   return EFI_SUCCESS;
 }
 #endif
+
+#if TARGET_BOARD_TYPE_AUTO
+/**
+ * UpdateOrAddBootConfigParam:
+ * For a single key=value pair: if the key already exists in
+ * BootConfigListHead, replaces its value in-place and adjusts
+ * BootConfigLen. If not found, appends as a new entry
+ */
+STATIC VOID
+UpdateOrAddBootConfigParam (
+  IN OUT LIST_ENTRY *BootConfigListHead,
+  IN OUT UINT32     *CmdLineLen,
+  IN OUT UINT32     *BootConfigLen,
+  IN     CONST CHAR8      *Key,
+  IN     UINT32      KeyLen,
+  IN     CONST CHAR8      *Val,
+  IN     UINT32      ValLen,
+  IN     UINT32      HeaderVersion
+  )
+{
+  LIST_ENTRY          *NodeLink    = NULL;
+  BootConfigParamNode *Entry       = NULL;
+  CHAR8               *NewParam    = NULL;
+  UINTN                NewParamLen = 0;
+  BOOLEAN              KeyFound    = FALSE;
+  BOOLEAN              BootConfigFlag = FALSE;
+  CHAR8               *EntryEq       = NULL;
+  UINT32               EntryKeyLen   = 0;
+  UINT32               OldLen        = 0;
+  UINT32               FullLen       = 0;
+  CHAR8               *FullParam     = NULL;
+  UINT32               FullParamLen  = 0;
+
+  if (BootConfigListHead == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateOrAddBootConfigParam: BootConfigListHead is NULL\n"));
+    return;
+  }
+
+  if (CmdLineLen == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateOrAddBootConfigParam: CmdLineLen is NULL\n"));
+    return;
+  }
+
+  if (BootConfigLen == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateOrAddBootConfigParam: BootConfigLen is NULL\n"));
+    return;
+  }
+
+  if (Key == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateOrAddBootConfigParam: Key is NULL\n"));
+    return;
+  }
+
+  if (Val == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateOrAddBootConfigParam: Val is NULL\n"));
+    return;
+  }
+
+  if (KeyLen == 0 || KeyLen >= DTB_BOOTCONFIG_KEY_MAX ||
+      ValLen >= DTB_BOOTCONFIG_KEY_MAX) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateOrAddBootConfigParam: KeyLen=%u ValLen=%u out of range\n",
+            KeyLen, ValLen));
+    return;
+  }
+
+  /* Search for existing node with this key and update if node already exists */
+  for (NodeLink = GetFirstNode (BootConfigListHead);
+       !IsNull (BootConfigListHead, NodeLink);
+       NodeLink = GetNextNode (BootConfigListHead, NodeLink)) {
+
+    Entry = BASE_CR (NodeLink, BootConfigParamNode, ListNode);
+    if (Entry->param == NULL) {
+      continue;
+    }
+
+    EntryEq = AsciiStrStr (Entry->param, "=");
+    if (!EntryEq) {
+      continue;
+    }
+
+    EntryKeyLen = (UINT32)(EntryEq - Entry->param);
+    if (EntryKeyLen == KeyLen &&
+        AsciiStrnCmp (Entry->param, Key, KeyLen) == 0) {
+
+      NewParamLen = (UINTN)KeyLen + 1u + (UINTN)ValLen + 1u;
+      NewParam = AllocateZeroPool (NewParamLen);
+      if (NewParam == NULL) {
+        DEBUG ((EFI_D_ERROR,
+                "UpdateOrAddBootConfigParam: AllocateZeroPool failed"
+                " for key=[%a]\n", Key));
+        return;
+      }
+
+      AsciiSPrint (NewParam, NewParamLen, "%a=%a", Key, Val);
+
+      DEBUG ((EFI_D_INFO,
+              "UpdateOrAddBootConfigParam: Overriding [%a] -> [%a]\n",
+              Entry->param, NewParam));
+
+      OldLen = Entry->ParamLen;
+      FreePool (Entry->param);
+      Entry->param    = NewParam;
+      Entry->ParamLen = (UINT32) AsciiStrLen (NewParam);
+
+      if (*BootConfigLen >= OldLen) {
+        *BootConfigLen -= OldLen;
+      } else {
+        DEBUG ((EFI_D_ERROR,
+                "UpdateOrAddBootConfigParam: BootConfigLen (%u) < OldLen (%u)"
+                " for key=[%a]; counter corruption, clamping to zero\n",
+                *BootConfigLen, OldLen, Key));
+        *BootConfigLen = 0;
+      }
+      *BootConfigLen += Entry->ParamLen;
+
+      if (*CmdLineLen >= OldLen) {
+        *CmdLineLen -= OldLen;
+      } else {
+        DEBUG ((EFI_D_ERROR,
+                "UpdateOrAddBootConfigParam: CmdLineLen (%u) < OldLen (%u)"
+                " for key=[%a]; counter corruption, clamping to zero\n",
+                *CmdLineLen, OldLen, Key));
+        *CmdLineLen = 0;
+      }
+      *CmdLineLen += Entry->ParamLen;
+
+      KeyFound = TRUE;
+      break;
+    }
+  }
+
+  /* Key not found — append as new entry*/
+  if (!KeyFound) {
+    BootConfigFlag = IsAndroidBootParam (Key, KeyLen, HeaderVersion);
+    if (!BootConfigFlag) {
+      DEBUG ((EFI_D_ERROR,
+              "UpdateOrAddBootConfigParam: key=[%a] is not androidboot.*,"
+              " skipping DTB entry\n", Key));
+      return;
+    }
+
+    FullLen = KeyLen + 1u + ValLen + 1u;
+    FullParam    = AllocateZeroPool (FullLen);
+    if (FullParam == NULL) {
+      DEBUG ((EFI_D_ERROR,
+              "UpdateOrAddBootConfigParam: AllocateZeroPool failed"
+              " for key=[%a]\n", Key));
+      return;
+    }
+    AsciiSPrint (FullParam, FullLen, "%a=%a", Key, Val);
+    FullParamLen = FullLen - 1;
+
+    ADD_PARAM_LEN (BootConfigFlag, KeyLen + 1, *CmdLineLen, *BootConfigLen);
+    ADD_PARAM_LEN (BootConfigFlag, ValLen,     *CmdLineLen, *BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, FullParam, NULL,
+                         BootConfigListHead, FullParamLen, 0);
+
+    DEBUG ((EFI_D_INFO,
+            "UpdateOrAddBootConfigParam: Appended [%a]\n", FullParam));
+
+    FreePool (FullParam);
+    FullParam = NULL;
+  }
+}
+
+/**
+ * UpdateDtbBootconfig:
+ * Reads chosen->bootconfig from the DTB and for each key=value pair:
+ *   - If the key already exists in BootConfigListHead: overrides its value
+ *   - If the key is new: appends it via IsAndroidBootParam + AddtoBootConfigList
+ */
+STATIC VOID
+UpdateDtbBootconfig (
+  IN     VOID       *fdt,
+  IN OUT LIST_ENTRY *BootConfigListHead,
+  IN OUT UINT32     *CmdLineLen,
+  IN OUT UINT32     *BootConfigLen,
+  IN     UINT32      HeaderVersion
+  )
+{
+  INT32        ChosenOffset   = -1;
+  INT32        BcPropLen      = 0;
+  CONST struct fdt_property *BcProp = NULL;
+  CHAR8       *BcCopy         = NULL;
+  CHAR8       *Line           = NULL;
+  CHAR8       *NextLine       = NULL;
+  CHAR8       *EqSign         = NULL;
+  CHAR8        Key[DTB_BOOTCONFIG_KEY_MAX];
+  CHAR8       *Val            = NULL;
+  UINTN        KeyLen         = 0;
+  UINTN        ValLen         = 0;
+  UINTN        LineLen        = 0;
+
+  if (fdt == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateDtbBootconfig: fdt is NULL,"
+            " skipping DTB bootconfig update\n"));
+    return;
+  }
+
+  if (BootConfigListHead == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateDtbBootconfig: BootConfigListHead is NULL,"
+            " skipping DTB bootconfig update\n"));
+    return;
+  }
+
+  if (CmdLineLen == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateDtbBootconfig: CmdLineLen is NULL,"
+            " skipping DTB bootconfig update\n"));
+    return;
+  }
+
+  if (BootConfigLen == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateDtbBootconfig: BootConfigLen is NULL,"
+            " skipping DTB bootconfig update\n"));
+    return;
+  }
+
+  DEBUG ((EFI_D_INFO,
+          "UpdateDtbBootconfig: Checking DTB chosen->bootconfig"
+          " for overrides\n"));
+
+  ChosenOffset = fdt_path_offset (fdt, "/chosen");
+  if (ChosenOffset < 0) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateDtbBootconfig: /chosen not found in DTB (err=%d),"
+            " skipping\n", ChosenOffset));
+    return;
+  }
+
+  BcProp = fdt_get_property (fdt, ChosenOffset, "bootconfig", &BcPropLen);
+  if (BcProp == NULL || BcPropLen <= 0) {
+    DEBUG ((EFI_D_INFO,
+            "UpdateDtbBootconfig: No bootconfig property in /chosen,"
+            " skipping DTB overrides\n"));
+    return;
+  }
+
+  if (BcPropLen > DTB_BOOTCONFIG_MAX_LEN) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateDtbBootconfig: DTB bootconfig too large (%d bytes),"
+            " rejecting\n", BcPropLen));
+    return;
+  }
+
+  BcCopy = AllocateZeroPool (BcPropLen + 1);
+  if (BcCopy == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "UpdateDtbBootconfig: Failed to allocate memory"
+            " for DTB bootconfig copy\n"));
+    return;
+  }
+
+  gBS->CopyMem (BcCopy, (VOID *)BcProp->data, BcPropLen);
+  BcCopy[BcPropLen] = '\0';
+
+  Line = BcCopy;
+  while (Line && *Line != '\0') {
+
+    LineLen  = AsciiStrLen (Line);
+    NextLine = (Line + LineLen + 1 < BcCopy + (UINTN)BcPropLen)
+              ? Line + LineLen + 1
+              : NULL;
+
+    if (LineLen == 0) {
+      Line = NextLine;
+      continue;
+    }
+
+    EqSign = AsciiStrStr (Line, "=");
+    if (!EqSign) {
+      DEBUG ((EFI_D_WARN,
+              "UpdateDtbBootconfig: No '=' in line [%a], skipping\n",
+              Line));
+      Line = NextLine;
+      continue;
+    }
+
+    KeyLen = EqSign - Line;
+    if (KeyLen == 0 || KeyLen >= sizeof (Key)) {
+      DEBUG ((EFI_D_ERROR,
+              "UpdateDtbBootconfig: Invalid key length %u, skipping\n",
+              (UINT32)KeyLen));
+      Line = NextLine;
+      continue;
+    }
+
+    gBS->CopyMem (Key, Line, KeyLen);
+    Key[KeyLen] = '\0';
+
+    Val    = EqSign + 1;
+    ValLen = AsciiStrLen (Val);
+    if (ValLen >= DTB_BOOTCONFIG_KEY_MAX) {
+      DEBUG ((EFI_D_ERROR,
+              "UpdateDtbBootconfig: Val too long (%u bytes), skipping\n",
+              (UINT32)ValLen));
+      Line = NextLine;
+      continue;
+    }
+
+    UpdateOrAddBootConfigParam (BootConfigListHead,
+                                CmdLineLen, BootConfigLen,
+                                Key, (UINT32)KeyLen,
+                                Val, (UINT32)ValLen,
+                                HeaderVersion);
+
+    Line = NextLine;
+  } /* end while */
+
+  FreePool (BcCopy);
+  BcCopy = NULL;
+}
+#endif/*if TARGET_BOARD_TYPE_AUTO*/
+
 /*Update command line: appends boot information to the original commandline
  *that is taken from boot image header*/
 EFI_STATUS
@@ -1416,6 +1779,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 MemOffAmt[MEM_OFF_SIZE];
   BOOLEAN BootConfigFlag = FALSE;
   CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
+  CHAR8 DdrSizeStr[MAX_DDR_SIZE_STR] = "\0";
+  UINT64 FullDdrSize = 0;
 
   CONST CHAR8 *CmdLine = BootParamlistPtr->CmdLine;
   CHAR8 **FinalCmdLine = &BootParamlistPtr->FinalCmdLine;
@@ -1817,6 +2182,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
   if (!AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) {
     Param.FstabSuffix = FstabSuffixEmmc;
+  } else if (!AsciiStriCmp (FstabSuffixNvme, RootDevStr)) {
+    Param.FstabSuffix = FstabSuffixNvme;
   } else {
     Param.FstabSuffix = FstabSuffixDefault;
   }
@@ -1828,6 +2195,19 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (Param.FstabSuffix),
                  CmdLineLen,
                  BootConfigLen);
+
+  Status = GetCompleteDdrSize(&FullDdrSize);
+  if (Status == EFI_SUCCESS) {
+    AsciiSPrint (DdrSizeStr, sizeof(DdrSizeStr),
+                 "%a%dMB", AndroidBootDdrSize, FullDdrSize);
+    ParamLen = AsciiStrLen (DdrSizeStr);
+    BootConfigFlag = IsAndroidBootParam (DdrSizeStr, ParamLen,
+                                         HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                   CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, DdrSizeStr, NULL,
+                         BootConfigListHead, ParamLen, 0);
+  }
 
   Status = GetMemoryLimit (fdt, MemOffAmt);
   /* Don't override "mem" argument if coded into boot image */
@@ -1939,11 +2319,28 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
     Param.BootCpuCmdLine = BootCpuCmdLine;
   }
 
+#if TARGET_BOARD_TYPE_AUTO
+  /* Add bootconfig params from DTB chosen->bootconfig.
+   * Only applicable for boot header v4+ where bootconfig is used.
+   * Uses the same IsAndroidBootParam + AddtoBootConfigList pattern
+   * as all other params in this function.
+   */
+  if (HeaderVersion > BOOT_HEADER_VERSION_THREE) {
+    UpdateDtbBootconfig (fdt, BootConfigListHead,
+                         &CmdLineLen, &BootConfigLen, HeaderVersion);
+  } else {
+    DEBUG ((EFI_D_VERBOSE,
+            "UpdateCmdLine: Skipping DTB bootconfig update,"
+            " HeaderVersion %d <= BOOT_HEADER_VERSION_THREE,"
+            " bootconfig not supported\n", HeaderVersion));
+  }
+#endif/*if TARGET_BOARD_TYPE_AUTO*/
+
   /* 1 extra byte for NULL */
   CmdLineLen += 1;
 
   if (IsHibernationEnabled ()) {
-    CmdLineLen += GetResumeCmdLine (&ResumeCmdLine, 
+    CmdLineLen += GetResumeCmdLine (&ResumeCmdLine,
                     (CHAR16 *)SWAP_PARTITION_NAME);
   }
 

@@ -66,6 +66,20 @@ struct PartialGoodsWithLabel {
   struct LabelStruct LabelRef; /* Labels list */
 };
 
+struct PartialGoodsDelNode {
+  UINT32      Val;       /* Value for the subset */
+  CONST CHAR8 *NodePath; /* Full absolute path of node to delete */
+};
+
+struct PgHit {
+  CONST CHAR8 *ParentPath; /* parent node path, e.g. "/soc" or "/cpus"     */
+  CONST CHAR8 *NodeName;   /* table base name, e.g. "qcom,kgsl-3d0"        */
+  CONST CHAR8 *PropName;   /* property to set, e.g. "status"               */
+  CONST CHAR8 *Val;        /* replacement value, e.g. "no"                 */
+  UINT32       TableVal;   /* entry's defect bits (for the wlan special case)*/
+  INT32        Offset;     /* resolved node offset, -1 until phase 1 finds it*/
+};
+
  STATIC CONST char *ChipInfoPartTypeStr[] = {
   [EFICHIPINFO_PART_UNKNOWN]   = "unknown",
   [EFICHIPINFO_PART_GPU]       = "gpu",
@@ -92,6 +106,12 @@ struct PartialGoodsWithLabel {
 
 EFI_STATUS
 UpdatePartialGoodsNode (VOID *fdt);
+
+EFI_STATUS
+GetPartialGoodsMMValue (VOID);
+
+BOOLEAN
+IsNodeMarkedForDeletion (CONST CHAR8 *NodePath);
 
 EFI_STATUS
 ReadMMPartialGoods (EFI_CHIPINFO_PROTOCOL *pChipInfoProtocol, UINT32 *Value);
