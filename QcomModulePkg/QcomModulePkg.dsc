@@ -271,6 +271,9 @@
   !if $(EXCLUSIVE_SME_MTE)
       GCC:*_*_*_CC_FLAGS = -DEXCLUSIVE_SME_MTE
   !endif
+  !if $(SKIP_ORANGE_WAIT) == 1
+      GCC:*_*_*_CC_FLAGS = -DSKIP_ORANGE_WAIT
+  !endif
 
 
 [PcdsFixedAtBuild.common]
