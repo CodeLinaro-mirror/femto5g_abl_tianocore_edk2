@@ -20,15 +20,16 @@
 STATIC Object gAppObj = Object_NULL;
 
 /**
-  Load the FSP TA from the pkcs11 (or pkcs11_b) partition via QSEECom.
+  Load the FSP TA from the pkcs11, pkcs11_b, or fspapp partition via QSEECom.
 
-  It locates the QSEECom protocol and calls QseecomStartApp, falling back to the "_b" slot
-  on failure.
+  It locates the QSEECom protocol and tries each partition in order,
+  returning as soon as one loads the TA successfully.
 
   @retval EFI_SUCCESS           TA loaded successfully.
   @retval EFI_NOT_FOUND         QSEECom protocol not present in the system.
   @retval EFI_PROTOCOL_ERROR    Protocol pointer or function pointer is NULL.
-  @retval Other                 Error returned by QseecomStartApp.
+  @retval Other                 Error returned by QseecomStartApp for the
+                                 last partition slot attempted.
 **/
 STATIC
 EFI_STATUS
@@ -36,9 +37,15 @@ FspLoadApp (
   VOID
   )
 {
+  STATIC CHAR8 *CONST PartitionNames[] = {
+    "pkcs11",
+    "pkcs11_b",
+    "fspapp"
+  };
   EFI_STATUS             Status          = EFI_DEVICE_ERROR;
   QCOM_QSEECOM_PROTOCOL *QseeComProtocol = NULL;
   UINT32                 AppId           = 0;
+  UINTN                  Index           = 0;
 
   Status = gBS->LocateProtocol (
                   &gQcomQseecomProtocolGuid,
@@ -58,28 +65,23 @@ FspLoadApp (
     return EFI_PROTOCOL_ERROR;
   }
 
-  /* Attempt primary partition slot */
-  Status = QseeComProtocol->QseecomStartApp (
-                              QseeComProtocol,
-                              "pkcs11",
-                              &AppId
-                              );
-  if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR,
-            "FspLoadApp: Could not load from pkcs11 partition: %r\n", Status));
-
-    /* Fallback to the _b slot */
+  for (Index = 0; Index < ARRAY_SIZE (PartitionNames); Index++) {
     Status = QseeComProtocol->QseecomStartApp (
                                 QseeComProtocol,
-                                "pkcs11_b",
+                                PartitionNames[Index],
                                 &AppId
                                 );
-    if (EFI_ERROR (Status)) {
-      DEBUG ((EFI_D_ERROR,
-              "FspLoadApp: Could not load from pkcs11_b partition: %r\n",
-              Status));
+    if (!EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_INFO,
+              "FspLoadApp: Loaded FSP TA from %a partition\n",
+              PartitionNames[Index]));
+      return EFI_SUCCESS;
     }
   }
+
+  DEBUG ((EFI_D_ERROR,
+          "FspLoadApp: Could not load FSP TA from pkcs11, pkcs11_b, or "
+          "fspapp partition: %r\n", Status));
 
   return Status;
 }
