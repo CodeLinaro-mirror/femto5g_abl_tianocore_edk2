@@ -198,14 +198,18 @@ GetStorageHandle (INT32 Lun, HandleInfo *BlockIoHandle, UINT32 *MaxHandles)
     HandleFilter.RootDeviceType = &gEfiEmmcUserPartitionGuid;
     Status =
         GetBlkIOHandles (Attribs, &HandleFilter, BlockIoHandle, MaxHandles);
-    if (EFI_ERROR (Status)) {
+    if (EFI_ERROR (Status) ||
+        *MaxHandles == 0) {
+      Attribs = 0;
+      Attribs |= BLK_IO_SEL_MATCH_ROOT_DEVICE;
       HandleFilter.RootDeviceType = &gEfiNvme0Guid;
       Status =
         GetBlkIOHandles (Attribs, &HandleFilter, BlockIoHandle, MaxHandles);
-      if (EFI_ERROR (Status)) {
+      if (EFI_ERROR (Status) ||
+         *MaxHandles == 0) {
         DEBUG ((EFI_D_ERROR,
-               "Error getting block IO handle for Emmc and Nvme\n"));
-        return Status;
+               "Error getting block IO handle for Emmc and Nvme: %r\n", Status));
+        return EFI_NOT_FOUND;
       }
     }
   } else {
