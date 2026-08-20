@@ -106,6 +106,12 @@ typedef enum {
 
 #define PARTITION_ENTRY_SIZE 128
 #define PART_ATT_READONLY_OFFSET 60
+
+/* misc_boot cookie*/
+#define A_BOOT_RECOVERY 0xAA
+#define B_BOOT_RECOVERY 0xBB
+#define AB_BOOT_RECOVERY 0xAB
+
 /*
 The attributes like Priority, Active bit,
 Max retry count, Success bit and Unabootable bits will be
@@ -121,7 +127,11 @@ table in the respective position mentioned below.
 
 #define PART_ATT_PRIORITY_VAL ((UINT64)0x3 << PART_ATT_PRIORITY_BIT)
 #define PART_ATT_ACTIVE_VAL ((UINT64)0x1 << PART_ATT_ACTIVE_BIT)
+#ifdef ENABLE_FASTBOOT_IF_LOADAUTH_FAIL
+#define PART_ATT_MAX_RETRY_COUNT_VAL ((UINT64)0x3 << PART_ATT_MAX_RETRY_CNT_BIT)
+#else
 #define PART_ATT_MAX_RETRY_COUNT_VAL ((UINT64)0x7 << PART_ATT_MAX_RETRY_CNT_BIT)
+#endif
 #define PART_ATT_SUCCESSFUL_VAL ((UINT64)0x1 << PART_ATT_SUCCESS_BIT)
 #define PART_ATT_UNBOOTABLE_VAL ((UINT64)0x1 << PART_ATT_UNBOOTABLE_BIT)
 #define MAX_PRIORITY 3
@@ -231,6 +241,12 @@ EFI_STATUS
 FindBootableSlot (Slot *BootableSlot);
 BOOLEAN
 IsSuffixEmpty (Slot *CheckSlot);
+#ifdef ENABLE_FASTBOOT_IF_LOADAUTH_FAIL
+BOOLEAN
+HandleCurrentSlotAttribute (VOID);
+BOOLEAN
+IsExistBootablePartition (VOID);
+#endif
 EFI_STATUS
 SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit);
 BOOLEAN IsCurrentSlotBootable (VOID);

@@ -374,7 +374,7 @@ GetSWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
   BccInputValues.config_descriptor_size = BccEncodedConfigDescValidSize;
   BccInputValues.mode = BccRoot.Mode;
 
-#ifndef USE_OPENDICE_UDS_DERIVATION
+#ifndef USE_RKP_ALIGNED_UDS_DERIVATION
   //---------------------------------------------------------------------
   // Non-degenerate DICE: derive NextCDIAttest from UDS + BccInputValues
   //---------------------------------------------------------------------
@@ -396,14 +396,14 @@ GetSWBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
   CborWriteMap (2, &Out);
 
   CborWriteInt (KCdiAttestLabel, &Out);
-#ifdef USE_OPENDICE_UDS_DERIVATION
+#ifdef USE_RKP_ALIGNED_UDS_DERIVATION
   CborWriteBstr (DICE_CDI_SIZE, BccRoot.Uds, &Out);  /* degenerate: UDS as CDI_Attest */
 #else
   CborWriteBstr (DICE_CDI_SIZE, BccCDIsOnly.NextCDIAttest, &Out);
 #endif
 
   CborWriteInt (KCdiSealLabel, &Out);
-#ifdef USE_OPENDICE_UDS_DERIVATION
+#ifdef USE_RKP_ALIGNED_UDS_DERIVATION
   CborWriteBstr (DICE_CDI_SIZE, BccRoot.Uds, &Out);  /* degenerate: UDS as CDI_Seal */
 #else
   CborWriteBstr (DICE_CDI_SIZE, BccCDIsOnly.NextCDISeal, &Out);
