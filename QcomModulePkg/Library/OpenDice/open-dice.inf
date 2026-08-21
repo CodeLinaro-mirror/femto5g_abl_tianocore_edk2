@@ -25,6 +25,7 @@
 	open-dice/src/dice.c
 	open-dice/src/utils.c
 	boringssl/src/crypto/fipsmodule/sha/sha512.c
+	boringssl/src/crypto/fipsmodule/sha/sha256.c
 	boringssl/src/crypto/hkdf/hkdf.c
 	boringssl/src/crypto/fipsmodule/hmac/hmac.c
 	boringssl/src/crypto/fipsmodule/digest/digest.c

@@ -233,4 +233,10 @@ STATIC inline CHAR8* GetAudioFw (VOID)
 }
 #endif
 
+EFI_STATUS DetectSDCardAndMountFAT(VOID);
+
+BOOLEAN IsSdCardPresent(VOID);
+
+VOID DisableSdCard(VOID);
+
 #endif

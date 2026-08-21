@@ -1,7 +1,6 @@
 /*
- * Changes from Qualcomm Technologies, Inc. are provided under the following license:
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
- * All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "AvbPopulateBccParams.h"
@@ -11,7 +10,7 @@
 STATIC void
 SetDummyBccParams (BccParams_t *bcc_params)
 {
-#ifndef USE_OPENDICE_UDS_DERIVATION
+#ifndef USE_RKP_ALIGNED_UDS_DERIVATION
     avb_memset ((void *)bcc_params, 0, sizeof (*bcc_params));
     DEBUG ((EFI_D_INFO, "VB: Setting Dummy DICE params\n"));
 #endif
