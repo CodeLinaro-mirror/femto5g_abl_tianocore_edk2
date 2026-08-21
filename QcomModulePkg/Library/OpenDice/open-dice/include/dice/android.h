@@ -12,9 +12,9 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Changes from Qualcomm Technologies, Inc. are provided under the
+// following license:
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #ifndef DICE_ANDROID_H_
@@ -34,6 +34,16 @@ extern "C" {
 #define DICE_ANDROID_CONFIG_SECURITY_VERSION (1 << 3)
 #define DICE_ANDROID_CONFIG_RKP_VM_MARKER (1 << 4)
 
+// Added to support the SDV DICE profile
+#define DICE_ANDROID_CONFIG_COMPONENT_INSTANCE_NAME (1 << 5)
+#define DICE_ANDROID_CONFIG_VERIFIED_BOOT_STATE (1 << 6)
+#define DICE_ANDROID_CONFIG_BUILD_FINGERPRINT (1 << 7)
+#define DICE_ANDROID_CONFIG_SYSTEM_EXT_SECURITY_VERSION (1 << 8)
+#define DICE_ANDROID_CONFIG_PRODUCT_SECURITY_VERSION (1 << 9)
+#define DICE_ANDROID_CONFIG_VENDOR_SECURITY_VERSION (1 << 10)
+#define DICE_ANDROID_CONFIG_BOOT_SECURITY_VERSION (1 << 11)
+#define DICE_ANDROID_CONFIG_SDV_BOOT_MODE  (1 << 12)
+
 // Contains the input values used to construct the Android Profile for DICE
 // configuration descriptor. The fields to include in the configuration
 // descriptor are selected in the |configs| bitfield.
@@ -48,6 +58,15 @@ typedef struct DiceAndroidConfigValues_ {
   const char* component_name;
   uint64_t component_version;
   uint64_t security_version;
+  // Added to support the SDV DICE profile
+  const char* component_instance_name;
+  const char* verified_boot_state;
+  const char* build_fingerprint;
+  uint64_t system_ext_security_version;
+  uint64_t product_security_version;
+  uint64_t vendor_security_version;
+  uint64_t boot_security_version;
+  const char* sdv_boot_mode;
 } DiceAndroidConfigValues;
 
 // Formats a configuration descriptor following the Android Profile for DICE
