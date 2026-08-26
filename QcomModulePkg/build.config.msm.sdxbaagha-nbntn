@@ -1,5 +1,5 @@
 ################################################################################
-MSM_ARCH=sdxpinn-rdkb-v1
-ENABLE_FSP_WRAP_KEY_FEATURE=1
+MSM_ARCH=sdxbaagha-nbntn
+
 ################################################################################
-. ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxpinn.common
+. ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxbaagha.common
