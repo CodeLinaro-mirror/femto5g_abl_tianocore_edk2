@@ -82,6 +82,9 @@ fi
 if [ -n "${VERITY_LE}" ]; then
   MAKE_FLAGS+=("VERITY_LE=${VERITY_LE}")
 fi
+if [ -n "${VERITY_USE_DM_MOD_CREATE}" ]; then
+  MAKE_FLAGS+=("VERITY_USE_DM_MOD_CREATE=${VERITY_USE_DM_MOD_CREATE}")
+fi
 if [ -n "${WEAR_OS}" ]; then
   MAKE_FLAGS+=("WEAR_OS=${WEAR_OS}")
 fi
