@@ -2243,6 +2243,15 @@ CmdSetActive (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
     return;
   }
 
+ /* Mirror the active-slot commit onto SPINOR */
+  if (SpinorSlotSyncEnabled ()) {
+    EFI_STATUS SpinorStatus = SetSpinorActiveSlot (&NewSlot);
+    if (EFI_ERROR (SpinorStatus)) {
+      DEBUG ((EFI_D_ERROR,
+              "set_active: SPINOR slot sync failed: %r (UFS commit kept)\n",
+              SpinorStatus));
+    }
+  }
   // Updating fbvar `current-slot'
   UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix, CurrentSlotFB);
 
