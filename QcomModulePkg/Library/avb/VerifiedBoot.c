@@ -1360,6 +1360,7 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   UINTN RecoveryImageSize = 0;
   KMRotAndBootState Data = {0};
   boot_img_hdr *BootImgHdr = NULL;
+  VOID *ImageHdrBuffer = NULL;
   AvbSlotVerifyFlags VerifyFlags =
       AllowVerificationError ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
                              : AVB_SLOT_VERIFY_FLAGS_NONE;
@@ -1488,7 +1489,6 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
     }
   } else {
     Slot CurrentSlot = {{0}};
-    VOID *ImageHdrBuffer = NULL;
     UINT32 ImageHdrSize = 0;
 
     if (!Info->Images[IMG_BOOT].ImageBuffer) {
@@ -1514,8 +1514,10 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
     DEBUG ((EFI_D_VERBOSE, "Header version  %d\n", Info->HeaderVersion));
 
     if (!Info->NumLoadedImages) {
-      AddRequestedPartition (RequestedPartitionAll, IMG_BOOT);
-      NumRequestedPartition += 1;
+      if (!HibernationResume) {
+        AddRequestedPartition (RequestedPartitionAll, IMG_BOOT);
+        NumRequestedPartition += 1;
+      }
     }
 
     if (!HibernationResume) {
@@ -1531,13 +1533,14 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
      * 1. In Case of header version 3
      * 2. valid partititon.
      */
-
-    if (IsValidPartition (&CurrentSlot, L"vendor_boot") &&
-       Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
-      AddRequestedPartition (RequestedPartitionAll, IMG_VENDOR_BOOT);
-      NumRequestedPartition += 1;
-    } else {
-      DEBUG ((EFI_D_VERBOSE, "Invalid vendor_boot partition. Skipping\n"));
+    if (!HibernationResume) {
+      if (IsValidPartition (&CurrentSlot, L"vendor_boot") &&
+          Info->HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
+          AddRequestedPartition (RequestedPartitionAll, IMG_VENDOR_BOOT);
+          NumRequestedPartition += 1;
+      } else {
+          DEBUG ((EFI_D_VERBOSE, "Invalid vendor_boot partition. Skipping\n"));
+      }
     }
 
     if (Info->BootIntoRecovery &&
@@ -1672,41 +1675,53 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   VBData->Ops = Ops;
   VBData->SlotData = SlotData;
   Info->VBData = (VOID *)VBData;
-
-  GUARD_OUT (GetImage (Info, &ImageBuffer, &ImageSize,
-                    ( (!Info->MultiSlotBoot ||
-                     IsDynamicPartitionSupport ()) &&
-                     (Info->BootIntoRecovery &&
-                     !IsBuildUseRecoveryAsBoot () &&
-                     !IsRecoveryHasNoKernel ())) ?
-                     "recovery" : "boot"));
-
-  if (ImageSize < sizeof (boot_img_hdr)) {
-    DEBUG ((EFI_D_ERROR, "Invalid boot image header size: %u\n", ImageSize));
-    Status = EFI_BAD_BUFFER_SIZE;
-    goto out;
-  }
-
-  BootImgHdr = (boot_img_hdr *)ImageBuffer;
-
-  if (BootImgHdr->header_version >= BOOT_HEADER_VERSION_THREE) {
-    GUARD_OUT (GetImage (Info, &VendorBootImageBuffer,
-                         &VendorBootImageSize, "vendor_boot"));
-
-  if (Info->BootIntoRecovery &&
-      IsRecoveryHasNoKernel ()) {
-      GUARD_OUT (GetImage (Info, &RecoveryImageBuffer, &RecoveryImageSize,
-                           "recovery"));
+  if (!HibernationResume) {
+    GUARD_OUT (GetImage (Info, &ImageBuffer, &ImageSize,
+                      ( (!Info->MultiSlotBoot ||
+                       IsDynamicPartitionSupport ()) &&
+                       (Info->BootIntoRecovery &&
+                       !IsBuildUseRecoveryAsBoot () &&
+                       !IsRecoveryHasNoKernel ())) ?
+                       "recovery" : "boot"));
+    if (ImageSize < sizeof (boot_img_hdr)) {
+      DEBUG ((EFI_D_ERROR, "Invalid boot image header size: %u\n", ImageSize));
+      Status = EFI_BAD_BUFFER_SIZE;
+      goto out;
     }
+
+    BootImgHdr = (boot_img_hdr *)ImageBuffer;
+  }
+  else {
+    /* in case of hiberantion resume */
+    if (ImageHdrBuffer ==  NULL) {
+      DEBUG ((EFI_D_ERROR, "ERROR: Failed to get image header\n"));
+      Info->BootState = RED;
+      goto out;
+    }
+
+    BootImgHdr = (boot_img_hdr *)ImageHdrBuffer;
   }
 
-  Status = CheckImageHeader (ImageBuffer, ImageHdrSize,
-                             VendorBootImageBuffer, VendorBootImageSize,
-                             &ImageSizeActual, &PageSize,
-                             Info->BootIntoRecovery, RecoveryImageBuffer);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Invalid boot image header:%r\n", Status));
-    goto out;
+  if (!HibernationResume) {
+    if (BootImgHdr->header_version >= BOOT_HEADER_VERSION_THREE) {
+      GUARD_OUT (GetImage (Info, &VendorBootImageBuffer,
+                           &VendorBootImageSize, "vendor_boot"));
+
+    if (Info->BootIntoRecovery &&
+        IsRecoveryHasNoKernel ()) {
+        GUARD_OUT (GetImage (Info, &RecoveryImageBuffer, &RecoveryImageSize,
+                             "recovery"));
+      }
+    }
+
+    Status = CheckImageHeader (ImageBuffer, ImageHdrSize,
+                               VendorBootImageBuffer, VendorBootImageSize,
+                               &ImageSizeActual, &PageSize,
+                               Info->BootIntoRecovery, RecoveryImageBuffer);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Invalid boot image header:%r\n", Status));
+      goto out;
+    }
   }
 
   if (AllowVerificationError) {
