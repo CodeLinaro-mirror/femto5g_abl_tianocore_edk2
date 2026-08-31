@@ -27,39 +27,9 @@
 */
 
 /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 /* Supporting function of UpdateDeviceTree()
@@ -83,7 +53,7 @@
 #define NUM_SPLASHMEM_PROP_ELEM 4
 #define DEFAULT_CELL_SIZE 2
 #define NUM_RNG_SEED_WORDS 512
-#define NUM_RAMDUMP_PROP_ELEM   2
+#define NUM_RAMDUMP_PROP_ELEM   4
 
 STATIC struct FstabNode FstabTable = {"/firmware/android/fstab", "dev",
                                       "/soc/"};
@@ -198,6 +168,7 @@ UpdateRamDumpMemInfo (VOID *fdt)
   INT32 PropLen = 0;
   INT32 Ret     = 0;
   INT32 OffSet  = 0;
+  CHAR8 *tmp    = NULL;
   UINT32 CONST RamdumpMemPropSize = NUM_RAMDUMP_PROP_ELEM * sizeof (UINT32);
 
   /* Ramdump address same as splash */
@@ -225,8 +196,8 @@ UpdateRamDumpMemInfo (VOID *fdt)
 
    /*
    * The format of the "reg" field is as follows:
-   *       <FBAddress FBSize>
-   * The expected size of this property is 2 * sizeof(UINT32)
+   *       <0x0 FBAddress 0x0 FBSize>
+   * The expected size of this property is 4 * sizeof(UINT32)
    */
   if (PropLen != RamdumpMemPropSize) {
     DEBUG (
@@ -241,8 +212,9 @@ UpdateRamDumpMemInfo (VOID *fdt)
     DEBUG ((EFI_D_ERROR, "ERROR: integer Overflow while updating FBAddress"));
     return EFI_BAD_BUFFER_SIZE;
   }
+  tmp = (CHAR8 *)Prop->data + sizeof (UINT32);
   splashBuf.uFrameAddr = cpu_to_fdt32 (splashBuf.uFrameAddr);
-  memcpy ((CHAR8 *)Prop->data, &splashBuf.uFrameAddr, sizeof (UINT32));
+  memcpy (tmp, &splashBuf.uFrameAddr, sizeof (UINT32));
 
   /* Update the property value in place */
   Ret = fdt_setprop_inplace (fdt, OffSet, "reg", Prop->data, PropLen);
