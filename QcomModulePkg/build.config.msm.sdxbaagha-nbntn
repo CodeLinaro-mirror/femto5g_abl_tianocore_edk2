@@ -1,6 +1,5 @@
 ################################################################################
-MSM_ARCH=sdxkova-512
-VERITY_LE=1
-VERITY_LE_ROOTHASH_SIGNED=1
+MSM_ARCH=sdxbaagha-nbntn
+
 ################################################################################
-. ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxkova.common
+. ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxbaagha.common

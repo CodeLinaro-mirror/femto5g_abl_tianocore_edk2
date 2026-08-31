@@ -27,39 +27,9 @@
  */
 
  /*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *      * Redistributions of source code must retain the above copyright
- *        notice, this list of conditions and the following disclaimer.
- *
- *      * Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials provided
- *        with the distribution.
- *
- *      * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *        contributors may be used to endorse or promote products derived
- *        from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "VerifiedBoot.h"
@@ -129,23 +99,7 @@ typedef struct {
 #if VERIFIED_BOOT_ENABLED
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
 {
-  UINT32 PtnCount;
-  INT32 PtnIdx;
-  INT32 PtnIdx_a;
-  GetPartitionCount (&PtnCount);
-  PtnIdx_a = GetPartitionIndex ((CHAR16 *)L"vbmeta_a");
-
-  if (PtnIdx_a < PtnCount &&
-      PtnIdx_a != INVALID_PTN) {
-      return TRUE;
-  } else {
-      PtnIdx = GetPartitionIndex ((CHAR16 *)L"vbmeta");
-      if (PtnIdx < PtnCount &&
-      PtnIdx != INVALID_PTN) {
-      return TRUE;
-    }
-  }
-  return FALSE;
+  return TRUE;
 }
 #else
 BOOLEAN Is_VERIFIED_BOOT_2 (VOID)
@@ -1156,7 +1110,7 @@ static BOOLEAN GetHeaderVersion (AvbSlotVerifyData *SlotData)
   UINTN LoadedIndex = 0;
   for (LoadedIndex = 0; LoadedIndex < SlotData->num_loaded_partitions;
          LoadedIndex++) {
-    if ((!SlotData->loaded_partitions[LoadedIndex].partition_name) && 
+    if ((!SlotData->loaded_partitions[LoadedIndex].partition_name) &&
       (avb_strcmp (SlotData->loaded_partitions[LoadedIndex].partition_name,
       "recovery") == 0))
       return ( (boot_img_hdr *)
@@ -1931,7 +1885,7 @@ DisplayVerifiedBootScreen (BootInfo *Info)
   return EFI_SUCCESS;
 }
 
-STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info, 
+STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                                          BOOLEAN HibernationResume,
                                          BOOLEAN SetRotAndBootState)
 {
@@ -2035,7 +1989,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
         ImgSize = Info->Images[0].ImageSize;
         ImgHash = AllocateZeroPool (HashSize);
         if (ImgHash == NULL) {
-            DEBUG ((EFI_D_ERROR, 
+            DEBUG ((EFI_D_ERROR,
                    "kernel image hash buffer allocation failed!\n"));
             Status = EFI_OUT_OF_RESOURCES;
             return Status;
@@ -2044,20 +1998,20 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                     (UINT8 *)Info->Images[0].ImageBuffer,
                     ImgSize, ImgHash, HashSize);
         if (Status != EFI_SUCCESS) {
-            DEBUG ((EFI_D_ERROR, 
+            DEBUG ((EFI_D_ERROR,
                    "VB: Error during VBGetImageHash: %r\n", Status));
             return Status;
         }
-    
+
         SigAddr = (UINT8 *)Info->Images[0].ImageBuffer + ImgSize;
         SigSize = LE_BOOTIMG_SIG_SIZE;
         Status = LEVerifyHashWithSignature (QcomAsn1X509Protocal, ImgHash,
         HashAlgorithm, &OemCert, SigAddr, SigSize);
-    
+
         if (Status != EFI_SUCCESS) {
             DEBUG ((EFI_D_ERROR, "VB: Error during "
                           "LEVBVerifyHashWithSignature: %r\n", Status));
-    
+
             /* There are build variants where boot image is not signed.
              * Below check allows the device to bootup even if the
              * authentication fails on a Non-secure device.
@@ -2068,19 +2022,20 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                 if (!TargetBuildVariantUser () ) {
                     DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
                                                         "debug builds\n"));
+                    Status = EFI_SUCCESS;
                     if (!SetRotAndBootState) {
                         if (KeymasterEnabled) {
                             Data.PublicKeyModLength = DUMMY_PUBLIC_KEY_MOD_LEN;
-                            Data.PublicKeyMod = 
+                            Data.PublicKeyMod =
                                 avb_calloc (DUMMY_PUBLIC_KEY_MOD_LEN);
                             Data.PublicKeyExpLength = DUMMY_PUBLIC_KEY_EXP_LEN;
-                            Data.PublicKeyExp = 
+                            Data.PublicKeyExp =
                                 avb_calloc (DUMMY_PUBLIC_KEY_EXP_LEN);
                             if (Data.PublicKeyMod != NULL &&
                                     Data.PublicKeyExp != NULL) {
                               Status = KeyMasterSetRotForLE (&Data);
                               if (Status != EFI_SUCCESS) {
-                                DEBUG ((EFI_D_ERROR, 
+                                DEBUG ((EFI_D_ERROR,
                                         "KeyMasterSetRotForLE failed %r\n",
                                         Status));
                                 return Status;
@@ -2111,7 +2066,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                 Data.PublicKeyExpLength = PublicExp.Len;
                 Status = KeyMasterSetRotForLE (&Data);
                 if (Status != EFI_SUCCESS) {
-                  DEBUG ((EFI_D_ERROR, 
+                  DEBUG ((EFI_D_ERROR,
                          "KeyMasterSetRotForLE failed %r\n", Status));
                   return Status;
                 }
@@ -2121,7 +2076,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
     }
     else
     {
-        DEBUG ((EFI_D_INFO, 
+        DEBUG ((EFI_D_INFO,
                 "VB: LoadImageAndAuthForLE for Hibernate complete!\n"));
     }
 
@@ -2264,7 +2219,7 @@ get_ptn_name:
     /* For RecoveryInfo skip _a suffix */
     if (IsRecoveryInfo () &&
         (!IsRecoveryInfoWithSlotA ()) &&
-        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) { 
+        (!StrCmp (CurrentSlot.Suffix , (CONST CHAR16 *)L"_a"))) {
       GUARD (StrnCpyS (Info->Pname, ARRAY_SIZE (Info->Pname), L"boot",
                          StrLen (L"boot")));
     }
@@ -2303,8 +2258,8 @@ get_ptn_name:
     Status = LoadImageAndAuthVB2 (Info, HibernationResume, SetRotAndBootState);
     break;
   case AVB_LE:
-    Status = LoadImageAndAuthForLE (Info, 
-                                    HibernationResume, 
+    Status = LoadImageAndAuthForLE (Info,
+                                    HibernationResume,
                                     SetRotAndBootState);
     break;
   default:
