@@ -52,6 +52,7 @@
 #include <Protocol/Print2.h>
 #include <Library/EarlyUsbInit.h>
 #include <Library/PartialGoods.h>
+#include <Library/Board.h>
 
 #include "AutoGen.h"
 #include "DeviceInfo.h"
@@ -145,6 +146,9 @@ STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
 STATIC CHAR8 *FstabSuffixDefault = "default";
+
+#define MAX_DDR_SIZE_STR 64
+STATIC CHAR8 *AndroidBootDdrSize = " androidboot.ddr_size=";
 
 /* Memory offline arguments */
 STATIC CHAR8 *MemOff = " mem=";
@@ -1283,6 +1287,8 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   CHAR8 MemOffAmt[MEM_OFF_SIZE];
   BOOLEAN BootConfigFlag = FALSE;
   CHAR8 UsbCompositionCmdline[COMPOSITION_CMDLINE_LEN]= "\0";
+  CHAR8 DdrSizeStr[MAX_DDR_SIZE_STR] = "\0";
+  UINT64 FullDdrSize = 0;
 
   CONST CHAR8 *CmdLine = BootParamlistPtr->CmdLine;
   CHAR8 **FinalCmdLine = &BootParamlistPtr->FinalCmdLine;
@@ -1632,6 +1638,22 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (Param.FstabSuffix),
                  CmdLineLen,
                  BootConfigLen);
+
+  Status = GetDdrSize (&FullDdrSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Error getting DDR size %r\n", Status));
+  } else {
+    AsciiSPrint (DdrSizeStr, sizeof(DdrSizeStr),
+                 "%a%LuMB", AndroidBootDdrSize,
+                 FullDdrSize / (1024ULL * 1024ULL));
+    ParamLen = AsciiStrLen (DdrSizeStr);
+    BootConfigFlag = IsAndroidBootParam (DdrSizeStr, ParamLen,
+                                         HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                   CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, DdrSizeStr, NULL,
+                         BootConfigListHead, ParamLen, 0);
+  }
 
   Status = GetMemoryLimit (fdt, MemOffAmt);
   /* Don't override "mem" argument if coded into boot image */
