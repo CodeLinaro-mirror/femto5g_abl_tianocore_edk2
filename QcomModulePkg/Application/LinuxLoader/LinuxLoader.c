@@ -270,6 +270,8 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     FindPtnActiveSlot ();
   }
 
+  DetectSDCardAndMountFAT();
+
   Status = GetKeyPress (&KeyPressed);
   if (Status == EFI_SUCCESS) {
     if (KeyPressed == SCAN_DOWN)
@@ -383,6 +385,23 @@ flashless_boot:
     DEBUG ((EFI_D_ERROR, "VM Hyp calls not present\n"));
   }
 
+  if (DetectSDCardAndMountFAT() == EFI_SUCCESS) {
+    BootInfo SdBootInfo = {0};
+    SdBootInfo.MultiSlotBoot = FALSE;
+    SdBootInfo.BootIntoRecovery = TRUE;
+
+    Status = LoadImageAndAuth (&SdBootInfo, FALSE, SetRotAndBootStateAndVBH
+#ifndef USE_DUMMY_BCC
+                               , &BccParamsRecvdFromAVB
+#endif
+                              );
+    if (Status == EFI_SUCCESS) {
+      BootLinux (&SdBootInfo);
+    }
+
+    DisableSdCard();
+  }
+
   if (BootIntoFastboot) {
       goto fastboot;
   }
@@ -403,7 +422,20 @@ flashless_boot:
                               );
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
+#ifdef ENABLE_FASTBOOT_IF_LOADAUTH_FAIL
+      if (!HandleCurrentSlotAttribute ()) {
+        goto fastboot;
+      }
+
+      if (IsExistBootablePartition () == TRUE) {
+        RebootDevice (BootReason);
+      }
+      else {
+        goto fastboot;
+      }
+#else
       goto fastboot;
+#endif
     }
 
     BootLinux (&Info);

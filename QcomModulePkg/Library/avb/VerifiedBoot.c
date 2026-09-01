@@ -706,6 +706,11 @@ LoadImageNoAuthWrapper (BootInfo *Info)
   GUARD (VBAllocateCmdLine (Info));
   GUARD (LoadImageNoAuth (Info));
 
+  if (IsSdCardPresent ()) {
+    GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
+    return Status;
+  }
+
    if (!IsDynamicPartitionSupport () &&
         !IsRootCmdLineUpdated (Info)) {
     SystemPathLen = GetSystemPath (&SystemPath,
@@ -776,6 +781,11 @@ LoadImageAndAuthVB1 (BootInfo *Info)
   Status = Info->VbIntf->VBSendRot (Info->VbIntf);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Error sending Rot : %r\n", Status));
+    return Status;
+  }
+
+  if (IsSdCardPresent ()) {
+    GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
     return Status;
   }
 
@@ -1990,11 +2000,26 @@ AuthQtvmDtboImg (BootInfo *Info)
   AvbOps *Ops = NULL;
   AvbOpsUserData *UserData = NULL;
   AvbSlotVerifyData *SlotData = NULL;
+  Slot CurrentSlot = {{0}};
   AvbHashtreeErrorMode VerityFlags =
       AVB_HASHTREE_ERROR_MODE_MANAGED_RESTART_AND_EIO;
   AvbSlotVerifyFlags VerifyFlags = AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION |
       (AllowVerificationError ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
                              : AVB_SLOT_VERIFY_FLAGS_NONE);
+
+  /* Check if qtvm_dtbo partition exists before attempting AVB verification.
+   * If the partition is absent (e.g. platforms without a qtvm_dtbo partition),
+   * skip verification gracefully instead of failing with ERROR_IO which would
+   * set BootState to RED and cause a boot failure.
+   */
+  if (Info->MultiSlotBoot) {
+    CurrentSlot = GetCurrentSlotSuffix ();
+  }
+  if (!IsValidPartition (&CurrentSlot, L"qtvm_dtbo")) {
+    DEBUG ((EFI_D_INFO, "No qtvm_dtbo partition found, "
+                        "skipping VB verification\n"));
+    return EFI_SUCCESS;
+  }
 
   UserData = avb_calloc (sizeof (AvbOpsUserData));
   if (UserData == NULL) {
@@ -2304,6 +2329,11 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     }
 
 skip_verification:
+    if (IsSdCardPresent()) {
+      GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
+      return Status;
+    }
+
     if (!IsRootCmdLineUpdated (Info)) {
         SystemPathLen = GetSystemPath (&SystemPath,
                                        Info->MultiSlotBoot,
