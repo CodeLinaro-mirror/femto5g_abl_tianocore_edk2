@@ -706,6 +706,11 @@ LoadImageNoAuthWrapper (BootInfo *Info)
   GUARD (VBAllocateCmdLine (Info));
   GUARD (LoadImageNoAuth (Info));
 
+  if (IsSdCardPresent ()) {
+    GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
+    return Status;
+  }
+
    if (!IsDynamicPartitionSupport () &&
         !IsRootCmdLineUpdated (Info)) {
     SystemPathLen = GetSystemPath (&SystemPath,
@@ -776,6 +781,11 @@ LoadImageAndAuthVB1 (BootInfo *Info)
   Status = Info->VbIntf->VBSendRot (Info->VbIntf);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Error sending Rot : %r\n", Status));
+    return Status;
+  }
+
+  if (IsSdCardPresent ()) {
+    GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
     return Status;
   }
 
@@ -1920,9 +1930,9 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   }
 
 #ifndef USE_DUMMY_BCC
-  if (Info->HasPvmFw) {
+  if (Info->HasPvmFw || Info->HasSdvDiceEnabled) {
     EFI_STATUS BccStatus = PopulateBccParams (SlotData,
-                                              Info->BootIntoRecovery,
+                                              Info,
                                               BccParams);
     if (BccStatus != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "VB2: PopulateBccParams failed with Status: %r\n",
@@ -2134,6 +2144,7 @@ DisplayVerifiedBootScreen (BootInfo *Info)
     if (FfbmStr[0] != '\0' && !TargetBuildVariantUser ()) {
       DEBUG ((EFI_D_VERBOSE, "Device will boot into FFBM mode\n"));
     } else {
+#ifndef SKIP_ORANGE_WAIT
       Status = DisplayVerifiedBootMenu (DISPLAY_MENU_ORANGE);
       if (Status == EFI_SUCCESS) {
         WaitForExitKeysDetection ();
@@ -2141,6 +2152,9 @@ DisplayVerifiedBootScreen (BootInfo *Info)
         DEBUG (
             (EFI_D_INFO, "Device is unlocked, Skipping boot verification\n"));
       }
+#else
+      DEBUG ((EFI_D_INFO, "SKIP_ORANGE_WAIT set, skipping orange wait\n"));
+#endif
     }
     break;
   default:
@@ -2319,6 +2333,11 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     }
 
 skip_verification:
+    if (IsSdCardPresent()) {
+      GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
+      return Status;
+    }
+
     if (!IsRootCmdLineUpdated (Info)) {
         SystemPathLen = GetSystemPath (&SystemPath,
                                        Info->MultiSlotBoot,
@@ -2411,6 +2430,15 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
 
   Info->HasPvmFw = false;
   Info->PvmFwRawSize = 0;
+
+  Info->HasSdvDiceEnabled = false;
+  Info->SdvDiceLeaf = false;
+#ifdef SDV_DICE_ENABLED
+  Info->HasSdvDiceEnabled = true;
+#endif
+#ifdef AUTO_VIRT_ABL
+  Info->SdvDiceLeaf = true;
+#endif
 
 #ifdef PVMFW_BCC
   /* Check for pvmfw partition */

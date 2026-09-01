@@ -31,6 +31,9 @@ fi
 if [ -n "${PVMFW_DUMMY_BCC_ENABLED}" ]; then
   MAKE_FLAGS+=("PVMFW_USE_DUMMY_BCC=-DUSE_DUMMY_BCC")
 fi
+if [ -n "${SDV_DICE_ENABLED}" ]; then
+  MAKE_FLAGS+=("SDV_DICE_ENABLED=${SDV_DICE_ENABLED}")
+fi
 if [ -n "${PVMFW_CONFIG_EXT}" ]; then
   MAKE_FLAGS+=("PVMFW_CONFIG_EXT=-DPVMFW_CONFIG_EXT")
 fi
@@ -160,4 +163,7 @@ if [ -n "${ENABLE_CHECK_MTE}" ]; then
 fi
 if [ -n "${EXCLUSIVE_SME_MTE}" ]; then
   MAKE_FLAGS+=("EXCLUSIVE_SME_MTE=${EXCLUSIVE_SME_MTE}")
+fi
+if [ -n "${SKIP_ORANGE_WAIT}" ]; then
+  MAKE_FLAGS+=("SKIP_ORANGE_WAIT=${SKIP_ORANGE_WAIT}")
 fi

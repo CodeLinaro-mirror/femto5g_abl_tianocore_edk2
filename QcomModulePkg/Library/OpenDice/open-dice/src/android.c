@@ -14,9 +14,9 @@
 
 // For more information on the Android Profile for DICE, see docs/android.md.
 
-// ​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Changes from Qualcomm Technologies, Inc. are provided under the
+// following license:
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #ifdef ENABLE_C_HEADER
@@ -48,6 +48,14 @@ DiceResult DiceAndroidFormatConfigDescriptor(
   static const int64_t kResettableLabel = -70004;
   static const int64_t kSecurityVersionLabel = -70005;
   static const int64_t kRkpVmMarkerLabel = -70006;
+  static const int64_t kComponentInstanceNameLabel = -70007;
+  static const int64_t kVerifiedBootStateLabel = -71000;
+  static const int64_t kBuildFingerprintLabel = -71001;
+  static const int64_t kSystemExtSecurityVersionLabel = -71002;
+  static const int64_t kProductSecurityVersionLabel = -71003;
+  static const int64_t kVendorSecurityVersionLabel = -71004;
+  static const int64_t kBootSecurityVersionLabel = -71005;
+  static const int64_t kSdvBootModeLabel = -71006;
 
   // AndroidConfigDescriptor = {
   //   ? -70002 : tstr,     ; Component name
@@ -78,6 +86,43 @@ DiceResult DiceAndroidFormatConfigDescriptor(
     CborWriteInt(kRkpVmMarkerLabel, &out);
     CborWriteNull(&out);
   }
+  if (config_values->configs & DICE_ANDROID_CONFIG_COMPONENT_INSTANCE_NAME &&
+      config_values->component_instance_name) {
+    CborWriteInt(kComponentInstanceNameLabel, &out);
+    CborWriteTstr(config_values->component_instance_name, &out);
+  }
+  if (config_values->configs & DICE_ANDROID_CONFIG_VERIFIED_BOOT_STATE &&
+      config_values->verified_boot_state) {
+    CborWriteInt(kVerifiedBootStateLabel, &out);
+    CborWriteTstr(config_values->verified_boot_state, &out);
+  }
+  if (config_values->configs & DICE_ANDROID_CONFIG_BUILD_FINGERPRINT &&
+      config_values->build_fingerprint) {
+    CborWriteInt(kBuildFingerprintLabel, &out);
+    CborWriteTstr(config_values->build_fingerprint, &out);
+  }
+  if (config_values->configs & DICE_ANDROID_CONFIG_SYSTEM_EXT_SECURITY_VERSION) {
+    CborWriteInt(kSystemExtSecurityVersionLabel, &out);
+    CborWriteUint(config_values->system_ext_security_version, &out);
+  }
+  if (config_values->configs & DICE_ANDROID_CONFIG_PRODUCT_SECURITY_VERSION) {
+    CborWriteInt(kProductSecurityVersionLabel, &out);
+    CborWriteUint(config_values->product_security_version, &out);
+  }
+  if (config_values->configs & DICE_ANDROID_CONFIG_VENDOR_SECURITY_VERSION) {
+    CborWriteInt(kVendorSecurityVersionLabel, &out);
+    CborWriteUint(config_values->vendor_security_version, &out);
+  }
+  if (config_values->configs & DICE_ANDROID_CONFIG_BOOT_SECURITY_VERSION) {
+    CborWriteInt(kBootSecurityVersionLabel, &out);
+    CborWriteUint(config_values->boot_security_version, &out);
+  }
+  if (config_values->configs & DICE_ANDROID_CONFIG_SDV_BOOT_MODE &&
+      config_values->sdv_boot_mode) {
+    CborWriteInt(kSdvBootModeLabel, &out);
+    CborWriteTstr(config_values->sdv_boot_mode, &out);
+  }
+
   *actual_size = CborOutSize(&out);
   if (CborOutOverflowed(&out)) {
     return kDiceResultBufferTooSmall;
