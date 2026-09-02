@@ -118,6 +118,12 @@
   !if $(SEND_MILESTONE_CALL_LE)
       GCC:*_*_*_CC_FLAGS = -DSEND_MILESTONE_CALL_LE
   !endif
+  !if $(VERIFIED_BOOT_LE_ARB)
+      GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE_ARB
+  !endif
+  !if $(VB_LE_DTBO_AUTH)
+      GCC:*_*_*_CC_FLAGS = -DVB_LE_DTBO_AUTH
+  !endif
 
   !ifdef $(FORCE_NO_PIE)
   GCC:*_*_*_ARCHCC_FLAGS  =  -fno-PIE
@@ -184,6 +190,9 @@
   !endif
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
+  !endif
+  !if $(VERITY_USE_DM_MOD_CREATE)
+      GCC:*_*_*_CC_FLAGS = -DVERITY_USE_DM_MOD_CREATE
   !endif
   !if $(USER_BUILD_VARIANT) == 0
       GCC:*_*_*_CC_FLAGS = -DENABLE_UPDATE_PARTITIONS_CMDS -DENABLE_BOOT_CMD -DENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS

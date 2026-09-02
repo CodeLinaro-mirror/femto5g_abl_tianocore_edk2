@@ -11,6 +11,7 @@ DISABLE_PARALLEL_DOWNLOAD_FLASH=0
 PVMFW_ENABLED=1
 PVMFW_CONFIG_EXT=1
 QSPA_BOOTCONFIG_ENABLE=1
+SKIP_ORANGE_WAIT=1
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common
