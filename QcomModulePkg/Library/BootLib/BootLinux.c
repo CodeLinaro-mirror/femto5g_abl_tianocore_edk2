@@ -43,6 +43,7 @@
 #include <Library/VerifiedBootMenu.h>
 #include <Library/HypervisorMvCalls.h>
 #include <Library/Rtic.h>
+#include <Library/QcBcc.h>
 #include <Protocol/EFIMdtp.h>
 #include <Protocol/EFIScmModeSwitch.h>
 #include <Protocol/EFIRmVm.h>
@@ -78,6 +79,7 @@ STATIC AvfProperty SkPubKey = {"secretkeeper_public_key", NULL, 0};
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
 STATIC BOOLEAN RecoveryHasNoKernel = FALSE;
+STATIC BOOLEAN IsSdCardDetected = FALSE;
 RamPartitionEntry UpdatedRamPartitions[NUM_NOMAP_REGIONS];
 UINT32 NumUpdPartitions;
 BOOLEAN UpdRamPartitionsAvail = FALSE;
@@ -201,6 +203,115 @@ QueryPvmFwParams (UINT64 *PvmFwLoadAddr, UINT64 *PvmFwSizeReserved)
 
   return (Status == EFI_SUCCESS &&
           SizeStatus == EFI_SUCCESS);
+}
+#endif
+
+#ifdef SDV_DICE_ENABLED
+STATIC BOOLEAN
+QueryDiceParams (UINT64 *DiceLoadAddr, UINT64 *DiceSizeReserved)
+{
+  EFI_STATUS Status;
+  EFI_STATUS SizeStatus;
+  UINTN DataSize = 0;
+
+  DataSize = sizeof (*DiceLoadAddr);
+  Status = gRT->GetVariable ((CHAR16 *)L"DiceBaseAddr", &gQcomTokenSpaceGuid,
+                          NULL, &DataSize, DiceLoadAddr);
+
+  DataSize = sizeof (*DiceSizeReserved);
+  SizeStatus = gRT->GetVariable ((CHAR16 *)L"DiceSize", &gQcomTokenSpaceGuid,
+                              NULL, &DataSize, DiceSizeReserved);
+
+  return (Status == EFI_SUCCESS &&
+          SizeStatus == EFI_SUCCESS);
+}
+
+/*
+ * Magic written by the PVM SDV DICE service at the last 4 bytes of the
+ * handover carveout to signal that valid CBOR handover data is present.
+ * Must match HANDOVER_MAGIC in sdv_dice_service/include/sdv_dice_service.h.
+ */
+#define DICE_HANDOVER_MAGIC           0x7AADD86Cu
+
+/* Maximum time to wait for PVM to write the handover magic (milliseconds). */
+#define DICE_HANDOVER_POLL_TIMEOUT_MS 500u
+
+/* Polling interval while waiting for the magic (microseconds). */
+#define DICE_HANDOVER_POLL_INTERVAL_US 1000u
+
+STATIC EFI_STATUS
+GenerateSdvDiceArtifacts (BootInfo *Info, BootParamlist *BootParamlistPtr)
+{
+  UINT64            DiceLoadAddr = 0;
+  UINT64            DiceSizeReserved = 0;
+  UINT8             *FinalEncodedBccArtifacts = NULL;
+  size_t            BccArtifactsValidSize = 0;
+  volatile UINT32   *MagicPtr;
+  UINT64            PollStartMs;
+  BOOLEAN           MagicFound = FALSE;
+  UINT8             Ret;
+  EFI_STATUS        Status = EFI_SUCCESS;
+
+  if (!QueryDiceParams (&DiceLoadAddr, &DiceSizeReserved)) {
+    DEBUG ((EFI_D_ERROR, "Querying DICE memory parameters failed"));
+    Status = EFI_FAILURE;
+    return Status;
+  }
+
+  if (!DiceLoadAddr || !DiceSizeReserved) {
+    DEBUG ((EFI_D_ERROR, "Wrong DICE memory parameters"));
+    Status = EFI_FAILURE;
+    return Status;
+  }
+
+  FinalEncodedBccArtifacts = (UINT8 *)DiceLoadAddr;
+  BccArtifactsValidSize = DiceSizeReserved;
+
+  /* Poll for the PVM handover magic at the last 4 bytes of the carveout.
+   * PVM writes this after placing valid CBOR BCC handover data at offset 0. */
+  MagicPtr = (volatile UINT32 *)(DiceLoadAddr + DiceSizeReserved - sizeof (UINT32));
+  PollStartMs = GetTimerCountms ();
+
+  do {
+    if (*MagicPtr == DICE_HANDOVER_MAGIC) {
+      MagicFound = TRUE;
+      break;
+    }
+    MicroSecondDelay (DICE_HANDOVER_POLL_INTERVAL_US);
+  } while (GetTimerCountms () - PollStartMs < DICE_HANDOVER_POLL_TIMEOUT_MS);
+
+  if (!MagicFound) {
+    DEBUG ((EFI_D_ERROR,
+            "DICE: Handover magic not found within %u ms — skipping DICE\n",
+            DICE_HANDOVER_POLL_TIMEOUT_MS));
+    return EFI_TIMEOUT;
+  }
+
+  /* Ensure CBOR data reads are not speculated before the magic check. */
+  MemoryFence ();
+
+  DEBUG ((EFI_D_INFO, "DICE: Handover magic found after %lu ms\n",
+          GetTimerCountms () - PollStartMs));
+
+  /* Generate BCC handover data*/
+  Ret =
+      GetBccArtifacts (FinalEncodedBccArtifacts,
+                       BCC_ARTIFACTS_WITH_BCC_TOTAL_SIZE, &BccArtifactsValidSize,
+                       Info
+#ifndef USE_DUMMY_BCC
+                       , BccParamsRecvdFromAVB
+#endif
+);
+  if (Ret != 0) {
+    DEBUG ((EFI_D_ERROR, "BCC handover data generation failed\n"));
+    Status = EFI_FAILURE;
+    return Status;
+  }
+
+  DEBUG ((EFI_D_INFO, "GenerateSdvDiceArtifacts: Generated at address 0x%x\n",
+          FinalEncodedBccArtifacts));
+
+  return Status;
 }
 #endif
 
@@ -1174,7 +1285,8 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   /* Generate BCC handover data*/
   Ret = GetBccArtifacts (FinalEncodedBccArtifacts,
                        BCC_ARTIFACTS_WITH_BCC_TOTAL_SIZE,
-                       &BccArtifactsValidSize
+                       &BccArtifactsValidSize,
+                       Info
 #ifndef USE_DUMMY_BCC
                       , BccParamsRecvdFromAVB
 #endif
@@ -1559,6 +1671,15 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                 BootParamlistPtr->RamdiskSize);
 
   RamdiskLoadAddr +=BootParamlistPtr->RamdiskSize;
+
+#ifdef SDV_DICE_ENABLED
+  if (Info->HasSdvDiceEnabled) {
+    Status = GenerateSdvDiceArtifacts (Info, BootParamlistPtr);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Failed to generate DICE artifacs: %r\n", Status));
+    }
+  }
+#endif
 
   if (BootParamlistPtr->BootingWith32BitKernel) {
     if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
@@ -2536,6 +2657,88 @@ CheckImageHeader (VOID *ImageHdrBuffer,
 
   return Status;
 }
+
+BOOLEAN IsSdCardPresent(VOID)
+{
+  return IsSdCardDetected;
+}
+
+VOID DisableSdCard(VOID)
+{
+  IsSdCardDetected = FALSE;
+}
+
+EFI_STATUS DetectSDCardAndMountFAT(VOID)
+{
+  EFI_STATUS Status;
+  PartiSelectFilter HandleFilter;
+  HandleInfo HandleInfoList[2];
+  UINT32 MaxHandles = 2, BlkIOAttrib = 0, detectedIndex = 0;
+  EFI_DEVICE_PATH_PROTOCOL *DevicePath;
+  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *Fs;
+
+  BlkIOAttrib = BLK_IO_SEL_PARTITIONED_MBR;
+  BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_REMOVABLE;
+  BlkIOAttrib |= BLK_IO_SEL_MATCH_ROOT_DEVICE;
+
+  HandleFilter.RootDeviceType = &gEfiSdRemovableGuid;
+
+  Status =
+      GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
+
+  if (Status == EFI_SUCCESS) {
+    if (MaxHandles == 0) {
+      DEBUG ((EFI_D_INFO, "SD card is not present\n"));
+      return EFI_NO_MEDIA;
+    }
+  } else {
+    DEBUG ((EFI_D_ERROR, "GetBlkIOHandles failed: %r\n", Status));
+    return Status;
+  }
+
+  /*
+   * GetBlkIOHandles with BLK_IO_SEL_MATCH_ROOT_DEVICE returns the root device
+   * handle directly. The root device path does NOT contain MEDIA_HARDDRIVE_DP
+   * nodes (those only appear in partition handles). Use the first returned
+   * handle directly as the SD card handle.
+   */
+  detectedIndex = 0;
+  IsSdCardDetected = TRUE;
+
+  /* Print device path for debugging */
+  Status = gBS->HandleProtocol (HandleInfoList[detectedIndex].Handle,
+                                &gEfiDevicePathProtocolGuid, (VOID **)&DevicePath);
+  if (!EFI_ERROR (Status)) {
+    CHAR16 *DevicePathStr = ConvertDevicePathToText (DevicePath, TRUE, TRUE);
+    if (DevicePathStr != NULL) {
+      DEBUG ((EFI_D_INFO, "DevicePath string for SD card is: %s\n", DevicePathStr));
+      FreePool (DevicePathStr);
+    }
+  }
+
+  /* Mount FAT FS of SD card */
+  Status = gBS->HandleProtocol(HandleInfoList[detectedIndex].Handle,
+                                &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Fs);
+  if (Status == EFI_SUCCESS)
+  {
+    DEBUG ((EFI_D_ERROR, "[DetectSDAndMount] File System Already mounted %d on :%d\n", Status, detectedIndex));
+    return Status;
+  }
+
+  if (Status != EFI_SUCCESS)
+  {
+    Status = gBS->ConnectController (HandleInfoList[detectedIndex].Handle, NULL, NULL, TRUE);
+    if (EFI_ERROR(Status))
+    {
+      DEBUG ((EFI_D_ERROR, "[MountFat] Failed to connect controller\n"));
+      IsSdCardDetected = FALSE;   // need to add mainline via Qualcomm
+      return Status;
+    }
+  }
+
+  return EFI_SUCCESS;
+}
+
 
 /**
   Load image header from partition

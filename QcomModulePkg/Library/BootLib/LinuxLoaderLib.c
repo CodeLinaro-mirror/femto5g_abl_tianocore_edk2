@@ -409,6 +409,82 @@ ToLower (CHAR8 *Str)
   }
 }
 
+EFI_STATUS
+LoadImageFromFatPartition (VOID *ImageBuffer, UINT32 *ImageSize, CHAR16 *Pname)
+{
+  EFI_STATUS Status = EFI_NOT_FOUND;
+  EFI_FILE_HANDLE                   RootFileHandle = NULL;
+  EFI_FILE_HANDLE                   FileHandle = NULL;
+  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL   *Fs = NULL;
+  UINT32                            MaxHandles = 2;
+  HandleInfo                        HandleInfoList[2];
+  PartiSelectFilter                 HandleFilter;
+  UINT32                            BlkIOAttrib;
+  UINTN Size = 0;
+
+  BlkIOAttrib = BLK_IO_SEL_PARTITIONED_MBR;
+  BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_REMOVABLE;
+  BlkIOAttrib |= BLK_IO_SEL_MATCH_ROOT_DEVICE;
+
+  HandleFilter.RootDeviceType = &gEfiSdRemovableGuid;;
+
+  Status = GetBlkIOHandles(BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
+
+  if (Status != EFI_SUCCESS) {
+   DEBUG ((DEBUG_ERROR, "Failed to get blkIO Handles\n"));
+   return Status;
+  }
+
+  if (MaxHandles == 0)
+    return EFI_NOT_FOUND;
+
+  Status = gBS->HandleProtocol (HandleInfoList[0].Handle,
+                                &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Fs);
+  if (Status != EFI_SUCCESS)
+  {
+    DEBUG ((DEBUG_ERROR, "[LoadFileFromFAT] Unable to find filesystem handle :%r\n", Status));
+    return Status;
+  }
+
+  /* Open the root directory of the volume */
+  Status = Fs->OpenVolume (Fs, &RootFileHandle);
+  if ((Status != EFI_SUCCESS) || (RootFileHandle == NULL)) {
+    DEBUG ((DEBUG_ERROR, "[LoadFileFromFAT]Failed to open Volume :%d\n", Status));
+    return Status;
+  }
+
+EFI_FILE_HANDLE UpdateDirHandle = NULL;
+
+  Status = RootFileHandle->Open(RootFileHandle, &UpdateDirHandle, (CHAR16*)L"update",
+                                EFI_FILE_MODE_READ, 0);
+  if ((Status != EFI_SUCCESS) || (UpdateDirHandle == NULL))
+  {
+      DEBUG ((DEBUG_ERROR, "Failed to open update directory Status :%d\n", Status));
+      return Status;
+  }
+
+  Status = UpdateDirHandle->Open(UpdateDirHandle, &FileHandle, (CHAR16*)L"recovery.img",
+                                 EFI_FILE_MODE_READ, 0);
+  if ((Status != EFI_SUCCESS) || (FileHandle == NULL))
+  {
+      DEBUG ((DEBUG_ERROR, "Failed to open recovery.img file Status :%d\n", Status));
+      UpdateDirHandle->Close(UpdateDirHandle);
+      return Status;
+  }
+
+  UpdateDirHandle->Close(UpdateDirHandle);
+  Size = ROUND_TO_PAGE(*ImageSize, (HandleInfoList[0].BlkIo->Media->BlockSize - 1));
+  Status = FileHandle->Read (FileHandle, &Size, ImageBuffer);
+  FileHandle->Close(FileHandle);
+  if (Status != EFI_SUCCESS)
+  {
+    DEBUG ((EFI_D_WARN, "[LoadFileFromFAT] failed to Read File Status :%d\r\n", Status));
+    return Status;
+  }
+
+  return Status;
+}
+
 /* Load image from partition to buffer */
 EFI_STATUS
 LoadImageFromPartition (VOID *ImageBuffer, UINT32 *ImageSize, CHAR16 *Pname)
@@ -420,6 +496,13 @@ LoadImageFromPartition (VOID *ImageBuffer, UINT32 *ImageSize, CHAR16 *Pname)
   STATIC UINT32 MaxHandles;
   STATIC UINT32 BlkIOAttrib = 0;
   UINT64 LoadImageStartTime = GetTimerCountms ();
+
+  if (IsSdCardPresent() && StrStr(Pname, L"recovery"))
+  {
+     Status = LoadImageFromFatPartition(ImageBuffer, ImageSize, Pname);
+     if (Status == EFI_SUCCESS)
+         return Status;
+  }
 
   BlkIOAttrib = BLK_IO_SEL_PARTITIONED_MBR;
   BlkIOAttrib |= BLK_IO_SEL_PARTITIONED_GPT;

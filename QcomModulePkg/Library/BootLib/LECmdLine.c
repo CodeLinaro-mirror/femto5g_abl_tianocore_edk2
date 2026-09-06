@@ -29,6 +29,9 @@
  **/
 
 #include <Library/PartitionTableUpdate.h>
+#ifdef VERITY_USE_DM_MOD_CREATE
+#include <Library/Board.h>
+#endif
 #include "LECmdLine.h"
 #include <Library/MemoryAllocationLib.h>
 
@@ -36,7 +39,9 @@
 #define MAX_VERITY_CMD_LINE 512
 #define MAX_VERITY_SECTOR_LEN 12
 #define MAX_VERITY_HASH_LEN 65
+#ifndef VERITY_USE_DM_MOD_CREATE
 STATIC CONST CHAR8 *VeritySystemPartitionStr = "/dev/mmcblk0p";
+#endif
 STATIC CONST CHAR8 *VerityName = "verity";
 STATIC CONST CHAR8 *VerityAppliedOn = "system";
 STATIC CONST CHAR8 *VerityEncriptionName = "sha256";
@@ -100,7 +105,11 @@ LEVerityWordnCpy ( CHAR8 *DstCmdLine,
   for (Loop = 0; Loop < MaxLen; Loop++) {
     /* if space or NULL found, assign NULL, making it a string */
     if ((SrcCmdLine[Loop]==' ') ||
-        (SrcCmdLine[Loop]=='\0')) {
+        (SrcCmdLine[Loop]=='\0')
+#ifdef VERITY_USE_DM_MOD_CREATE
+        || (SrcCmdLine[Loop]=='"')
+#endif
+        ) {
       DstCmdLine[Loop]='\0';
       Loop++;
       break;
@@ -214,8 +223,13 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       goto ErrLEVerityout;
     }
 
-    /* Get HashSize which is always greater by 8 bytes to DataSize */
+    /* Get HashSize: hash tree starts after 1-block veritysetup superblock (new),
+       or legacy +8 offset (old dm= path) */
+#ifdef VERITY_USE_DM_MOD_CREATE
+    HashSize = AsciiStrDecimalToUintn ((CHAR8 *) &DataSize[0]) + 1;
+#else
     HashSize = AsciiStrDecimalToUintn ((CHAR8 *) &DataSize[0]) + 8;
+#endif
 
     /* Get system partition index */
     MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
@@ -237,6 +251,22 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       goto ErrLEVerityout;
     }
 
+    /* Build partition device path based on storage type (UFS or eMMC) */
+#ifdef VERITY_USE_DM_MOD_CREATE
+    CHAR8 LunCharMapping[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
+    CHAR8 RootDevStr[10]; /* BOOT_DEV_NAME_SIZE_MAX */
+    CHAR8 PartitionPath[72]; /* MAX_PATH_SIZE */
+    GetRootDeviceType (RootDevStr, sizeof (RootDevStr));
+    if (!AsciiStrCmp ("UFS", RootDevStr)) {
+      UINT32 Lun = GetPartitionLunFromIndex (Index);
+      AsciiSPrint (PartitionPath, sizeof (PartitionPath), "/dev/sd%c%d",
+                   LunCharMapping[Lun],
+                   GetPartitionIdxInLun (PartitionName, Lun));
+    } else {
+      AsciiSPrint (PartitionPath, sizeof (PartitionPath), "/dev/mmcblk0p%d", Index);
+    }
+#endif
+
     DMTemp = AllocateZeroPool (sizeof (CHAR8) * MAX_VERITY_CMD_LINE);
     if (!DMTemp) {
       DEBUG ((EFI_D_ERROR, "Failed to allocate memory for DMTemp\n"));
@@ -246,6 +276,17 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
 
     /* Construct complete verity command line */
     if (AsciiStrCmp (FecOff, "0") == 0) {
+#ifdef VERITY_USE_DM_MOD_CREATE
+        AsciiSPrint (
+        DMTemp,
+        MAX_VERITY_CMD_LINE,
+        " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a %a %a %a %a %d %a %a %a\"",
+        VerityRoot, VerityAppliedOn, SectorSize, VerityName,
+        PartitionPath, PartitionPath,
+        VerityBlockSize, VerityBlockSize, DataSize, HashSize, VerityEncriptionName,
+        Hash, VeritySalt
+        );
+#else
         AsciiSPrint (
         DMTemp,
         MAX_VERITY_CMD_LINE,
@@ -255,8 +296,21 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
         VerityBlockSize, VerityBlockSize, DataSize, HashSize, VerityEncriptionName,
         Hash, VeritySalt
         );
+#endif
     }
     else {
+#ifdef VERITY_USE_DM_MOD_CREATE
+        AsciiSPrint (
+        DMTemp,
+        MAX_VERITY_CMD_LINE,
+        " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a %a %a %a %a %d %a %a %a %d %a %a %a %a %a 2 %a %a %a %a\"",
+        VerityRoot, VerityAppliedOn, SectorSize, VerityName,
+        PartitionPath, PartitionPath,
+        VerityBlockSize, VerityBlockSize, DataSize, HashSize, VerityEncriptionName,
+        Hash, VeritySalt, FEATUREARGS, OptionalParam0, OptionalParam1, UseFec,
+        PartitionPath, FecRoot, FecBlock, FecOff, FecStart, FecOff
+        );
+#else
         AsciiSPrint (
         DMTemp,
         MAX_VERITY_CMD_LINE,
@@ -267,6 +321,7 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
         Hash, VeritySalt, FEATUREARGS, OptionalParam0, OptionalParam1, UseFec,
         VeritySystemPartitionStr, Index, FecRoot, FecBlock, FecOff, FecStart, FecOff
         );
+#endif
     }
 
     Length = AsciiStrLen (DMTemp) + 1; /* 1 extra byte for NULL */
