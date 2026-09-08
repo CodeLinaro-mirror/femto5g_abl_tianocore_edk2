@@ -165,6 +165,8 @@ STATIC CHAR8 *AndroidBootForceNormalBoot =
 CHAR8 BootForceNormalBoot = '0';
 STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
+STATIC CONST CHAR8 *AndroidBootIsSdCardBoot =
+                                      " androidboot.is_sdcard_boot=1";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
 STATIC CHAR8 *FstabSuffixNvme = "nvme";
 STATIC CHAR8 *FstabSuffixDefault = "default";
@@ -717,6 +719,8 @@ GetSystemPath (CHAR8 **SysPath, BOOLEAN MultiSlotBoot, BOOLEAN BootIntoRecovery,
 
   if (!AsciiStrCmp ("EMMC", RootDevStr)) {
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/mmcblk0p%d", Key, Index);
+  } else if (!AsciiStrCmp ("SD", RootDevStr)) {
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/mmcblk1p%d", Key, Index);
   } else if (!AsciiStrCmp ("NAND", RootDevStr)) {
     /* NAND is being treated as GPT partition, hence reduce the index by 1 as
      * PartitionIndex (0) should be ignored for correct mapping of partition.
@@ -859,6 +863,8 @@ GetSystemPathByPname (CHAR8 **SysPath, BOOLEAN MultiSlotBoot,
 
   if (!AsciiStrCmp ("EMMC", RootDevStr)) {
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/mmcblk0p%d", Key, Index);
+  } else if (!AsciiStrCmp ("SD", RootDevStr)) {
+    AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/mmcblk1p%d", Key, Index);
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " %a=/dev/sd%c%d",
                  Key,
@@ -2307,7 +2313,9 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
                  CmdLineLen,
                  BootConfigLen);
   GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
-  if (!AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) {
+  if (GetBootStorageFstabSuffix () != NULL) {
+    Param.FstabSuffix = (CHAR8 *)GetBootStorageFstabSuffix ();
+  } else if (!AsciiStriCmp (FstabSuffixEmmc, RootDevStr)) {
     Param.FstabSuffix = FstabSuffixEmmc;
   } else if (!AsciiStriCmp (FstabSuffixNvme, RootDevStr)) {
     Param.FstabSuffix = FstabSuffixNvme;
@@ -2322,6 +2330,17 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (Param.FstabSuffix),
                  CmdLineLen,
                  BootConfigLen);
+
+  if (IsSdBootStorage ()) {
+    ParamLen = AsciiStrLen (AndroidBootIsSdCardBoot);
+    BootConfigFlag = IsAndroidBootParam (AndroidBootIsSdCardBoot, ParamLen,
+                                         HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen,
+                   CmdLineLen,
+                   BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, AndroidBootIsSdCardBoot, NULL,
+                         BootConfigListHead, ParamLen, 0);
+  }
 
   Status = GetCompleteDdrSize(&FullDdrSize);
   if (Status == EFI_SUCCESS) {

@@ -123,6 +123,7 @@
 
 /* Macros to check the boot type */
 #define EFI_EMMC_NETWORK_FLASH_TYPE 14
+#define EFI_SDC_FLASH_TYPE 4
 #define EFI_MMC_FLASH_TYPE 5
 #define EFI_PCIE_FLASH_TYPE 7
 #define EFI_UFS_FLASH_TYPE 8
@@ -154,6 +155,33 @@ typedef struct {
    */
   const HARDDRIVE_DEVICE_PATH *PartitionInfo;
 } HandleInfo;
+
+typedef enum {
+  BOOT_STORAGE_INTERNAL = 0,
+  BOOT_STORAGE_SD_REMOVABLE,
+} BootStorageSource;
+
+VOID
+SetBootStorageSource (BootStorageSource Source);
+
+BootStorageSource
+GetBootStorageSource (VOID);
+
+BOOLEAN
+IsSdBootStorage (VOID);
+
+EFI_STATUS
+DetectBootStorageSource (VOID);
+
+CONST CHAR8 *
+GetBootStorageName (VOID);
+
+CONST CHAR8 *
+GetBootStorageFstabSuffix (VOID);
+
+UINT32
+ApplySdBootStorageSelection (UINT32 SelectionAttrib,
+                           PartiSelectFilter *FilterData);
 
 /* Load image from partition to buffer */
 EFI_STATUS

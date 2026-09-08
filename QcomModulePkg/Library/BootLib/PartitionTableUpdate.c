@@ -194,6 +194,17 @@ GetStorageHandle (INT32 Lun, HandleInfo *BlockIoHandle, UINT32 *MaxHandles)
   HandleFilter.PartitionType = NULL;
   HandleFilter.VolumeName = NULL;
 
+  if (IsSdBootStorage ()) {
+    HandleFilter.RootDeviceType = &gEfiSdRemovableGuid;
+    Attribs = ApplySdBootStorageSelection (Attribs, &HandleFilter);
+    Status =
+        GetBlkIOHandles (Attribs, &HandleFilter, BlockIoHandle, MaxHandles);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_ERROR, "Error getting block IO handle for SD\n"));
+    }
+    return Status;
+  }
+
   if (Lun == NO_LUN) {
     HandleFilter.RootDeviceType = &gEfiEmmcUserPartitionGuid;
     Status =
@@ -291,8 +302,11 @@ VOID UpdatePartitionAttributes (UINT32 UpdateType)
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
   for (Lun = 0; Lun < MaxLuns; Lun++) {
+    MaxHandles = MAX_HANDLEINF_LST_SIZE;
 
-    if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
+    if (IsSdBootStorage ()) {
+      Status = GetStorageHandle (NO_LUN, BlockIoHandle, &MaxHandles);
+    } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
         !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
       Status = GetStorageHandle (NO_LUN, BlockIoHandle, &MaxHandles);
     } else if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
@@ -712,6 +726,26 @@ EnumeratePartitions (VOID)
   Ptable[0].MaxHandles = ARRAY_SIZE (Ptable[0].HandleInfoList);
   HandleFilter.PartitionType = NULL;
   HandleFilter.VolumeName = NULL;
+
+  if (IsSdBootStorage ()) {
+    Attribs = ApplySdBootStorageSelection (Attribs, &HandleFilter);
+    Ptable[0].MaxHandles = ARRAY_SIZE (Ptable[0].HandleInfoList);
+
+    Status = GetBlkIOHandles (Attribs, &HandleFilter,
+                              &Ptable[0].HandleInfoList[0],
+                              &Ptable[0].MaxHandles);
+    if (Status == EFI_SUCCESS &&
+        Ptable[0].MaxHandles > 0) {
+      MaxLuns = 1;
+      DEBUG ((EFI_D_INFO, "Selected SD boot storage: %u handles\n",
+              Ptable[0].MaxHandles));
+      return Status;
+    }
+
+    DEBUG ((EFI_D_ERROR, "Error getting block IO handle for SD\n"));
+    return EFI_ERROR (Status) ? Status : EFI_NOT_FOUND;
+  }
+
 #ifdef AUTO_VIRT_ABL
   HandleFilter.RootDeviceType = &gVirtioMmioTransportGuid;
 #else
@@ -2177,7 +2211,8 @@ ValidateSlotGuids (Slot *BootableSlot)
         return EFI_DEVICE_ERROR;
       }
     }
-  } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
+  } else if (IsSdBootStorage () ||
+           !AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
            !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
   } else {
     DEBUG ((EFI_D_ERROR, "Unsupported Device Type\n"));
