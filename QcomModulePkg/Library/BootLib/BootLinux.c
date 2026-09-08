@@ -2657,7 +2657,12 @@ EFI_STATUS DetectSDCardAndMountFAT(VOID)
   HandleInfo HandleInfoList[2];
   UINT32 MaxHandles = 2, BlkIOAttrib = 0, detectedIndex = 0;
   EFI_DEVICE_PATH_PROTOCOL *DevicePath;
-  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *Fs;
+  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *Fs = NULL;
+  EFI_FILE_HANDLE RootFileHandle = NULL;
+  EFI_FILE_HANDLE RecoveryFileHandle = NULL;
+
+  /* A previous probe must not leave FAT recovery enabled on failure. */
+  IsSdCardDetected = FALSE;
 
   BlkIOAttrib = BLK_IO_SEL_PARTITIONED_MBR;
   BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_REMOVABLE;
@@ -2678,14 +2683,8 @@ EFI_STATUS DetectSDCardAndMountFAT(VOID)
     return Status;
   }
 
-  /*
-   * GetBlkIOHandles with BLK_IO_SEL_MATCH_ROOT_DEVICE returns the root device
-   * handle directly. The root device path does NOT contain MEDIA_HARDDRIVE_DP
-   * nodes (those only appear in partition handles). Use the first returned
-   * handle directly as the SD card handle.
-   */
+  /* Match the existing FAT loader's first-handle selection. */
   detectedIndex = 0;
-  IsSdCardDetected = TRUE;
 
   /* Print device path for debugging */
   Status = gBS->HandleProtocol (HandleInfoList[detectedIndex].Handle,
@@ -2699,25 +2698,57 @@ EFI_STATUS DetectSDCardAndMountFAT(VOID)
   }
 
   /* Mount FAT FS of SD card */
-  Status = gBS->HandleProtocol(HandleInfoList[detectedIndex].Handle,
+  Status = gBS->HandleProtocol (HandleInfoList[detectedIndex].Handle,
                                 &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Fs);
-  if (Status == EFI_SUCCESS)
-  {
-    DEBUG ((EFI_D_ERROR, "[DetectSDAndMount] File System Already mounted %d on :%d\n", Status, detectedIndex));
+  if (EFI_ERROR (Status)) {
+    Status = gBS->ConnectController (HandleInfoList[detectedIndex].Handle,
+                                      NULL, NULL, TRUE);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_ERROR, "[MountFat] Failed to connect controller\n"));
+      return Status;
+    }
+
+    /* Connecting the controller does not guarantee a filesystem is available. */
+    Status = gBS->HandleProtocol (HandleInfoList[detectedIndex].Handle,
+                                  &gEfiSimpleFileSystemProtocolGuid,
+                                  (VOID **)&Fs);
+  }
+
+  if (EFI_ERROR (Status) || Fs == NULL) {
+    return EFI_ERROR (Status) ? Status : EFI_UNSUPPORTED;
+  }
+
+  Status = Fs->OpenVolume (Fs, &RootFileHandle);
+  if (EFI_ERROR (Status)) {
+    goto out;
+  }
+  if (RootFileHandle == NULL) {
+    Status = EFI_DEVICE_ERROR;
+    goto out;
+  }
+
+  /* File presence admits the attempt; authentication remains unchanged. */
+  Status = RootFileHandle->Open (RootFileHandle, &RecoveryFileHandle,
+                                 (CHAR16 *)L"\\update\\recovery.img",
+                                 EFI_FILE_MODE_READ, 0);
+  if (!EFI_ERROR (Status) && RecoveryFileHandle == NULL) {
+    Status = EFI_DEVICE_ERROR;
+  }
+
+out:
+  if (RecoveryFileHandle != NULL) {
+    RecoveryFileHandle->Close (RecoveryFileHandle);
+  }
+  if (RootFileHandle != NULL) {
+    RootFileHandle->Close (RootFileHandle);
+  }
+
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_INFO, "SD FAT recovery file unavailable: %r\n", Status));
     return Status;
   }
 
-  if (Status != EFI_SUCCESS)
-  {
-    Status = gBS->ConnectController (HandleInfoList[detectedIndex].Handle, NULL, NULL, TRUE);
-    if (EFI_ERROR(Status))
-    {
-      DEBUG ((EFI_D_ERROR, "[MountFat] Failed to connect controller\n"));
-      IsSdCardDetected = FALSE;   // need to add mainline via Qualcomm
-      return Status;
-    }
-  }
-
+  IsSdCardDetected = TRUE;
   return EFI_SUCCESS;
 }
 

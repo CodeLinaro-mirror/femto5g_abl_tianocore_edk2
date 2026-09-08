@@ -1184,7 +1184,11 @@ GetOvrdDtb ( VOID **DtboImgBuffer)
   HandleFilter.RootDeviceType = NULL;
   HandleFilter.PartitionLabel = NULL;
   HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionType = NULL;
   HandleFilter.PartitionLabel = PtnName;
+  if (IsSdBootStorage ()) {
+    BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+  }
 
   Status =
      GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
@@ -1296,7 +1300,11 @@ GetAvfDpDtbo ( VOID **DtboImgBuffer)
   HandleFilter.RootDeviceType = NULL;
   HandleFilter.PartitionLabel = NULL;
   HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionType = NULL;
   HandleFilter.PartitionLabel = PtnName;
+  if (IsSdBootStorage ()) {
+    BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+  }
 
   Status =
      GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);
@@ -1425,7 +1433,11 @@ GetQtvmDtboImg (BootInfo *Info, VOID **DtboImgBuffer, UINT32 *ImageSize)
   HandleFilter.RootDeviceType = NULL;
   HandleFilter.PartitionLabel = NULL;
   HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionType = NULL;
   HandleFilter.PartitionLabel = PtnName;
+  if (IsSdBootStorage ()) {
+    BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+  }
 
   Status =
      GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList, &MaxHandles);

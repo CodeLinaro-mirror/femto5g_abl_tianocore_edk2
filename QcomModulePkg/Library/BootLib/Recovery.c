@@ -71,6 +71,10 @@ WriteVirtualABMessage (UINT8 MergeStatus)
   HandleFilter.RootDeviceType = NULL;
   HandleFilter.PartitionType = &Ptype;
   HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionLabel = NULL;
+  if (IsSdBootStorage ()) {
+    BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+  }
 
   MaxHandles = ARRAY_SIZE (HandleInfoList);
   Status =
@@ -145,6 +149,10 @@ ReadFromPartitionOffset (EFI_GUID *Ptype, VOID **Msg,
   HandleFilter.RootDeviceType = NULL;
   HandleFilter.PartitionType = Ptype;
   HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionLabel = NULL;
+  if (IsSdBootStorage ()) {
+    BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+  }
 
   MaxHandles = ARRAY_SIZE (HandleInfoList);
 
@@ -334,6 +342,10 @@ ClearMemtagBits (MiscMemtagMessage *MemtagMsg, VOID *Buf)
   HandleFilter.RootDeviceType = NULL;
   HandleFilter.PartitionType = &Ptype;
   HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionLabel = NULL;
+  if (IsSdBootStorage ()) {
+    BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+  }
 
   MaxHandles = ARRAY_SIZE (HandleInfoList);
   Status =

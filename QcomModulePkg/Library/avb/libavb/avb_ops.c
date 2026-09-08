@@ -97,6 +97,9 @@ STATIC AvbIOResult GetHandleInfo(const char *Partition, HandleInfo *HandleInfo)
 	BlkIOAttrib |= BLK_IO_SEL_MEDIA_TYPE_NON_REMOVABLE;
 	BlkIOAttrib |= BLK_IO_SEL_MATCH_PARTITION_LABEL;
 	HandleFilter.PartitionLabel = UnicodePartition;
+	if (IsSdBootStorage ()) {
+		BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+	}
 
 	Status = GetBlkIOHandles(BlkIOAttrib, &HandleFilter, HandleInfo, &MaxHandles);
 

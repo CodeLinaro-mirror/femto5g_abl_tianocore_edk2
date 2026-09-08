@@ -1883,6 +1883,7 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
         UfsGetSetBootLun (&UfsBootLun, FALSE); /* False = Set */
       }
     } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
+               !AsciiStrnCmp (BootDeviceType, "SD", AsciiStrLen ("SD")) ||
                !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
       Lun = NO_LUN;
       LunSet = FALSE;
@@ -2069,6 +2070,11 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   VirtualAbMergeStatus SnapshotMergeStatus;
 
   WaitForFlashFinished ();
+
+  if (IsSdBootStorage ()) {
+    FastbootFail ("Erase is not supported in SD boot mode");
+    return;
+  }
 
   if (AsciiStrLen (arg) >= MAX_GPT_NAME_SIZE) {
     FastbootFail ("Invalid partition name");

@@ -63,7 +63,8 @@
 #define USB_BUFFER_SIZE \
   (IsLEVariant () \
    && (CheckRootDeviceType () == NAND \
-       || CheckRootDeviceType () == EMMC) ? \
+       || CheckRootDeviceType () == EMMC \
+       || CheckRootDeviceType () == SDC) ? \
    (1024 * 1024 * 4) : (1024 * 1024 * 16))
 
 #define VERSION_STR_LEN 96
@@ -94,6 +95,7 @@
   (IsLEVariant () && \
    (CheckRootDeviceType () == NAND || \
        CheckRootDeviceType () == EMMC || \
+       CheckRootDeviceType () == SDC || \
        CheckRootDeviceType () == NVME) ? \
    (((BYTES) * 90) / 100) : (((BYTES) * 3) / 4))
 
