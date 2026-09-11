@@ -158,6 +158,8 @@ table in the respective position mentioned below.
 #define MAX_SLOTS 2
 #define MAX_LUNS 8
 #define NO_LUN -1
+/* Multi-storage: UFS + NVMe */
+#define MAX_PTABLE_NUM MAX_LUNS + 1
 
 #define GET_LWORD_FROM_BYTE(x)                                                 \
   ((UINT32) * (x) | ((UINT32) * (x + 1) << 8) | ((UINT32) * (x + 2) << 16) |   \
@@ -193,7 +195,7 @@ struct StoragePartInfo {
   HandleInfo HandleInfoList[MAX_NUM_PARTITIONS];
   UINT32 MaxHandles;
 };
-extern struct StoragePartInfo Ptable[MAX_LUNS];
+extern struct StoragePartInfo Ptable[MAX_PTABLE_NUM];
 
 typedef struct {
   CHAR16 Suffix[MAX_SLOT_SUFFIX_SZ];
