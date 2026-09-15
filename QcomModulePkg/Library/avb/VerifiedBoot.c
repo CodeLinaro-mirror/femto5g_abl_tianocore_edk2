@@ -1540,8 +1540,9 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   BOOLEAN UpdateRollbackIndex = FALSE;
 
   Info->BootState = RED;
+
+  GUARD (VBCommonInit (Info));
   if (!HibernationResume) {
-    GUARD (VBCommonInit (Info));
     GUARD (VBAllocateCmdLine (Info));
   }
 
@@ -2843,6 +2844,46 @@ FreeVerifiedBootResource (BootInfo *Info)
     FreePool (Info->VBCmdLine);
   }
   return;
+}
+
+EFI_STATUS
+SendVBMilestoneCall (BootInfo *Info)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 AVBVersion = GetAVBVersion ();
+
+  if (AVBVersion == NO_AVB) {
+    return EFI_SUCCESS;
+  }
+
+  if (Info->VbIntf == NULL) {
+    DEBUG ((EFI_D_ERROR,
+            "SendVBMilestoneCall: Info->VbIntf is NULL, skipping "
+            "milestone call\n"));
+    return EFI_NOT_READY;
+  }
+
+  BOOLEAN SendMilestone = (AVBVersion != AVB_LE);
+#ifdef SEND_MILESTONE_CALL_LE
+  if (AVBVersion == AVB_LE) {
+    BOOLEAN KeymasterEnabled = FALSE;
+    Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
+                                                 &KeymasterEnabled);
+    if (Status == EFI_SUCCESS && KeymasterEnabled) {
+      SendMilestone = TRUE;
+    }
+  }
+#endif
+  if (SendMilestone) {
+    DEBUG ((EFI_D_INFO, "Sending Milestone Call\n"));
+    Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Error sending milestone call to TZ\n"));
+      return Status;
+    }
+  }
+
+  return EFI_SUCCESS;
 }
 
 EFI_STATUS
