@@ -171,6 +171,8 @@ typedef struct BootInfo {
   BOOLEAN HasBootInitRamdisk;
   BOOLEAN HasPvmFw;
   UINT32 PvmFwRawSize;
+  BOOLEAN HasSdvDiceEnabled;
+  BOOLEAN SdvDiceLeaf;
 } BootInfo;
 
 typedef struct BootLinuxParamlist {

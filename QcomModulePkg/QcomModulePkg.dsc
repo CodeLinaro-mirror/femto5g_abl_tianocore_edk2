@@ -118,6 +118,12 @@
   !if $(SEND_MILESTONE_CALL_LE)
       GCC:*_*_*_CC_FLAGS = -DSEND_MILESTONE_CALL_LE
   !endif
+  !if $(VERIFIED_BOOT_LE_ARB)
+      GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE_ARB
+  !endif
+  !if $(VB_LE_DTBO_AUTH)
+      GCC:*_*_*_CC_FLAGS = -DVB_LE_DTBO_AUTH
+  !endif
 
   !ifdef $(FORCE_NO_PIE)
   GCC:*_*_*_ARCHCC_FLAGS  =  -fno-PIE
@@ -185,6 +191,9 @@
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
+  !if $(VERITY_USE_DM_MOD_CREATE)
+      GCC:*_*_*_CC_FLAGS = -DVERITY_USE_DM_MOD_CREATE
+  !endif
   !if $(USER_BUILD_VARIANT) == 0
       GCC:*_*_*_CC_FLAGS = -DENABLE_UPDATE_PARTITIONS_CMDS -DENABLE_BOOT_CMD -DENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS
   !else
@@ -222,6 +231,9 @@
   !endif
   !if $(BASE_ADDRESS)
       GCC:*_*_*_CC_FLAGS = -DBASE_ADDRESS=$(BASE_ADDRESS)
+  !endif
+  !if $(SDV_DICE_ENABLED)
+      GCC:*_*_*_CC_FLAGS = -DSDV_DICE_ENABLED
   !endif
   !if $(TARGET_LINUX_BOOT_CPU_ID)
       GCC:*_*_*_CC_FLAGS = -DTARGET_LINUX_BOOT_CPU_ID=$(TARGET_LINUX_BOOT_CPU_ID)
@@ -270,6 +282,9 @@
   !endif
   !if $(EXCLUSIVE_SME_MTE)
       GCC:*_*_*_CC_FLAGS = -DEXCLUSIVE_SME_MTE
+  !endif
+  !if $(SKIP_ORANGE_WAIT) == 1
+      GCC:*_*_*_CC_FLAGS = -DSKIP_ORANGE_WAIT
   !endif
 
 
