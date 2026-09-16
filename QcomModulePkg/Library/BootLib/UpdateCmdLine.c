@@ -574,6 +574,11 @@ LoadGvmInfo (VOID)
   UINT32 ImageSize = MAX_GVMINFO_SIZE;
 
   ImageBuffer = AllocateZeroPool (ImageSize);
+  if (ImageBuffer == NULL) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate memory for GvmInfo\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
+
   Status = LoadImageFromPartition (ImageBuffer, &ImageSize,
     (CHAR16 *)L"gvminfo");
   if (Status != EFI_SUCCESS) {
