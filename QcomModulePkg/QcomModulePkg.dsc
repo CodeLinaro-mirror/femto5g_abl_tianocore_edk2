@@ -111,6 +111,7 @@
   PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
   AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
   AesLib|QcomModulePkg/Library/aes/AesLib.inf
+  FspLib|QcomModulePkg/Library/Fsp/Fsp.inf
 
 [LibraryClasses.ARM]
   ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
@@ -164,6 +165,10 @@
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_NO_AES
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT_NO_AES
   !endif
+  !if $(BOOT_IMG_DECRYPT)
+      GCC:*_*_*_CC_FLAGS = -DBOOT_IMG_DECRYPT
+      GCC:*_*_*_PP_FLAGS = -DBOOT_IMG_DECRYPT
+  !endif
   !if $(HIBERNATION_SUPPORT_AES)
       GCC:*_*_*_CC_FLAGS = -DHIBERNATION_SUPPORT_AES
       GCC:*_*_*_PP_FLAGS = -DHIBERNATION_SUPPORT_AES
@@ -203,6 +208,9 @@
   !endif
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
+  !endif
+  !if $(ENABLE_FSP_WRAP_KEY_FEATURE) == 1
+      GCC:*_*_*_CC_FLAGS = -DENABLE_FSP_WRAP_KEY_FEATURE
   !endif
   !if $(PRIMARY_PMIC_INDEX_SUPPORTED) == 1
       GCC:*_*_*_CC_FLAGS = -DPRIMARY_PMIC_INDEX_SUPPORTED
