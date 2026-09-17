@@ -57,6 +57,9 @@ STATIC BOOLEAN KeymasterEnabled = FALSE;
 #define MAX_NUM_REQ_PARTITION    9
 #define MAX_PROPERTY_SIZE        10
 
+#define DUMMY_PUBLIC_KEY_MOD_LEN 256
+#define DUMMY_PUBLIC_KEY_EXP_LEN 1
+
 static CHAR8 *avb_verify_partition_name[] = {
      "boot",
      "dtbo",
@@ -1930,9 +1933,9 @@ LoadImageAndAuthVB2 (BootInfo *Info, BOOLEAN HibernationResume,
   }
 
 #ifndef USE_DUMMY_BCC
-  if (Info->HasPvmFw) {
+  if (Info->HasPvmFw || Info->HasSdvDiceEnabled) {
     EFI_STATUS BccStatus = PopulateBccParams (SlotData,
-                                              Info->BootIntoRecovery,
+                                              Info,
                                               BccParams);
     if (BccStatus != EFI_SUCCESS) {
         DEBUG ((EFI_D_ERROR, "VB2: PopulateBccParams failed with Status: %r\n",
@@ -2144,6 +2147,7 @@ DisplayVerifiedBootScreen (BootInfo *Info)
     if (FfbmStr[0] != '\0' && !TargetBuildVariantUser ()) {
       DEBUG ((EFI_D_VERBOSE, "Device will boot into FFBM mode\n"));
     } else {
+#ifndef SKIP_ORANGE_WAIT
       Status = DisplayVerifiedBootMenu (DISPLAY_MENU_ORANGE);
       if (Status == EFI_SUCCESS) {
         WaitForExitKeysDetection ();
@@ -2151,6 +2155,9 @@ DisplayVerifiedBootScreen (BootInfo *Info)
         DEBUG (
             (EFI_D_INFO, "Device is unlocked, Skipping boot verification\n"));
       }
+#else
+      DEBUG ((EFI_D_INFO, "SKIP_ORANGE_WAIT set, skipping orange wait\n"));
+#endif
     }
     break;
   default:
@@ -2172,7 +2179,106 @@ DisplayVerifiedBootScreen (BootInfo *Info)
   return EFI_SUCCESS;
 }
 
-STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
+STATIC EFI_STATUS
+AuthenticateImageForLE (QcomAsn1x509Protocol *QcomAsn1X509Protocal,
+                        CERTIFICATE *OemCert,
+                        VOID *ImageBuffer,
+                        UINTN ImageSize,
+                        VB_HASH HashAlgorithm,
+                        UINTN HashSize,
+                        CONST CHAR8 *ImageName)
+{
+    EFI_STATUS Status = EFI_SUCCESS;
+    UINT8 *ImgHash = NULL;
+    UINTN ActualImgSize = ImageSize;
+    UINT8 *SigAddr = NULL;
+    UINT32 SigSize = LE_BOOTIMG_SIG_SIZE;
+
+#ifdef VERIFIED_BOOT_LE_ARB
+    /* Includes rollback index size as part of ActualImgSize.
+     * Hash is computed over [ ImageData | RollbackValue ] together.
+     * Image layout:
+     *   [ Image Data | RollbackValue (VBLE_ROLLBACK_SIZE) | Signature ]
+     */
+    if (!avb_safe_add (&ActualImgSize, ImageSize, VBLE_ROLLBACK_SIZE)) {
+        DEBUG ((EFI_D_ERROR,
+               "%a: Integer overflow in ActualImgSize calculation\n",
+               ImageName));
+        return EFI_BAD_BUFFER_SIZE;
+    }
+#endif
+
+    ImgHash = AllocateZeroPool (HashSize);
+    if (ImgHash == NULL) {
+        DEBUG ((EFI_D_ERROR,
+               "%a: Hash buffer allocation failed!\n", ImageName));
+        return EFI_OUT_OF_RESOURCES;
+    }
+
+    Status = LEGetImageHash (QcomAsn1X509Protocal, HashAlgorithm,
+                             (UINT8 *)ImageBuffer,
+                             ActualImgSize, ImgHash, HashSize);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR,
+               "%a: Error during LEGetImageHash: %r\n", ImageName, Status));
+        goto exit;
+    }
+
+    /* Signature is appended after [ ImageData | RollbackValue ] */
+    SigAddr = (UINT8 *)ImageBuffer + ActualImgSize;
+
+    Status = LEVerifyHashWithSignature (QcomAsn1X509Protocal, ImgHash,
+                                        HashAlgorithm, OemCert,
+                                        SigAddr, SigSize);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR,
+               "%a: Error during LEVerifyHashWithSignature: %r\n",
+               ImageName, Status));
+        goto exit;
+    }
+    DEBUG ((EFI_D_INFO, "VB: %a Authentication successfull\n", ImageName));
+
+exit:
+    if (ImgHash != NULL) {
+        FreePool (ImgHash);
+    }
+    return Status;
+}
+
+#ifdef VERIFIED_BOOT_LE_ARB
+STATIC EFI_STATUS
+UpdateARBForLE (VOID *ImageBuffer,
+                UINTN ImageSize,
+                CONST CHAR8 *ImageName)
+{
+    EFI_STATUS Status = EFI_SUCCESS;
+    UINT32 RollbackValue = 0;
+
+    if (ImageSize < VBLE_ROLLBACK_SIZE) {
+        DEBUG ((EFI_D_ERROR,
+               "%a: Image too small for rollback data\n", ImageName));
+        return EFI_BAD_BUFFER_SIZE;
+    }
+
+    /* Rollback value is appended at the end of image data */
+    CopyMem ((VOID *)&RollbackValue,
+             (VOID *)((UINT8 *)ImageBuffer + ImageSize),
+             VBLE_ROLLBACK_SIZE);
+
+    Status = updateHLOSVersion (RollbackValue);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR,
+               "updateHLOSVersion failed\n"));
+        return Status;
+    }
+    DEBUG ((EFI_D_ERROR, "UpdateARBForLE: ARB update successfull \n"));
+    return Status;
+}
+#endif /* VERIFIED_BOOT_LE_ARB */
+
+STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
+                                         BOOLEAN HibernationResume,
+                                         BOOLEAN SetRotAndBootStateAndVBH)
 {
     EFI_STATUS Status = EFI_SUCCESS;
     QcomAsn1x509Protocol *QcomAsn1X509Protocal = NULL;
@@ -2180,11 +2286,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     UINTN OemCertFileLen = sizeof (LeOemCertificate);
     CERTIFICATE OemCert = {NULL};
     UINTN HashSize;
-    UINT8 *ImgHash = NULL;
-    UINTN ImgSize;
     VB_HASH HashAlgorithm;
-    UINT8 *SigAddr = NULL;
-    UINT32 SigSize = 0;
     CHAR8 *SystemPath = NULL;
     UINT32 SystemPathLen = 0;
     UINT32 PageSize = 0;
@@ -2193,26 +2295,46 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
     secasn1_data_type Modulus = {NULL};
     secasn1_data_type PublicExp = {NULL};
     UINT32 PaddingType = 0;
+#ifdef VB_LE_DTBO_AUTH
+    CONST CHAR8 *AuthImages[] = { "boot", "dtbo" };
+#else
+    CONST CHAR8 *AuthImages[] = { "boot" };
+#endif
+    UINTN NumAuthImages = ARRAY_SIZE (AuthImages);
+    UINTN Idx = 0;
+    VOID *ImageBuffer;
+    UINTN ImageSize;
+    device_info_vb_t DevInfo_vb;
+#ifdef VERIFIED_BOOT_LE_ARB
+    /* Variables to store boot and dtbo ARB values for validation */
+    UINT32 BootRollbackValue = 0;
+    UINT32 DtboRollbackValue = 1; /* Intialised boot & dtbo rollback values */
+    VOID *BootImageBuffer = NULL;
+    UINTN BootImageSize = 0;
+#endif
 
-    /*Load image*/
-    GUARD (VBAllocateCmdLine (Info));
     GUARD (VBCommonInit (Info));
 
-    Status = IsSecureDevice (&SecureDevice);
-    if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
-        return Status;
-    }
+    if (!HibernationResume) {
+        /*Load image*/
+        GUARD (VBAllocateCmdLine (Info));
 
-    /* In case of flashless LE devices images are already loaded and verified
-     * by previous bootloaders, so just fill the BootInfo structure with
-     * required parameters
-     */
-    if (Info->FlashlessBoot) {
-      GUARD (LocateImageNoAuth (Info, &PageSize));
-      goto skip_verification;
-    } else {
-      GUARD (LoadImageNoAuth (Info));
+        Status = IsSecureDevice (&SecureDevice);
+        if (Status != EFI_SUCCESS) {
+            DEBUG ((EFI_D_ERROR, "VB: Failed read device state: %r\n", Status));
+            return Status;
+        }
+
+        /* In case of flashless LE devices images are already loaded and verified
+         * by previous bootloaders, so just fill the BootInfo structure with
+         * required parameters
+         */
+        if (Info->FlashlessBoot) {
+          GUARD (LocateImageNoAuth (Info, &PageSize));
+          goto skip_verification;
+        } else {
+          GUARD (LoadImageNoAuth (Info));
+        }
     }
 
     /* Locate QcomAsn1x509Protocol*/
@@ -2233,62 +2355,6 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         return Status;
     }
 
-    /* Initialize Verified Boot*/
-    device_info_vb_t DevInfo_vb;
-    DevInfo_vb.is_unlocked = IsUnlocked ();
-    DevInfo_vb.is_unlock_critical = IsUnlockCritical ();
-    Status = Info->VbIntf->VBDeviceInit (Info->VbIntf,
-                                        (device_info_vb_t *)&DevInfo_vb);
-    if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "VB: Error during VBDeviceInit: %r\n", Status));
-        return Status;
-    }
-
-    /*Calculate kernel image hash, SHA256 is used by default*/
-    HashAlgorithm = VB_SHA256;
-    HashSize = VB_SHA256_SIZE;
-    ImgSize = Info->Images[0].ImageSize;
-    ImgHash = AllocateZeroPool (HashSize);
-    if (ImgHash == NULL) {
-        DEBUG ((EFI_D_ERROR, "kernel image hash buffer allocation failed!\n"));
-        Status = EFI_OUT_OF_RESOURCES;
-        return Status;
-    }
-    Status = LEGetImageHash (QcomAsn1X509Protocal, HashAlgorithm,
-                (UINT8 *)Info->Images[0].ImageBuffer,
-                ImgSize, ImgHash, HashSize);
-    if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "VB: Error during VBGetImageHash: %r\n", Status));
-        return Status;
-    }
-
-    SigAddr = (UINT8 *)Info->Images[0].ImageBuffer + ImgSize;
-    SigSize = LE_BOOTIMG_SIG_SIZE;
-    Status = LEVerifyHashWithSignature (QcomAsn1X509Protocal, ImgHash,
-    HashAlgorithm, &OemCert, SigAddr, SigSize);
-
-    if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR, "VB: Error during "
-                      "LEVBVerifyHashWithSignature: %r\n", Status));
-
-        /* There are build variants where boot image is not signed.
-         * Below check allows the device to bootup even if the
-         * authentication fails on a Non-secure device.
-         * Note: Root of Trust cannnot be set if image authentication fails
-         * or boot image is not signed.
-         */
-         if (!SecureDevice) {
-            if (!TargetBuildVariantUser () ) {
-                DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
-                                                    "debug builds\n"));
-                Status = EFI_SUCCESS;
-                goto skip_verification;
-            }
-        }
-        return Status;
-    }
-    DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
-
     /* Check if VBIsKeymasterEnabled is valid.*/
     if (Info->VbIntf->VBIsKeymasterEnabled != NULL) {
       Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf,
@@ -2304,48 +2370,217 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info)
         "Avoid loading Keymaster TA from UEFI since RoT data will not be set in the TA\n"));
     }
 
-    if (KeymasterEnabled) {
-      /* Set Rot & Boot State*/
-      Data.IsUnlocked = IsUnlocked ();
+    /* Initialize Verified Boot*/
+    DevInfo_vb.is_unlocked = IsUnlocked ();
+    DevInfo_vb.is_unlock_critical = IsUnlockCritical ();
+    Status = Info->VbIntf->VBDeviceInit (Info->VbIntf,
+                                        (device_info_vb_t *)&DevInfo_vb);
+    if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "VB: Error during VBDeviceInit: %r\n", Status));
+        return Status;
+    }
 
-      Status = LEGetRSAPublicKeyInfoFromCertificate (QcomAsn1X509Protocal,
-                &OemCert, &Modulus, &PublicExp, &PaddingType);
+    if (!HibernationResume) {
+        /*Calculate kernel image hash, SHA256 is used by default*/
+        HashAlgorithm = VB_SHA256;
+        HashSize = VB_SHA256_SIZE;
+        /*
+         * Single loop over AuthImages[]:
+         *   Step 1 - Authenticate image via AuthenticateImageForLE()
+         *   Step 2 - Update ARB via UpdateARBForLE() [VERIFIED_BOOT_LE_ARB only]
+         */
+        for ( Idx = 0; Idx < NumAuthImages; Idx++) {
+             ImageBuffer = NULL;
+             ImageSize = 0;
 
-      if (Modulus.data != NULL &&
-            PublicExp.data != NULL) {
-        Data.PublicKeyMod = Modulus.data;
-        Data.PublicKeyModLength = Modulus.Len;
-        Data.PublicKeyExp = PublicExp.data;
-        Data.PublicKeyExpLength = PublicExp.Len;
+            Status = GetImage (Info, &ImageBuffer, &ImageSize,
+                               (CHAR8 *)AuthImages[Idx]);
+            if (Status != EFI_SUCCESS || ImageBuffer == NULL) {
+                /* boot image must always be present */
+                if (Idx == 0) {
+                    DEBUG ((EFI_D_ERROR,
+                           "VB: %a image not found \n", AuthImages[Idx]));
+                    return EFI_NOT_FOUND;
+                }
+                DEBUG ((EFI_D_ERROR,
+                       "VB: %a image not found, skipping \n", AuthImages[Idx]));
+                continue;
+            }
 
-        Status = KeyMasterSetRotForLE (&Data);
-        if (Status != EFI_SUCCESS) {
-          DEBUG ((EFI_D_ERROR, "KeyMasterSetRotForLE failed %r\n", Status));
-          return Status;
+            if ( Idx == 1 ) {
+                ImageSize = fdt32_to_cpu (((struct DtboTableHdr *)ImageBuffer)->TotalSize);
+                if (ImageSize > DTBO_MAX_SIZE_ALLOWED || ImageSize == 0) {
+                    DEBUG ((EFI_D_ERROR, "VB: %a Invalid DTBO size: 0x%x\n",
+                            AuthImages[Idx], ImageSize));
+                    return EFI_BAD_BUFFER_SIZE;
+                }
+            }
+
+            /* Authenticate image */
+            Status = AuthenticateImageForLE (QcomAsn1X509Protocal,
+                                             &OemCert,
+                                             ImageBuffer,
+                                             ImageSize,
+                                             HashAlgorithm,
+                                             HashSize,
+                                             AuthImages[Idx]);
+            if (Status != EFI_SUCCESS) {
+                DEBUG ((EFI_D_ERROR, "VB: Error during "
+                        "AuthenticateImageForLE: %r\n", Status));
+
+            /* There are build variants where boot image is not signed.
+             * Below check allows the device to bootup even if the
+             * authentication fails on a Non-secure device.
+             * Note: Root of Trust cannnot be set if image authentication fails
+             * or boot image is not signed.
+             */
+             if (!SecureDevice) {
+                if (!TargetBuildVariantUser () ) {
+                    DEBUG ((EFI_D_ERROR, "VB: Verification skipped for "
+                                                        "debug builds\n"));
+                    if (!SetRotAndBootStateAndVBH) {
+                        if (KeymasterEnabled) {
+                            Data.PublicKeyModLength = DUMMY_PUBLIC_KEY_MOD_LEN;
+                            Data.PublicKeyMod =
+                                avb_calloc (DUMMY_PUBLIC_KEY_MOD_LEN);
+                            Data.PublicKeyExpLength = DUMMY_PUBLIC_KEY_EXP_LEN;
+                            Data.PublicKeyExp =
+                                avb_calloc (DUMMY_PUBLIC_KEY_EXP_LEN);
+                            if (Data.PublicKeyMod != NULL &&
+                                    Data.PublicKeyExp != NULL) {
+                              Status = KeyMasterSetRotForLE (&Data);
+                              if (Status != EFI_SUCCESS) {
+                                DEBUG ((EFI_D_ERROR,
+                                        "KeyMasterSetRotForLE failed %r\n",
+                                        Status));
+                                return Status;
+                              }
+                              DEBUG ((EFI_D_INFO, "VB: Dummy ROT set\n"));
+                            }
+                        }
+                    }
+                    goto skip_verification;
+                }
+            }
+            return Status;
         }
-      }
-    } else {
-      DEBUG ((EFI_D_INFO, "VB: Keymaster is not enabled\n"));
+#ifdef VERIFIED_BOOT_LE_ARB
+        /* Extract ARB value based on image index */
+         if (ImageSize < VBLE_ROLLBACK_SIZE) {
+             DEBUG ((EFI_D_ERROR,
+                    "VB: %a image too small for ARB data\n",
+                    AuthImages[Idx]));
+             return EFI_BAD_BUFFER_SIZE;
+         }
+
+         if (Idx == 0) {
+             /* Boot image - store for ARB update */
+             BootImageBuffer = ImageBuffer;
+             BootImageSize = ImageSize;
+             CopyMem ((VOID *)&BootRollbackValue,
+                      (VOID *)((UINT8 *)ImageBuffer + ImageSize),
+                      VBLE_ROLLBACK_SIZE);
+         }
+         if (Idx == 1) {
+             /* DTBO image - extract for comparison */
+             CopyMem ((VOID *)&DtboRollbackValue,
+                      (VOID *)((UINT8 *)ImageBuffer + ImageSize),
+                      VBLE_ROLLBACK_SIZE);
+         }
+
+#endif
+    } /* For loop ends here */
+#ifdef VERIFIED_BOOT_LE_ARB
+        /* Validate ARB consistency if dtbo was authenticated */
+        if (BootRollbackValue != DtboRollbackValue) {
+            DEBUG ((EFI_D_ERROR,
+                    "VB: ARB mismatch, boot: %u, dtbo: %u\n",
+                    BootRollbackValue, DtboRollbackValue));
+
+            if (!SecureDevice && !TargetBuildVariantUser ()) {
+                /* Non-fatal on non-secure debug builds */
+                DEBUG ((EFI_D_ERROR,
+                        "VB: ARB mismatch allowed on non-secure debug build\n"));
+                /* Skip ARB update but continue boot */
+                goto skip_arb_update;
+            }
+
+            DEBUG ((EFI_D_ERROR,
+                    "VB: ARB mismatch is FATAL on secure/user build\n"));
+            return EFI_SECURITY_VIOLATION;
+        }
+        DEBUG ((EFI_D_ERROR, "VB: ARB values matches \n"));
+
+        /* Update ARB once with validated rollback value from boot image */
+        Status = UpdateARBForLE (BootImageBuffer, BootImageSize,
+                                 "boot");
+        if (Status != EFI_SUCCESS) {
+            if (!SecureDevice && !TargetBuildVariantUser ()){
+                DEBUG ((EFI_D_ERROR, "UpdateARBForLE failed: %r, bootup allowed for non-secure debug build\n", Status));
+                goto skip_arb_update;
+            }
+            else{
+                DEBUG ((EFI_D_ERROR, "UpdateARBForLE failed: %r\n", Status));
+                return Status;
+            }
+        }
+skip_arb_update:
+        /* Label to skip ARB update on non-secure debug builds with ARB mismatch
+         * Execution continues here after goto, proceeding to ROT setting
+         */
+         ;
+#endif
+    }
+
+    if (!SetRotAndBootStateAndVBH) {
+        if (KeymasterEnabled) {
+          /* Set Rot & Boot State*/
+          Data.IsUnlocked = IsUnlocked ();
+
+          Status = LEGetRSAPublicKeyInfoFromCertificate (QcomAsn1X509Protocal,
+                    &OemCert, &Modulus, &PublicExp, &PaddingType);
+
+          if (Modulus.data != NULL &&
+                PublicExp.data != NULL) {
+            Data.PublicKeyMod = Modulus.data;
+            Data.PublicKeyModLength = Modulus.Len;
+            Data.PublicKeyExp = PublicExp.data;
+            Data.PublicKeyExpLength = PublicExp.Len;
+
+            Status = KeyMasterSetRotForLE (&Data);
+            if (Status != EFI_SUCCESS) {
+              DEBUG ((EFI_D_ERROR, "KeyMasterSetRotForLE failed %r\n", Status));
+              return Status;
+            }
+          }
+        }
+        DEBUG ((EFI_D_INFO, "VB: LoadImageAndAuthForLE complete!\n"));
+    }
+    else {
+        DEBUG ((EFI_D_INFO,
+                "VB: LoadImageAndAuthForLE for Hibernate complete!\n"));
     }
 
 skip_verification:
-    if (IsSdCardPresent()) {
-      GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
-      return Status;
-    }
-
-    if (!IsRootCmdLineUpdated (Info)) {
-        SystemPathLen = GetSystemPath (&SystemPath,
-                                       Info->MultiSlotBoot,
-                                       Info->BootIntoRecovery,
-                                       (CHAR16 *)L"system",
-                                       (CHAR8 *)"root",
-                                       Info->FlashlessBoot);
-        if (SystemPathLen == 0 ||
-            SystemPath == NULL) {
-            return EFI_LOAD_ERROR;
+    if (!HibernationResume) {
+        if (IsSdCardPresent()) {
+          GUARD (AppendVBCmdLine (Info, (CONST CHAR8 *)" root=/dev/ram0 update_mode=1 verity=disabled"));
+          return Status;
         }
-        GUARD (AppendVBCmdLine (Info, SystemPath));
+
+        if (!IsRootCmdLineUpdated (Info)) {
+            SystemPathLen = GetSystemPath (&SystemPath,
+                                           Info->MultiSlotBoot,
+                                           Info->BootIntoRecovery,
+                                           (CHAR16 *)L"system",
+                                           (CHAR8 *)"root",
+                                           Info->FlashlessBoot);
+            if (SystemPathLen == 0 ||
+                SystemPath == NULL) {
+                return EFI_LOAD_ERROR;
+            }
+            GUARD (AppendVBCmdLine (Info, SystemPath));
+        }
     }
     return Status;
 }
@@ -2426,6 +2661,15 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
 
   Info->HasPvmFw = false;
   Info->PvmFwRawSize = 0;
+
+  Info->HasSdvDiceEnabled = false;
+  Info->SdvDiceLeaf = false;
+#ifdef SDV_DICE_ENABLED
+  Info->HasSdvDiceEnabled = true;
+#endif
+#ifdef AUTO_VIRT_ABL
+  Info->SdvDiceLeaf = true;
+#endif
 
 #ifdef PVMFW_BCC
   /* Check for pvmfw partition */
@@ -2532,7 +2776,9 @@ get_ptn_name:
                                   );
     break;
   case AVB_LE:
-    Status = LoadImageAndAuthForLE (Info);
+    Status = LoadImageAndAuthForLE (Info,
+                                    HibernationResume,
+                                    SetRotAndBootStateAndVBH);
     break;
   default:
     DEBUG ((EFI_D_ERROR, "Unsupported AVB version %d\n", AVBVersion));
