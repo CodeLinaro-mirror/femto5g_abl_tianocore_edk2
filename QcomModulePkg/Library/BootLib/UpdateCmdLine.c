@@ -195,7 +195,6 @@ LIST_ENTRY *BootConfigListHead = NULL;
 #define GVMINFO_MAGIC "GVMINFO!"
 #define MAX_GVMINFO_SIZE 512
 #define GVMINFO_MAGIC_SIZE 8
-#define MAX_AUDIO_FW 4
 #define MAX_USER_CMD_LINE 256
 
 typedef struct {
@@ -633,7 +632,7 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
       Status = ReadAudioFrameWork (&Src, Length);
       if (Status == EFI_SUCCESS) {
          if (*Length) {
-            AsciiStrCpyS (FrameWork, *Length, Src);
+            AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW_LENGTH, Src, *Length);
          }
       }
       return;
@@ -643,7 +642,12 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
   GvmInfoBufHdr = (GvmInfoHdr *)pGvmInfo;
   *Length = GvmInfoBufHdr->AudioFrameworkSize;
   if (*Length) {
-    AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW,
+    if (*Length >= MAX_AUDIO_FW_LENGTH) {
+      DEBUG ((EFI_D_ERROR, "AudioFrameworkSize (%u) exceeds buffer, clamping\n",
+              *Length));
+      *Length = MAX_AUDIO_FW_LENGTH - 1;
+    }
+    AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW_LENGTH,
                    &pGvmInfo[GvmInfoBufHdr->HeaderSize], *Length);
     DEBUG ((EFI_D_INFO, "Audio FrameWork: %a\n", FrameWork));
   } else {
