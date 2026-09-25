@@ -82,6 +82,7 @@
         Bootconfig.c
 	EarlyEthernet.c
 	EarlyUsbInit.c
+	SpinorSlotSync.c
 
 [Packages]
 	ArmPkg/ArmPkg.dec
@@ -140,6 +141,8 @@
 	gEfiUfsLU6Guid
 	gEfiUfsLU7Guid
         gEfiNvme0Guid
+	gEfiSpiNor0Guid
+	gSpinorXblBootGuid
 	gVirtioMmioTransportGuid
 
 [Protocols]
