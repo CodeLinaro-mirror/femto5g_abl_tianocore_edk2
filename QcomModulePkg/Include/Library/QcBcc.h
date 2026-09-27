@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc.
- * All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef __BCC_H__
@@ -18,7 +18,10 @@ typedef UINTN uintptr_t;
 typedef UINTN size_t;
 typedef BOOLEAN bool;
 
+typedef struct BootInfo BootInfo;
+
 #include <dice/dice.h>
+
 /*
  * Size of BCC artifacts handed over from root (with Bcc) is:
  * CBOR tags + memory needed to encode "struct BCCArtifacts"
@@ -27,10 +30,22 @@ typedef BOOLEAN bool;
  *
  * However we can allocate little bigger buffer to be future compatible.
  */
-#define BCC_ARTIFACTS_WITH_BCC_TOTAL_SIZE 2 * 1024
+#define BCC_ARTIFACTS_WITH_BCC_TOTAL_SIZE 3 * 1024
 
 /* Max Supported BCC Component Version String */
 #define BCC_COMPONENT_NAME_BUFFER_MAX_SIZE 32
+
+/* Max Supported BCC Component Instance Name String */
+#define BCC_COMPONENT_INSTANCE_NAME_BUFFER_MAX_SIZE 32
+
+/* Max Supported Build Fingerprint String */
+#define BCC_BUILD_FINGERPRINT_BUFFER_MAX_SIZE 100
+
+/* Max Supported Boot State String */
+#define BCC_VERIFIED_BOOT_STATE_BUFFER_MAX_SIZE 10
+
+/* Max Supported SDV Boot Mode String */
+#define BCC_BOOT_MODE_BUFFER_MAX_SIZE 10
 
 /* Structure that holds details about the image and it's parameters
  * which may be included in the BCC generation
@@ -47,6 +62,35 @@ typedef struct BccImgParams {
 
   /* Version of the image which may be included in the BCC data */
   UINT64 ComponentVersion;
+
+  // Added to support the SDV DICE profile:
+
+  /* Component instance name */
+  CHAR8 ComponentInstanceName[BCC_COMPONENT_INSTANCE_NAME_BUFFER_MAX_SIZE];
+
+  /* Name of the image which may be included in the BCC data */
+  CHAR8 VerifiedBootState[BCC_VERIFIED_BOOT_STATE_BUFFER_MAX_SIZE];
+
+  /* Security version */
+  UINT64 SecurityVersion;
+
+  /* Boot Security version */
+  UINT64 BootSecurityVersion;
+
+  /* Vendor Security version */
+  UINT64 VendorSecurityVersion;
+
+  /* Product Security version */
+  UINT64 ProductSecurityVersion;
+
+  /* System_ext Security version */
+  UINT64 SystemExtSecurityVersion;
+
+  /* Name of the image which may be included in the BCC data */
+  CHAR8 BuildFingerprint[BCC_BUILD_FINGERPRINT_BUFFER_MAX_SIZE];
+
+  /* SDV boot mode */
+  CHAR8 SdvBootMode[BCC_BOOT_MODE_BUFFER_MAX_SIZE];
 } BccImgParams_t;
 
 /* Structure that is used to pass BCC parameters which may included in BCC */
@@ -101,6 +145,8 @@ typedef struct BccParams {
  *                                        encode BCC Artifacts returned
  *                                        in the BCC encoder buffer
  *
+ *    [IN] Info                         - Boot info
+ *
  * Returns:
  *
  *    kDiceResultOk                       - On Success
@@ -110,7 +156,8 @@ typedef struct BccParams {
 DiceResult
 GetBccArtifacts (UINT8 *FinalEncodedBccArtifacts,
                  size_t BccArtifactsBufferSize,
-                 size_t *BccArtifactsValidSize
+                 size_t *BccArtifactsValidSize,
+                 BootInfo *Info
 #ifndef USE_DUMMY_BCC
                  ,
                  BccParams_t BccParamsRecvdFromAVB

@@ -9,12 +9,12 @@
 #define __AVB_POPULATE_BCC_PARAMS_H__
 
 #include "libavb/avb_slot_verify.h"
-//#include <Library/QcBcc.h>
+#include "BootLinux.h"
 #include "Library/KeymasterClient.h"
 
 EFI_STATUS
 PopulateBccParams (AvbSlotVerifyData *SlotData,
-                   BOOLEAN BootIntoRecovery,
+                   BootInfo *Info,
                    BccParams_t *bcc_params);
 
 #endif /* __AVB_POPULATE_BCC_PARAMS_H__ */
