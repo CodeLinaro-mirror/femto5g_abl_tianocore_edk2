@@ -1,6 +1,7 @@
 ###############################################################################
 MSM_ARCH=sdxpinn-cpe-wkk-min
 EARLY_ETH_ENABLED=1
+VERITY_LE=1
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxpinn.common
 
