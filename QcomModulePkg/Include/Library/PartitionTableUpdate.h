@@ -146,6 +146,12 @@ table in the respective position mentioned below.
 #define PRIMARY_HDR_LBA 0x1
 #define BOOT_PART_SIZE 32
 
+/* SPINOR GPT extent (in blocks), used by the SPINOR slot-sync library.
+ * Bounding to 1 header block + 4 entry blocks keeps primary access at LBA 1..5,
+ * clear of the WP region. */
+#define SPINOR_GPT_ENTRY_BLOCKS 4
+#define SPINOR_GPT_TOTAL_BLOCKS (GPT_HDR_BLOCKS + SPINOR_GPT_ENTRY_BLOCKS)
+
 /*Slot specific macros*/
 #define MAX_SLOT_SUFFIX_SZ 3
 #define MIN_SLOTS 1
@@ -256,4 +262,9 @@ BOOLEAN IsABRetryCountUpdateRequired (VOID);
 UINT32 PartitionVerifyMibibImage (UINT8 *Image);
 UINT64 GetPartitionSize (EFI_BLOCK_IO_PROTOCOL *BlockIo);
 BOOLEAN IsSlotsUbootable (VOID);
+
+BOOLEAN SpinorSlotSyncEnabled (VOID);
+EFI_STATUS ReadSpinorActiveSlot (Slot *ActiveSlot);
+EFI_STATUS SetSpinorActiveSlot (Slot *NewSlot);
+VOID CheckAndRestoreSlotConsistency (VOID);
 #endif
