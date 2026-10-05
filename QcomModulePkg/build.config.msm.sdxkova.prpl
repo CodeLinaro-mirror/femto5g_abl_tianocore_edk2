@@ -1,5 +1,6 @@
 ################################################################################
 MSM_ARCH=sdxkova-prpl
 EARLY_ETH_ENABLED=1
+ENABLE_FSP_WRAP_KEY_FEATURE=1
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.sdxkova.common
