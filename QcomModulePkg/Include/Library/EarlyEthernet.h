@@ -44,7 +44,7 @@
 #define PHY_ADDR_LEN   33
 #define IFACE_LEN      8
 #define SPEED_LEN      6
-#define QOSCFG_LEN     3
+#define QOSCFG_LEN     5
 #define WAIT_SWITCH_RDY_LEN     1
 #define RSSCFG_LEN     3
 
