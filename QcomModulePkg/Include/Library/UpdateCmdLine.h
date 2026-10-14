@@ -86,6 +86,9 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *DispOpCmdLine;
   CHAR8 *HfiDbgCmdLine;
   CHAR8 *GpuCmdLine;
+#ifdef AUTO_VIRT_ABL
+  CHAR8 *UserCmdLine;
+#endif
   CONST CHAR8 *CmdLine;
   CONST CHAR8 *AlarmBootCmdLine;
   CONST CHAR8 *MdtpActiveFlag;

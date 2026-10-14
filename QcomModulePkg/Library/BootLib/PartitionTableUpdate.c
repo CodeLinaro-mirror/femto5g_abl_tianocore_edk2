@@ -1876,6 +1876,12 @@ GetActiveSlot (Slot *ActiveSlot)
       GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
                        Slots[0].Suffix, StrLen (Slots[0].Suffix)));
       UpdatePartitionAttributes (PARTITION_ATTRIBUTES);
+
+      /* First boot: mirror the default active slot onto SPINOR for the first time */
+      if (SpinorSlotSyncEnabled ()) {
+        SetSpinorActiveSlot (ActiveSlot);
+      }
+
       FirstBoot = TRUE;
       return EFI_SUCCESS;
     }
@@ -2051,6 +2057,11 @@ EFI_STATUS HandleActiveSlotUnbootable (BOOLEAN ForceBootAlternateSlot)
     DEBUG (
         (EFI_D_INFO, "Alternate Slot %s is bootable\n", AlternateSlot->Suffix));
     GUARD (SetActiveSlot (AlternateSlot, FALSE));
+
+    /* Mirror the rollback onto SPINOR before rebooting */
+    if (SpinorSlotSyncEnabled ()) {
+      SetSpinorActiveSlot (AlternateSlot);
+    }
 
     DEBUG ((EFI_D_INFO, "HandleActiveSlotUnbootable: Rebooting\n"));
     gRT->ResetSystem (EfiResetCold, EFI_SUCCESS, 0, NULL);

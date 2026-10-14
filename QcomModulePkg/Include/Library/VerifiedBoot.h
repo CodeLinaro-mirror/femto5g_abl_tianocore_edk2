@@ -47,6 +47,7 @@ enum
   AVB_LE
 };
 
+#define VBLE_ROLLBACK_SIZE  4
 #define VB_SHA256_SIZE  32
 #define LE_BOOTIMG_SIG_SIZE 256
 

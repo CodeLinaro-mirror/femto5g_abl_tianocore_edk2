@@ -43,6 +43,7 @@
 #include <Library/VerifiedBootMenu.h>
 #include <Library/HypervisorMvCalls.h>
 #include <Library/Rtic.h>
+#include <Library/QcBcc.h>
 #include <Protocol/EFIMdtp.h>
 #include <Protocol/EFIScmModeSwitch.h>
 #include <Protocol/EFIRmVm.h>
@@ -202,6 +203,115 @@ QueryPvmFwParams (UINT64 *PvmFwLoadAddr, UINT64 *PvmFwSizeReserved)
 
   return (Status == EFI_SUCCESS &&
           SizeStatus == EFI_SUCCESS);
+}
+#endif
+
+#ifdef SDV_DICE_ENABLED
+STATIC BOOLEAN
+QueryDiceParams (UINT64 *DiceLoadAddr, UINT64 *DiceSizeReserved)
+{
+  EFI_STATUS Status;
+  EFI_STATUS SizeStatus;
+  UINTN DataSize = 0;
+
+  DataSize = sizeof (*DiceLoadAddr);
+  Status = gRT->GetVariable ((CHAR16 *)L"DiceBaseAddr", &gQcomTokenSpaceGuid,
+                          NULL, &DataSize, DiceLoadAddr);
+
+  DataSize = sizeof (*DiceSizeReserved);
+  SizeStatus = gRT->GetVariable ((CHAR16 *)L"DiceSize", &gQcomTokenSpaceGuid,
+                              NULL, &DataSize, DiceSizeReserved);
+
+  return (Status == EFI_SUCCESS &&
+          SizeStatus == EFI_SUCCESS);
+}
+
+/*
+ * Magic written by the PVM SDV DICE service at the last 4 bytes of the
+ * handover carveout to signal that valid CBOR handover data is present.
+ * Must match HANDOVER_MAGIC in sdv_dice_service/include/sdv_dice_service.h.
+ */
+#define DICE_HANDOVER_MAGIC           0x7AADD86Cu
+
+/* Maximum time to wait for PVM to write the handover magic (milliseconds). */
+#define DICE_HANDOVER_POLL_TIMEOUT_MS 500u
+
+/* Polling interval while waiting for the magic (microseconds). */
+#define DICE_HANDOVER_POLL_INTERVAL_US 1000u
+
+STATIC EFI_STATUS
+GenerateSdvDiceArtifacts (BootInfo *Info, BootParamlist *BootParamlistPtr)
+{
+  UINT64            DiceLoadAddr = 0;
+  UINT64            DiceSizeReserved = 0;
+  UINT8             *FinalEncodedBccArtifacts = NULL;
+  size_t            BccArtifactsValidSize = 0;
+  volatile UINT32   *MagicPtr;
+  UINT64            PollStartMs;
+  BOOLEAN           MagicFound = FALSE;
+  UINT8             Ret;
+  EFI_STATUS        Status = EFI_SUCCESS;
+
+  if (!QueryDiceParams (&DiceLoadAddr, &DiceSizeReserved)) {
+    DEBUG ((EFI_D_ERROR, "Querying DICE memory parameters failed"));
+    Status = EFI_FAILURE;
+    return Status;
+  }
+
+  if (!DiceLoadAddr || !DiceSizeReserved) {
+    DEBUG ((EFI_D_ERROR, "Wrong DICE memory parameters"));
+    Status = EFI_FAILURE;
+    return Status;
+  }
+
+  FinalEncodedBccArtifacts = (UINT8 *)DiceLoadAddr;
+  BccArtifactsValidSize = DiceSizeReserved;
+
+  /* Poll for the PVM handover magic at the last 4 bytes of the carveout.
+   * PVM writes this after placing valid CBOR BCC handover data at offset 0. */
+  MagicPtr = (volatile UINT32 *)(DiceLoadAddr + DiceSizeReserved - sizeof (UINT32));
+  PollStartMs = GetTimerCountms ();
+
+  do {
+    if (*MagicPtr == DICE_HANDOVER_MAGIC) {
+      MagicFound = TRUE;
+      break;
+    }
+    MicroSecondDelay (DICE_HANDOVER_POLL_INTERVAL_US);
+  } while (GetTimerCountms () - PollStartMs < DICE_HANDOVER_POLL_TIMEOUT_MS);
+
+  if (!MagicFound) {
+    DEBUG ((EFI_D_ERROR,
+            "DICE: Handover magic not found within %u ms — skipping DICE\n",
+            DICE_HANDOVER_POLL_TIMEOUT_MS));
+    return EFI_TIMEOUT;
+  }
+
+  /* Ensure CBOR data reads are not speculated before the magic check. */
+  MemoryFence ();
+
+  DEBUG ((EFI_D_INFO, "DICE: Handover magic found after %lu ms\n",
+          GetTimerCountms () - PollStartMs));
+
+  /* Generate BCC handover data*/
+  Ret =
+      GetBccArtifacts (FinalEncodedBccArtifacts,
+                       BCC_ARTIFACTS_WITH_BCC_TOTAL_SIZE, &BccArtifactsValidSize,
+                       Info
+#ifndef USE_DUMMY_BCC
+                       , BccParamsRecvdFromAVB
+#endif
+);
+  if (Ret != 0) {
+    DEBUG ((EFI_D_ERROR, "BCC handover data generation failed\n"));
+    Status = EFI_FAILURE;
+    return Status;
+  }
+
+  DEBUG ((EFI_D_INFO, "GenerateSdvDiceArtifacts: Generated at address 0x%x\n",
+          FinalEncodedBccArtifacts));
+
+  return Status;
 }
 #endif
 
@@ -1175,7 +1285,8 @@ AppendPvmFwConfig (BootInfo *Info, BootParamlist *BootParamlistPtr) {
   /* Generate BCC handover data*/
   Ret = GetBccArtifacts (FinalEncodedBccArtifacts,
                        BCC_ARTIFACTS_WITH_BCC_TOTAL_SIZE,
-                       &BccArtifactsValidSize
+                       &BccArtifactsValidSize,
+                       Info
 #ifndef USE_DUMMY_BCC
                       , BccParamsRecvdFromAVB
 #endif
@@ -1560,6 +1671,15 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                 BootParamlistPtr->RamdiskSize);
 
   RamdiskLoadAddr +=BootParamlistPtr->RamdiskSize;
+
+#ifdef SDV_DICE_ENABLED
+  if (Info->HasSdvDiceEnabled) {
+    Status = GenerateSdvDiceArtifacts (Info, BootParamlistPtr);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Failed to generate DICE artifacs: %r\n", Status));
+    }
+  }
+#endif
 
   if (BootParamlistPtr->BootingWith32BitKernel) {
     if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
