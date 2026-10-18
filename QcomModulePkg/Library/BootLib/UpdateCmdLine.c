@@ -54,6 +54,7 @@
 #include <Library/PartialGoods.h>
 
 #include "AutoGen.h"
+#include "BootStats.h"
 #include "DeviceInfo.h"
 #include "UpdateCmdLine.h"
 #include "Recovery.h"
@@ -144,6 +145,12 @@ STATIC CHAR8 *HfiCoreStr = " msm_hfi_core.dbg_mode=";
 #define MAX_GPU_CMD_LINE 256
 STATIC CHAR8 GpuCmdLine[MAX_GPU_CMD_LINE];
 STATIC UINTN GpuCmdLineLen = sizeof (GpuCmdLine);
+
+#ifdef ENABLE_BOOT_STATS
+STATIC CONST CHAR8 *PreAblTimeStr = " androidboot.boottime=";
+#define MAX_PRE_ABL_TIME_CMD_LEN 192
+STATIC CHAR8 PreAblTimeVal[MAX_PRE_ABL_TIME_CMD_LEN];
+#endif
 
 #define MAX_AUDIO_CMD_LENGTH 64
 STATIC CHAR8 AudioFrameWork[MAX_AUDIO_FW_LENGTH];
@@ -2468,6 +2475,21 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   }
 #endif/*if TARGET_BOARD_TYPE_AUTO*/
 
+#ifdef ENABLE_BOOT_STATS
+  BootStatsGetPreAblTime (PreAblTimeVal,
+                                       sizeof (PreAblTimeVal));
+  if (PreAblTimeVal[0] != '\0') {
+    ParamLen = AsciiStrLen (PreAblTimeStr);
+    BootConfigFlag = IsAndroidBootParam (PreAblTimeStr, ParamLen,
+                                          HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+    ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (PreAblTimeVal),
+                   CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, PreAblTimeStr,
+                         PreAblTimeVal, BootConfigListHead,
+                         ParamLen, AsciiStrLen (PreAblTimeVal));
+  }
+#endif
   /* 1 extra byte for NULL */
   CmdLineLen += 1;
 
