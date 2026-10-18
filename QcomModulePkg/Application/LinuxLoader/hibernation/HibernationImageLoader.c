@@ -327,13 +327,17 @@ static VOID InitKernelPfnIterator (UINT64 *Array)
 static INT32 FindNextAvailableBlock (struct KernelPfnIterator *Iter)
 {
         UINT32 AvailablePfns;
+        static BOOLEAN IndexMaxedOutPrinted = FALSE;
 
         do {
                 UINT64 CurPfn, NextPfn;
                 Iter->CurIndex++;
                 if (Iter->CurIndex >= Iter->MaxIndex) {
-                        BUG ("index maxed out. Line %d\n", __LINE__);
-                }
+			if (!IndexMaxedOutPrinted) {
+				IndexMaxedOutPrinted = TRUE;
+				DEBUG((EFI_D_ERROR, "index maxed out. Line %d\n", __LINE__));
+			}
+		}
                 CurPfn = Iter->PfnArray[Iter->CurIndex];
                 NextPfn = Iter->PfnArray[Iter->CurIndex + 1];
                 AvailablePfns = NextPfn - CurPfn - 1;
