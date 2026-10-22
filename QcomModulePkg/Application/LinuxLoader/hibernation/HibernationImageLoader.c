@@ -2434,6 +2434,17 @@ VOID BootIntoHibernationImage (BootInfo *Info,
         }
 #endif
 
+        /* Sends Milestone Call to Keymaster. Must happen after the last
+         * devinfo write above, since BootLinux() is never reached on a
+         * successful hibernation resume (CopyBounceAndBootKernel below
+         * jumps directly into the resumed kernel).
+         */
+        Status = SendVBMilestoneCall (Info);
+        if (Status != EFI_SUCCESS) {
+                printf ("Failed to send milestone call : %r\n", Status);
+                goto err;
+        }
+
         Ret = RestoreSnapshotImage ();
         if (Ret) {
                 printf ("Failed restore_snapshot_image \n");
