@@ -109,7 +109,7 @@ EnableChargingScreen (BOOLEAN IsEnabled)
 BOOLEAN
 IsAllowedAudioFramework (IN CONST CHAR8 *Value)
 {
-  STATIC CONST CHAR8 *AllowedAudFrmwrk[] = { "elite", "audioreach"};
+  STATIC CONST CHAR8 *AllowedAudFrmwrk[] = { "elite", "audioreach", "awe", "ar", "audiolite", "audioreach_gen5"};
   UINTN ValLen, AlowdAudLen, i;
 
   if (Value == NULL) {

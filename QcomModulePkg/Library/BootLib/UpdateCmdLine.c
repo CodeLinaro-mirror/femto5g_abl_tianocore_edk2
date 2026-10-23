@@ -54,6 +54,7 @@
 #include <Library/PartialGoods.h>
 
 #include "AutoGen.h"
+#include "BootStats.h"
 #include "DeviceInfo.h"
 #include "UpdateCmdLine.h"
 #include "Recovery.h"
@@ -145,6 +146,12 @@ STATIC CHAR8 *HfiCoreStr = " msm_hfi_core.dbg_mode=";
 STATIC CHAR8 GpuCmdLine[MAX_GPU_CMD_LINE];
 STATIC UINTN GpuCmdLineLen = sizeof (GpuCmdLine);
 
+#ifdef ENABLE_BOOT_STATS
+STATIC CONST CHAR8 *PreAblTimeStr = " androidboot.boottime=";
+#define MAX_PRE_ABL_TIME_CMD_LEN 192
+STATIC CHAR8 PreAblTimeVal[MAX_PRE_ABL_TIME_CMD_LEN];
+#endif
+
 #define MAX_AUDIO_CMD_LENGTH 64
 STATIC CHAR8 AudioFrameWork[MAX_AUDIO_FW_LENGTH];
 STATIC UINT32 AudioFWLen;
@@ -195,7 +202,6 @@ LIST_ENTRY *BootConfigListHead = NULL;
 #define GVMINFO_MAGIC "GVMINFO!"
 #define MAX_GVMINFO_SIZE 512
 #define GVMINFO_MAGIC_SIZE 8
-#define MAX_AUDIO_FW 4
 #define MAX_USER_CMD_LINE 256
 
 typedef struct {
@@ -574,6 +580,11 @@ LoadGvmInfo (VOID)
   UINT32 ImageSize = MAX_GVMINFO_SIZE;
 
   ImageBuffer = AllocateZeroPool (ImageSize);
+  if (ImageBuffer == NULL) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate memory for GvmInfo\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
+
   Status = LoadImageFromPartition (ImageBuffer, &ImageSize,
     (CHAR16 *)L"gvminfo");
   if (Status != EFI_SUCCESS) {
@@ -633,7 +644,7 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
       Status = ReadAudioFrameWork (&Src, Length);
       if (Status == EFI_SUCCESS) {
          if (*Length) {
-            AsciiStrCpyS (FrameWork, *Length, Src);
+            AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW_LENGTH, Src, *Length);
          }
       }
       return;
@@ -643,7 +654,12 @@ GetAudioFrameWork (CHAR8 *FrameWork, UINT32* Length)
   GvmInfoBufHdr = (GvmInfoHdr *)pGvmInfo;
   *Length = GvmInfoBufHdr->AudioFrameworkSize;
   if (*Length) {
-    AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW,
+    if (*Length >= MAX_AUDIO_FW_LENGTH) {
+      DEBUG ((EFI_D_ERROR, "AudioFrameworkSize (%u) exceeds buffer, clamping\n",
+              *Length));
+      *Length = MAX_AUDIO_FW_LENGTH - 1;
+    }
+    AsciiStrnCpyS (FrameWork, MAX_AUDIO_FW_LENGTH,
                    &pGvmInfo[GvmInfoBufHdr->HeaderSize], *Length);
     DEBUG ((EFI_D_INFO, "Audio FrameWork: %a\n", FrameWork));
   } else {
@@ -2463,6 +2479,21 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   }
 #endif/*if TARGET_BOARD_TYPE_AUTO*/
 
+#ifdef ENABLE_BOOT_STATS
+  BootStatsGetPreAblTime (PreAblTimeVal,
+                                       sizeof (PreAblTimeVal));
+  if (PreAblTimeVal[0] != '\0') {
+    ParamLen = AsciiStrLen (PreAblTimeStr);
+    BootConfigFlag = IsAndroidBootParam (PreAblTimeStr, ParamLen,
+                                          HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+    ADD_PARAM_LEN (BootConfigFlag, AsciiStrLen (PreAblTimeVal),
+                   CmdLineLen, BootConfigLen);
+    AddtoBootConfigList (BootConfigFlag, PreAblTimeStr,
+                         PreAblTimeVal, BootConfigListHead,
+                         ParamLen, AsciiStrLen (PreAblTimeVal));
+  }
+#endif
   /* 1 extra byte for NULL */
   CmdLineLen += 1;
 

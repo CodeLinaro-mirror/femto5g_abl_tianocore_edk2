@@ -135,6 +135,16 @@ VOID
 FreeVerifiedBootResource (BootInfo *Info);
 
 /**
+ * Sends the verified boot milestone call to Keymaster/TZ.
+ * Must be called after the last devinfo (BCC/DICE) write for
+ * this boot, since TZ latches those values on this call.
+ *
+ * @return EFI_STATUS
+ */
+EFI_STATUS
+SendVBMilestoneCall (BootInfo *Info);
+
+/**
  *
  * Returns the Finger print for this
  * boot. A hash of user public key.

@@ -327,13 +327,17 @@ static VOID InitKernelPfnIterator (UINT64 *Array)
 static INT32 FindNextAvailableBlock (struct KernelPfnIterator *Iter)
 {
         UINT32 AvailablePfns;
+        static BOOLEAN IndexMaxedOutPrinted = FALSE;
 
         do {
                 UINT64 CurPfn, NextPfn;
                 Iter->CurIndex++;
                 if (Iter->CurIndex >= Iter->MaxIndex) {
-                        BUG ("index maxed out. Line %d\n", __LINE__);
-                }
+			if (!IndexMaxedOutPrinted) {
+				IndexMaxedOutPrinted = TRUE;
+				DEBUG((EFI_D_ERROR, "index maxed out. Line %d\n", __LINE__));
+			}
+		}
                 CurPfn = Iter->PfnArray[Iter->CurIndex];
                 NextPfn = Iter->PfnArray[Iter->CurIndex + 1];
                 AvailablePfns = NextPfn - CurPfn - 1;
@@ -2433,6 +2437,17 @@ VOID BootIntoHibernationImage (BootInfo *Info,
                 goto err;
         }
 #endif
+
+        /* Sends Milestone Call to Keymaster. Must happen after the last
+         * devinfo write above, since BootLinux() is never reached on a
+         * successful hibernation resume (CopyBounceAndBootKernel below
+         * jumps directly into the resumed kernel).
+         */
+        Status = SendVBMilestoneCall (Info);
+        if (Status != EFI_SUCCESS) {
+                printf ("Failed to send milestone call : %r\n", Status);
+                goto err;
+        }
 
         Ret = RestoreSnapshotImage ();
         if (Ret) {
