@@ -2385,6 +2385,9 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
         /*Calculate kernel image hash, SHA256 is used by default*/
         HashAlgorithm = VB_SHA256;
         HashSize = VB_SHA256_SIZE;
+        if (Info->Images[0].Name != NULL) {
+          AuthImages[0] = Info->Images[0].Name;
+        }
         /*
          * Single loop over AuthImages[]:
          *   Step 1 - Authenticate image via AuthenticateImageForLE()
@@ -2460,6 +2463,7 @@ STATIC EFI_STATUS LoadImageAndAuthForLE (BootInfo *Info,
                             }
                         }
                     }
+                    Status = EFI_SUCCESS;
                     goto skip_verification;
                 }
             }
