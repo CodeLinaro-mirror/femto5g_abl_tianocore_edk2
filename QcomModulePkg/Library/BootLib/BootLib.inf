@@ -112,6 +112,7 @@
 	RecoveryInfo.c
 	IntegrityIMA.c
 	SailLib.c
+	BootImgDecrypt.c
 
 [Packages]
 	ArmPkg/ArmPkg.dec
