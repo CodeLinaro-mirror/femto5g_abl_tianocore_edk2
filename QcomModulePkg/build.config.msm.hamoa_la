@@ -10,6 +10,7 @@ DISABLE_PARALLEL_DOWNLOAD_FLASH=0
 REMOVE_CARVEOUT_REGION=1
 PVMFW_ENABLED=1
 PVMFW_CONFIG_EXT=1
+ENABLE_SPINOR_SLOT_SYNC=1
 
 ################################################################################
 . ${ROOT_DIR}/${ABL_SRC}/QcomModulePkg/build.config.msm.common

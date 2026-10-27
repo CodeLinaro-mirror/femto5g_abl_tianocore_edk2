@@ -47,6 +47,7 @@ enum
   AVB_LE
 };
 
+#define VBLE_ROLLBACK_SIZE  4
 #define VB_SHA256_SIZE  32
 #define LE_BOOTIMG_SIG_SIZE 256
 
@@ -132,6 +133,16 @@ LoadImageAndAuth (BootInfo *Info, BOOLEAN HibernationResume,
  */
 VOID
 FreeVerifiedBootResource (BootInfo *Info);
+
+/**
+ * Sends the verified boot milestone call to Keymaster/TZ.
+ * Must be called after the last devinfo (BCC/DICE) write for
+ * this boot, since TZ latches those values on this call.
+ *
+ * @return EFI_STATUS
+ */
+EFI_STATUS
+SendVBMilestoneCall (BootInfo *Info);
 
 /**
  *

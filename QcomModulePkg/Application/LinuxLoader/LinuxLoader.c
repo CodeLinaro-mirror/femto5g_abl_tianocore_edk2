@@ -268,6 +268,12 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   if (MultiSlotBoot) {
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     FindPtnActiveSlot ();
+
+    /* Heal SPINOR slot to match UFS slot after an OTA
+     * that may have been interrupted between the UFS and SPINOR commits. */
+    if (SpinorSlotSyncEnabled ()) {
+       CheckAndRestoreSlotConsistency ();
+    }
   }
 
   DetectSDCardAndMountFAT();

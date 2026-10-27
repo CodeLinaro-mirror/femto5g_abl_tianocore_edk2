@@ -14,12 +14,16 @@
 // #include "object.h"
 #include "SmciInvokeUtils.h"
 
-
 #define IUpdateRollbackVersion_ERROR_UPDATE_RPMB_VERSION_FAILED INT32_C(10)
 #define IUpdateRollbackVersion_ERROR_BOOT_IMG_VERSIONS_UPDATE_FAILED INT32_C(11)
 #define IUpdateRollbackVersion_ERROR_PIL_SET_ROLLBACK_VERSION_FAILED INT32_C(12)
+#define IUpdateRollbackVersion_ERROR_READ_HLOS_VERSION_FAILED INT32_C(13)
+#define IUpdateRollbackVersion_ERROR_UPDATE_HLOS_VERSION_FAILED INT32_C(14)
+#define IUpdateRollbackVersion_ERROR_HLOS_VERSION_MISMATCH INT32_C(15)
+#define IUpdateRollbackVersion_ERROR_HLOS_VERSION_NOT_ALLOWED INT32_C(16)
 
 #define IUpdateRollbackVersion_OP_updateRollbackVersion 0
+#define IUpdateRollbackVersion_OP_updateHLOSVersion 1
 
 static inline int32_t
 IUpdateRollbackVersion_release(Object self)
@@ -53,3 +57,11 @@ static inline int32_t IUpdateRollbackVersion_updateRollbackVersion(Object self)
     return ObjectInvokeFunc(self, IUpdateRollbackVersion_OP_updateRollbackVersion, 0, 0);
 }
 
+static inline int32_t
+IUpdateRollbackVersion_updateHLOSVersion(Object self, UINT32 version_val)
+{
+  ObjectArg a[1]={{{0,0}}};
+  a[0].ArgB = (ObjectBuf) { &version_val, sizeof(UINT32) };
+
+  return ObjectInvokeFunc(self, IUpdateRollbackVersion_OP_updateHLOSVersion, a, ObjectCounts_pack(1, 0, 0, 0));
+}

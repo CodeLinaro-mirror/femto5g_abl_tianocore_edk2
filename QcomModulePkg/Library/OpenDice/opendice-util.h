@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -34,6 +34,8 @@ typedef int ptrdiff_t;
 
 // FILE is not used, but define it to make headers happy
 typedef void FILE;
+
+#undef offsetof
 
 #define memcpy(dest,source,count)         CopyMem(dest,source,(UINTN)(count))
 #define memset(dest,ch,count)             SetMem(dest,(UINTN)(count),(UINT8)(ch))
