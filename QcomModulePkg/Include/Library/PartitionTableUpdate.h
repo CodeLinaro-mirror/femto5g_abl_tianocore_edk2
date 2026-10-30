@@ -146,12 +146,20 @@ table in the respective position mentioned below.
 #define PRIMARY_HDR_LBA 0x1
 #define BOOT_PART_SIZE 32
 
+/* SPINOR GPT extent (in blocks), used by the SPINOR slot-sync library.
+ * Bounding to 1 header block + 4 entry blocks keeps primary access at LBA 1..5,
+ * clear of the WP region. */
+#define SPINOR_GPT_ENTRY_BLOCKS 4
+#define SPINOR_GPT_TOTAL_BLOCKS (GPT_HDR_BLOCKS + SPINOR_GPT_ENTRY_BLOCKS)
+
 /*Slot specific macros*/
 #define MAX_SLOT_SUFFIX_SZ 3
 #define MIN_SLOTS 1
 #define MAX_SLOTS 2
 #define MAX_LUNS 8
 #define NO_LUN -1
+/* Multi-storage: UFS + NVMe */
+#define MAX_PTABLE_NUM MAX_LUNS + 1
 
 #define GET_LWORD_FROM_BYTE(x)                                                 \
   ((UINT32) * (x) | ((UINT32) * (x + 1) << 8) | ((UINT32) * (x + 2) << 16) |   \
@@ -187,7 +195,7 @@ struct StoragePartInfo {
   HandleInfo HandleInfoList[MAX_NUM_PARTITIONS];
   UINT32 MaxHandles;
 };
-extern struct StoragePartInfo Ptable[MAX_LUNS];
+extern struct StoragePartInfo Ptable[MAX_PTABLE_NUM];
 
 typedef struct {
   CHAR16 Suffix[MAX_SLOT_SUFFIX_SZ];
@@ -256,4 +264,9 @@ BOOLEAN IsABRetryCountUpdateRequired (VOID);
 UINT32 PartitionVerifyMibibImage (UINT8 *Image);
 UINT64 GetPartitionSize (EFI_BLOCK_IO_PROTOCOL *BlockIo);
 BOOLEAN IsSlotsUbootable (VOID);
+
+BOOLEAN SpinorSlotSyncEnabled (VOID);
+EFI_STATUS ReadSpinorActiveSlot (Slot *ActiveSlot);
+EFI_STATUS SetSpinorActiveSlot (Slot *NewSlot);
+VOID CheckAndRestoreSlotConsistency (VOID);
 #endif
