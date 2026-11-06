@@ -112,6 +112,7 @@
 	RecoveryInfo.c
 	IntegrityIMA.c
 	SailLib.c
+	BootImgDecrypt.c
 
 [Packages]
 	ArmPkg/ArmPkg.dec
@@ -139,6 +140,7 @@
 	StackCanary
 	AvbLib
 	UbsanLib
+	FspLib
 
 [LibraryClasses.AARCH64]
 	AesLib
