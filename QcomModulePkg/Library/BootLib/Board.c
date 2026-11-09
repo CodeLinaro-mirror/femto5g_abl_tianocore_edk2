@@ -51,6 +51,7 @@ STATIC CONST CHAR8 *DeviceType[] = {
         [NAND] = "NAND",
         [NVME] = "NVME",
         [VBLK] = "VBLK",
+        [SDC] = "SD",
         [UNKNOWN] = "Unknown",
 };
 
@@ -355,6 +356,9 @@ GetDeviceHandleInfo (VOID *HndlInfo, UINT32 MaxHandles, MemCardType Type)
   case VBLK:
     HandleFilter.RootDeviceType = &gVirtioMmioTransportGuid;
     break;
+  case SDC:
+    Attribs = ApplySdBootStorageSelection (Attribs, &HandleFilter);
+    break;
   case UNKNOWN:
     DEBUG ((EFI_D_ERROR, "Device type unknown\n"));
     return Status;
@@ -411,6 +415,10 @@ CheckRootDeviceType (VOID)
 
   if (Val == EFI_EMMC_NETWORK_FLASH_TYPE) {
     return UNKNOWN;
+  }
+
+  if (Val == EFI_SDC_FLASH_TYPE) {
+    return SDC;
   }
 
   if (Type == UNKNOWN) {
@@ -689,7 +697,11 @@ GetMemCardInfo (VOID **MemCardInfo)
       MediaSignature = BlkIo->Media->MediaId;
     }
 
-    if (RemovableMedia == FALSE) {
+    if (IsSdBootStorage ()) {
+      if (RemovableMedia == TRUE) {
+        CardFound = TRUE;
+      }
+    } else if (RemovableMedia == FALSE) {
       for (Count = 0; Count < ARRAY_SIZE (DeviceTypeMedia); Count++) {
         if (DeviceTypeMedia[Count] == MediaSignature) {
           CardFound = TRUE;
@@ -706,6 +718,11 @@ GetMemCardInfo (VOID **MemCardInfo)
 
   // free the buffer for the handles
   gBS->FreePool (Handles);
+
+  if (!CardFound) {
+    return EFI_NOT_FOUND;
+  }
+
   return Status;
 }
 
