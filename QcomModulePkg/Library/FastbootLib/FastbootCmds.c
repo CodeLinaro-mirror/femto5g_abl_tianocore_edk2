@@ -1883,6 +1883,7 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
         UfsGetSetBootLun (&UfsBootLun, FALSE); /* False = Set */
       }
     } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
+               !AsciiStrnCmp (BootDeviceType, "SD", AsciiStrLen ("SD")) ||
                !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
       Lun = NO_LUN;
       LunSet = FALSE;
@@ -2070,6 +2071,11 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
 
   WaitForFlashFinished ();
 
+  if (IsSdBootStorage ()) {
+    FastbootFail ("Erase is not supported in SD boot mode");
+    return;
+  }
+
   if (AsciiStrLen (arg) >= MAX_GPT_NAME_SIZE) {
     FastbootFail ("Invalid partition name");
     return;
@@ -2243,6 +2249,15 @@ CmdSetActive (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
     return;
   }
 
+ /* Mirror the active-slot commit onto SPINOR */
+  if (SpinorSlotSyncEnabled ()) {
+    EFI_STATUS SpinorStatus = SetSpinorActiveSlot (&NewSlot);
+    if (EFI_ERROR (SpinorStatus)) {
+      DEBUG ((EFI_D_ERROR,
+              "set_active: SPINOR slot sync failed: %r (UFS commit kept)\n",
+              SpinorStatus));
+    }
+  }
   // Updating fbvar `current-slot'
   UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix, CurrentSlotFB);
 

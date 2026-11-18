@@ -51,7 +51,7 @@
 
 STATIC BOOLEAN FlashingGpt;
 STATIC BOOLEAN ParseSecondaryGpt;
-struct StoragePartInfo Ptable[MAX_LUNS];
+struct StoragePartInfo Ptable[MAX_PTABLE_NUM];
 struct PartitionEntry PtnEntries[MAX_NUM_PARTITIONS];
 STATIC UINT32 MaxLuns;
 STATIC UINT32 PartitionCount;
@@ -194,18 +194,33 @@ GetStorageHandle (INT32 Lun, HandleInfo *BlockIoHandle, UINT32 *MaxHandles)
   HandleFilter.PartitionType = NULL;
   HandleFilter.VolumeName = NULL;
 
+  if (IsSdBootStorage ()) {
+    HandleFilter.RootDeviceType = &gEfiSdRemovableGuid;
+    Attribs = ApplySdBootStorageSelection (Attribs, &HandleFilter);
+    Status =
+        GetBlkIOHandles (Attribs, &HandleFilter, BlockIoHandle, MaxHandles);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_ERROR, "Error getting block IO handle for SD\n"));
+    }
+    return Status;
+  }
+
   if (Lun == NO_LUN) {
     HandleFilter.RootDeviceType = &gEfiEmmcUserPartitionGuid;
     Status =
         GetBlkIOHandles (Attribs, &HandleFilter, BlockIoHandle, MaxHandles);
-    if (EFI_ERROR (Status)) {
+    if (EFI_ERROR (Status) ||
+        *MaxHandles == 0) {
+      Attribs = 0;
+      Attribs |= BLK_IO_SEL_MATCH_ROOT_DEVICE;
       HandleFilter.RootDeviceType = &gEfiNvme0Guid;
       Status =
         GetBlkIOHandles (Attribs, &HandleFilter, BlockIoHandle, MaxHandles);
-      if (EFI_ERROR (Status)) {
+      if (EFI_ERROR (Status) ||
+         *MaxHandles == 0) {
         DEBUG ((EFI_D_ERROR,
-               "Error getting block IO handle for Emmc and Nvme\n"));
-        return Status;
+               "Error getting block IO handle for Emmc and Nvme: %r\n", Status));
+        return EFI_NOT_FOUND;
       }
     }
   } else {
@@ -291,12 +306,22 @@ VOID UpdatePartitionAttributes (UINT32 UpdateType)
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);
   for (Lun = 0; Lun < MaxLuns; Lun++) {
+    MaxHandles = MAX_HANDLEINF_LST_SIZE;
 
-    if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
+    if (IsSdBootStorage ()) {
+      Status = GetStorageHandle (NO_LUN, BlockIoHandle, &MaxHandles);
+    } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
         !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
       Status = GetStorageHandle (NO_LUN, BlockIoHandle, &MaxHandles);
     } else if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
-      Status = GetStorageHandle (Lun, BlockIoHandle, &MaxHandles);
+      if (Lun == MAX_LUNS) {
+        /* Multi-storage: During partition enumeration, NVMe partition
+         * table entries are added after the UFS partition table entries.
+         */
+        Status = GetStorageHandle (NO_LUN, BlockIoHandle, &MaxHandles);
+      } else {
+        Status = GetStorageHandle (Lun, BlockIoHandle, &MaxHandles);
+      }
     } else if (!AsciiStrnCmp (BootDeviceType, "NAND", AsciiStrLen ("NAND"))) {
       DEBUG ((EFI_D_ERROR, "Skip setting if boot device type is NAND\n"));
       return;
@@ -687,6 +712,7 @@ EnumeratePartitions (VOID)
 {
   EFI_STATUS Status;
   PartiSelectFilter HandleFilter;
+  BOOLEAN IsUFSPresent = FALSE;
   UINT32 Attribs = 0;
   UINT32 i;
   // UFS LUN GUIDs
@@ -695,7 +721,8 @@ EnumeratePartitions (VOID)
       gEfiUfsLU4Guid, gEfiUfsLU5Guid, gEfiUfsLU6Guid, gEfiUfsLU7Guid,
   };
 
-  gBS->SetMem ((VOID *)Ptable, (sizeof (struct StoragePartInfo) * MAX_LUNS), 0);
+  gBS->SetMem ((VOID *)Ptable,
+               (sizeof (struct StoragePartInfo) * MAX_PTABLE_NUM), 0);
 
   /* By default look for emmc partitions if not found look for UFS */
   Attribs |= BLK_IO_SEL_MATCH_ROOT_DEVICE;
@@ -703,6 +730,26 @@ EnumeratePartitions (VOID)
   Ptable[0].MaxHandles = ARRAY_SIZE (Ptable[0].HandleInfoList);
   HandleFilter.PartitionType = NULL;
   HandleFilter.VolumeName = NULL;
+
+  if (IsSdBootStorage ()) {
+    Attribs = ApplySdBootStorageSelection (Attribs, &HandleFilter);
+    Ptable[0].MaxHandles = ARRAY_SIZE (Ptable[0].HandleInfoList);
+
+    Status = GetBlkIOHandles (Attribs, &HandleFilter,
+                              &Ptable[0].HandleInfoList[0],
+                              &Ptable[0].MaxHandles);
+    if (Status == EFI_SUCCESS &&
+        Ptable[0].MaxHandles > 0) {
+      MaxLuns = 1;
+      DEBUG ((EFI_D_INFO, "Selected SD boot storage: %u handles\n",
+              Ptable[0].MaxHandles));
+      return Status;
+    }
+
+    DEBUG ((EFI_D_ERROR, "Error getting block IO handle for SD\n"));
+    return EFI_ERROR (Status) ? Status : EFI_NOT_FOUND;
+  }
+
 #ifdef AUTO_VIRT_ABL
   HandleFilter.RootDeviceType = &gVirtioMmioTransportGuid;
 #else
@@ -735,21 +782,7 @@ EnumeratePartitions (VOID)
     MaxLuns = 1;
     return Status;
   }
-
-  Ptable[0].MaxHandles = ARRAY_SIZE (Ptable[0].HandleInfoList);
-  HandleFilter.PartitionType = NULL;
-  HandleFilter.VolumeName = NULL;
-  HandleFilter.RootDeviceType = &gEfiNvme0Guid;
-
-  Status =
-      GetBlkIOHandles (Attribs, &HandleFilter, &Ptable[0].HandleInfoList[0],
-                       &Ptable[0].MaxHandles);
-  if (Status == EFI_SUCCESS &&
-      Ptable[0].MaxHandles > 0) {
-    MaxLuns = 1;
-    return Status;
-  }
-  /* If the media is not emmc/nvme/spinor then look for UFS */
+  /* If the media is not nand/emmc then look for UFS */
   else if (EFI_ERROR (Status) || Ptable[0].MaxHandles == 0) {
     /* By default max 8 luns are supported but HW could be configured to use
      * only few of them or all of them
@@ -773,9 +806,38 @@ EnumeratePartitions (VOID)
                 i));
         continue;
       }
+      if (Ptable[i].MaxHandles > 0) {
+        IsUFSPresent = TRUE;
+      }
     }
-    MaxLuns = i;
-  } else {
+
+    /* Multi-storage: if UFS is present, add the NVMe partition table entries
+     * after the UFS partition table; otherwise, add the NVMe partition table
+     * entries to Ptable[0].
+     */
+    if (IsUFSPresent) {
+      MaxLuns = i;
+    } else {
+      gBS->SetMem ((VOID *)Ptable,
+                  (sizeof (struct StoragePartInfo) * MAX_PTABLE_NUM), 0);
+      MaxLuns = 0;
+    }
+
+    Ptable[MaxLuns].MaxHandles = ARRAY_SIZE (Ptable[MaxLuns].HandleInfoList);
+    HandleFilter.PartitionType = NULL;
+    HandleFilter.VolumeName = NULL;
+    HandleFilter.RootDeviceType = &gEfiNvme0Guid;
+
+    Status =
+      GetBlkIOHandles (Attribs, &HandleFilter, &Ptable[MaxLuns].HandleInfoList[0],
+                      &Ptable[MaxLuns].MaxHandles);
+    if (Status == EFI_SUCCESS &&
+      Ptable[MaxLuns].MaxHandles > 0) {
+      MaxLuns += 1;
+    }
+  }
+
+  if (!MaxLuns) {
     DEBUG ((EFI_D_ERROR, "Error populating block IO handles\n"));
     return EFI_NOT_FOUND;
   }
@@ -1562,7 +1624,7 @@ BOOLEAN IsExistBootablePartition (VOID)
       ExistBootableSlot[SlotIndex] = TRUE;
     } else {
       ExistBootableSlot[SlotIndex] = FALSE;
-	}
+    }
   }
 
   if (ExistBootableSlot[0] == FALSE &&
@@ -1667,7 +1729,7 @@ ReadMisc_boot (Slot *BootableSlot)
           if (EFI_ERROR (Status)) {
             goto Exit;
           }
-		  Status = SetActiveSlot (&Slots[1], FALSE);
+          Status = SetActiveSlot (&Slots[1], FALSE);
           if (EFI_ERROR (Status)) {
             goto Exit;
           }
@@ -1680,7 +1742,7 @@ ReadMisc_boot (Slot *BootableSlot)
           if (EFI_ERROR (Status)) {
             goto Exit;
           }
-		  Status = SetActiveSlot (&Slots[0], FALSE);
+          Status = SetActiveSlot (&Slots[0], FALSE);
           if (EFI_ERROR (Status)) {
             goto Exit;
           }
@@ -1716,13 +1778,13 @@ ReadMisc_boot (Slot *BootableSlot)
         /* When the specified GUID is detected in the A/B partition,
          * the system will auto reboot from the Recovery chain to the
          * Primary chain*/
-        for (UINT32 j = 0; j < PartitionCount; j++) {
-          if (StrnCmp (PtnEntries[j].PartEntry.PartitionName,
+        for (UINT32 InnerIdx = 0; InnerIdx < PartitionCount; InnerIdx++) {
+          if (StrnCmp (PtnEntries[InnerIdx].PartEntry.PartitionName,
                       L"abl_a", StrLen (L"abl_a")) == 0 ||
-              StrnCmp (PtnEntries[j].PartEntry.PartitionName,
+              StrnCmp (PtnEntries[InnerIdx].PartEntry.PartitionName,
                       L"abl_b", StrLen (L"abl_b")) == 0) {
              if (CompareGuid (&AblRGuid,
-                 &PtnEntries[j].PartEntry.PartitionTypeGUID)) {
+                 &PtnEntries[InnerIdx].PartEntry.PartitionTypeGUID)) {
                FlagReboot = TRUE;
                break;
              }
@@ -1876,6 +1938,12 @@ GetActiveSlot (Slot *ActiveSlot)
       GUARD (StrnCpyS (ActiveSlot->Suffix, ARRAY_SIZE (ActiveSlot->Suffix),
                        Slots[0].Suffix, StrLen (Slots[0].Suffix)));
       UpdatePartitionAttributes (PARTITION_ATTRIBUTES);
+
+      /* First boot: mirror the default active slot onto SPINOR for the first time */
+      if (SpinorSlotSyncEnabled ()) {
+        SetSpinorActiveSlot (ActiveSlot);
+      }
+
       FirstBoot = TRUE;
       return EFI_SUCCESS;
     }
@@ -2052,6 +2120,11 @@ EFI_STATUS HandleActiveSlotUnbootable (BOOLEAN ForceBootAlternateSlot)
         (EFI_D_INFO, "Alternate Slot %s is bootable\n", AlternateSlot->Suffix));
     GUARD (SetActiveSlot (AlternateSlot, FALSE));
 
+    /* Mirror the rollback onto SPINOR before rebooting */
+    if (SpinorSlotSyncEnabled ()) {
+      SetSpinorActiveSlot (AlternateSlot);
+    }
+
     DEBUG ((EFI_D_INFO, "HandleActiveSlotUnbootable: Rebooting\n"));
     gRT->ResetSystem (EfiResetCold, EFI_SUCCESS, 0, NULL);
 
@@ -2142,7 +2215,8 @@ ValidateSlotGuids (Slot *BootableSlot)
         return EFI_DEVICE_ERROR;
       }
     }
-  } else if (!AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
+  } else if (IsSdBootStorage () ||
+           !AsciiStrnCmp (BootDeviceType, "EMMC", AsciiStrLen ("EMMC")) ||
            !AsciiStrnCmp (BootDeviceType, "NVME", AsciiStrLen ("NVME"))) {
   } else {
     DEBUG ((EFI_D_ERROR, "Unsupported Device Type\n"));

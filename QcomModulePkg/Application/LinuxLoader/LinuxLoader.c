@@ -247,6 +247,13 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     goto flashless_boot;
   }
 
+  Status = DetectBootStorageSource ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Boot storage source detection failed: %r\n",
+            Status));
+    goto stack_guard_update_default;
+  }
+
   // Initialize verified boot & Read Device Info
   Status = DeviceInfoInit ();
   if (Status != EFI_SUCCESS) {
@@ -268,9 +275,20 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   if (MultiSlotBoot) {
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     FindPtnActiveSlot ();
+
+    /* Heal SPINOR slot to match UFS slot after an OTA
+     * that may have been interrupted between the UFS and SPINOR commits. */
+    if (SpinorSlotSyncEnabled ()) {
+       CheckAndRestoreSlotConsistency ();
+    }
   }
 
-  DetectSDCardAndMountFAT();
+  /* Keep selected GPT SD boot separate from the legacy FAT updater. */
+  if (IsSdBootStorage ()) {
+    DisableSdCard ();
+  } else {
+    DetectSDCardAndMountFAT ();
+  }
 
   Status = GetKeyPress (&KeyPressed);
   if (Status == EFI_SUCCESS) {
@@ -385,7 +403,8 @@ flashless_boot:
     DEBUG ((EFI_D_ERROR, "VM Hyp calls not present\n"));
   }
 
-  if (DetectSDCardAndMountFAT() == EFI_SUCCESS) {
+  if (!BootIntoFastboot && !FlashlessBoot && !IsSdBootStorage () &&
+      DetectSDCardAndMountFAT () == EFI_SUCCESS) {
     BootInfo SdBootInfo = {0};
     SdBootInfo.MultiSlotBoot = FALSE;
     SdBootInfo.BootIntoRecovery = TRUE;
@@ -398,9 +417,10 @@ flashless_boot:
     if (Status == EFI_SUCCESS) {
       BootLinux (&SdBootInfo);
     }
-
-    DisableSdCard();
   }
+
+  /* Also clear an earlier probe when the optional FAT attempt is skipped. */
+  DisableSdCard ();
 
   if (BootIntoFastboot) {
       goto fastboot;

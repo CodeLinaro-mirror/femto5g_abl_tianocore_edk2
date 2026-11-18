@@ -56,6 +56,98 @@
 
 STATIC UINT32 TimerFreq, FactormS;
 STATIC MemCardType RootDeviceType = UNKNOWN;
+STATIC BootStorageSource SelectedBootStorage = BOOT_STORAGE_INTERNAL;
+
+#define SD_BOOT_FSTAB_SUFFIX "sdcard"
+
+VOID
+SetBootStorageSource (BootStorageSource Source)
+{
+  SelectedBootStorage = Source;
+  DEBUG ((EFI_D_INFO, "Boot storage source: %a\n",
+          GetBootStorageName ()));
+}
+
+BootStorageSource
+GetBootStorageSource (VOID)
+{
+  return SelectedBootStorage;
+}
+
+BOOLEAN
+IsSdBootStorage (VOID)
+{
+  return SelectedBootStorage == BOOT_STORAGE_SD_REMOVABLE;
+}
+
+STATIC
+BOOLEAN
+IsUefiSelectedBootMediaSd (VOID)
+{
+  return GetBootDeviceType () == EFI_SDC_FLASH_TYPE;
+}
+
+EFI_STATUS
+DetectBootStorageSource (VOID)
+{
+  EFI_STATUS Status;
+  PartiSelectFilter HandleFilter;
+  HandleInfo HandleInfoList[1];
+  UINT32 BlkIOAttrib;
+  UINT32 MaxHandles;
+
+  if (!IsUefiSelectedBootMediaSd ()) {
+    SetBootStorageSource (BOOT_STORAGE_INTERNAL);
+    return EFI_SUCCESS;
+  }
+
+  gBS->SetMem ((VOID *)&HandleFilter, sizeof (HandleFilter), 0);
+  gBS->SetMem ((VOID *)HandleInfoList, sizeof (HandleInfoList), 0);
+
+  BlkIOAttrib = ApplySdBootStorageSelection (0, &HandleFilter);
+  MaxHandles = ARRAY_SIZE (HandleInfoList);
+
+  Status = GetBlkIOHandles (BlkIOAttrib, &HandleFilter, HandleInfoList,
+                            &MaxHandles);
+  if (!EFI_ERROR (Status) && MaxHandles > 0) {
+    SetBootStorageSource (BOOT_STORAGE_SD_REMOVABLE);
+    return EFI_SUCCESS;
+  }
+
+  SetBootStorageSource (BOOT_STORAGE_INTERNAL);
+
+  if (!EFI_ERROR (Status)) {
+    return EFI_NOT_FOUND;
+  }
+
+  return Status;
+}
+
+CONST CHAR8 *
+GetBootStorageName (VOID)
+{
+  return IsSdBootStorage () ? "SD" : "INTERNAL";
+}
+
+CONST CHAR8 *
+GetBootStorageFstabSuffix (VOID)
+{
+  return IsSdBootStorage () ? SD_BOOT_FSTAB_SUFFIX : NULL;
+}
+
+UINT32
+ApplySdBootStorageSelection (UINT32 SelectionAttrib,
+                             PartiSelectFilter *FilterData)
+{
+  SelectionAttrib &= ~BLK_IO_SEL_MEDIA_TYPE_NON_REMOVABLE;
+  SelectionAttrib |= BLK_IO_SEL_MEDIA_TYPE_REMOVABLE;
+  if (FilterData != NULL) {
+    SelectionAttrib |= BLK_IO_SEL_MATCH_ROOT_DEVICE;
+    FilterData->RootDeviceType = &gEfiSdRemovableGuid;
+  }
+
+  return SelectionAttrib;
+}
 
 /* Returns 0 if the volume label matches otherwise non zero */
 STATIC UINTN
@@ -512,6 +604,10 @@ LoadImageFromPartition (VOID *ImageBuffer, UINT32 *ImageSize, CHAR16 *Pname)
   HandleFilter.RootDeviceType = NULL;
   HandleFilter.PartitionLabel = Pname;
   HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionType = NULL;
+  if (IsSdBootStorage ()) {
+    BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+  }
 
   MaxHandles = sizeof (HandleInfoList) / sizeof (*HandleInfoList);
 
@@ -788,6 +884,10 @@ WriteToPartition (EFI_GUID *Ptype, VOID *Msg, UINT32 MsgSize)
   HandleFilter.RootDeviceType = NULL;
   HandleFilter.PartitionType = Ptype;
   HandleFilter.VolumeName = NULL;
+  HandleFilter.PartitionLabel = NULL;
+  if (IsSdBootStorage ()) {
+    BlkIOAttrib = ApplySdBootStorageSelection (BlkIOAttrib, &HandleFilter);
+  }
 
   MaxHandles = ARRAY_SIZE (HandleInfoList);
   Status =
@@ -919,6 +1019,10 @@ GetBootDevice (CHAR8 *BootDevBuf, UINT32 Len)
   UINTN DataSize = sizeof (BootDevAddr);
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
 
+  if (BootDevBuf == NULL || Len == 0) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   Status =
       gRT->GetVariable ((CHAR16 *)L"BootDeviceBaseAddr", &gQcomTokenSpaceGuid,
                         NULL, &DataSize, &BootDevAddr);
@@ -927,6 +1031,11 @@ GetBootDevice (CHAR8 *BootDevBuf, UINT32 Len)
     DEBUG (
         (EFI_D_ERROR, "Failed to get Boot Device Base address, %r\n", Status));
     return Status;
+  }
+
+  if (IsSdBootStorage ()) {
+    AsciiSPrint (BootDevBuf, Len, "%x.sdhci", BootDevAddr);
+    return EFI_SUCCESS;
   }
 
   GetRootDeviceType (BootDeviceType, BOOT_DEV_NAME_SIZE_MAX);

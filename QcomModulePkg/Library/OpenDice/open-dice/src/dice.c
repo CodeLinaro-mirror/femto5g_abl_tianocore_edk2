@@ -12,10 +12,9 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// ​​​​​Changes from Qualcomm Innovation Center, Inc. are provided
-// under the following license:
-// Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc.
-// All rights reserved. SPDX-License-Identifier: BSD-3-Clause-Clear
+// Changes from Qualcomm Technologies, Inc. are provided under the following license:
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #ifdef ENABLE_C_HEADER
 #include <string.h>
@@ -50,14 +49,37 @@ static const uint8_t kIdSalt[] = {
     0x1D, 0xB9, 0x52, 0x0B, 0xA5, 0x1C, 0x7B, 0x29, 0xEA};
 static const size_t kIdSaltSize = 64;
 
+#ifdef USE_RKP_ALIGNED_UDS_DERIVATION
+#define RKP_KEY_SEED_LENGTH 16
+
+/*
+ * Forward declaration of DiceKdfSha256 defined in boringssl_hash_kdf_ops.c.
+ * Used ONLY for DiceDeriveCdiPrivateKeySeed to mirror the TA's HKDF-SHA256.
+ * DiceKdf() always uses SHA-512 and must NOT be changed for CDI derivation.
+ */
+DiceResult DiceKdfSha256(void* context, size_t length,
+                         const uint8_t* ikm, size_t ikm_size,
+                         const uint8_t* salt, size_t salt_size,
+                         const uint8_t* info, size_t info_size,
+                         uint8_t* output);
+#endif
 DiceResult DiceDeriveCdiPrivateKeySeed(
     void* context, const uint8_t cdi_attest[DICE_CDI_SIZE],
     uint8_t cdi_private_key_seed[DICE_PRIVATE_KEY_SEED_SIZE]) {
-  // Use the CDI as input key material, with fixed salt and info.
+#ifdef USE_RKP_ALIGNED_UDS_DERIVATION
+  static const uint8_t zero_ikm[32] = {0};
+  DiceResult r =
+      DiceKdfSha256(context, /*length=*/DICE_PRIVATE_KEY_SEED_SIZE, zero_ikm,
+                    sizeof(zero_ikm), /*salt=*/NULL, /*salt_size=*/0,
+                    /*info=*/cdi_attest, /*info_size=*/RKP_KEY_SEED_LENGTH,
+                    cdi_private_key_seed);
+  return r;
+#else
   return DiceKdf(context, /*length=*/DICE_PRIVATE_KEY_SEED_SIZE, cdi_attest,
                  /*ikm_size=*/DICE_CDI_SIZE, kAsymSalt, kAsymSaltSize,
                  /*info=*/(const uint8_t*)"Key Pair", /*info_size=*/8,
                  cdi_private_key_seed);
+#endif
 }
 
 DiceResult DiceDeriveCdiCertificateId(void* context,
@@ -175,8 +197,21 @@ DiceResult DiceMainFlow(void* context,
   if (result != kDiceResultOk) {
     goto out;
   }
+  /*
+   * Compatibility split:
+   * - current seed (authority for first SW cert) keeps TA-aligned UDS derivation.
+   * - next seed (subject of first SW cert / authority expected by AVF next stage)
+   *   uses standard OpenDice derivation so AVF-side stock OpenDice can verify/sign.
+   */
+#ifdef USE_RKP_ALIGNED_UDS_DERIVATION
+  result = DiceKdf(context, /*length=*/DICE_PRIVATE_KEY_SEED_SIZE,
+                   next_cdi_attest, /*ikm_size=*/DICE_CDI_SIZE, kAsymSalt,
+                   kAsymSaltSize, /*info=*/(const uint8_t*)"Key Pair",
+                   /*info_size=*/8, next_cdi_private_key_seed);
+#else
   result = DiceDeriveCdiPrivateKeySeed(context, next_cdi_attest,
                                        next_cdi_private_key_seed);
+#endif
   if (result != kDiceResultOk) {
     goto out;
   }
